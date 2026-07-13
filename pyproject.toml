@@ -1,0 +1,21 @@
+[project]
+name = "g7-openarm-vla"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pybind11-stubgen>=2.5.5",
+]
+
+[tool.uv.workspace]
+members = [
+    "modules/g7_openarm_gr00t",
+    "modules/g7_openarm_idl",
+    "modules/g7_openarm_lowlevel",
+    "modules/g7_openarm_monitor",
+    "modules/g7_openarm_mujoco",
+    "modules/g7_openarm_pinnzoo",
+    "modules/g7_openarm_state_estimator",
+    "modules/g7_oprnarm_wbc",
+]
