@@ -172,17 +172,19 @@ class SimulationNode:
         with self.viewer.lock():
             self.data.qpos[0] = self.odom.position.x
             self.data.qpos[1] = self.odom.position.y
-            self.data.qpos[2] = self.odom.position.z
+            self.data.qpos[2] = 0.160631
             self.data.qpos[3] = self.odom.quaternion.w
             self.data.qpos[4] = self.odom.quaternion.x
             self.data.qpos[5] = self.odom.quaternion.y
             self.data.qpos[6] = self.odom.quaternion.z
             for i in range(8):
                 self.data.qpos[7+i] = self.lowstate.motor_state[i].q
-            for i in range(8):
-                self.data.qpos[15+i] = self.lowstate.motor_state[i].q
-            for i in range(8):
-                self.data.qpos[24+i] = self.lowstate.motor_state[i].q
+            for i in range(7):
+                self.data.qpos[15+i] = self.lowstate.motor_state[8+i].q
+            for i in range(7):
+                self.data.qpos[24+i] = self.lowstate.motor_state[16+i].q
+            self.data.qpos[22:24] = 0.0
+            self.data.qpos[31:33] = 0.0
             self.data.qvel[:] = 0.0
             self.data.qacc[:] = 0.0
             mujoco.mj_step(self.model, self.data)

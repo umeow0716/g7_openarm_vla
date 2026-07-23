@@ -32,6 +32,8 @@ BUS_CONFIGS = {
     }
 }
 
+left_arm_direction  = [-1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, -1.0]
+right_arm_direction = [ 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, 1.0]
 
 class HardwareNode:
     def __init__(self):
@@ -40,6 +42,7 @@ class HardwareNode:
             can_interfaces=can_interfaces,
             enable_fd=config.can_fd
         )
+        self.total_expected = 0
         
         for can_interface, can_config in BUS_CONFIGS.items():
             arm = self.group.get_openarm(can_interface)
@@ -53,12 +56,14 @@ class HardwareNode:
 
             arm.set_callback_mode_all(oa.CallbackMode.STATE)
 
+            
             print(
                 f"{can_interface}: expected responses = "
                 f"{arm.expected_response_count()}"
             )
-            
-            self.group.enable_all()
+            self.total_expected += arm.expected_response_count()
+        
+        self.group.enable_all()
 
         self.lowstate = unitree_hg_msg_dds__LowState_()
         self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
@@ -86,7 +91,10 @@ class HardwareNode:
         self.imustate = msg
 
     def control_loop(self):
-        self.group.refresh_all_and_recv(3000)
+        total_packet = 0
+        for result in self.group.refresh_all_and_recv(2000):
+            total_packet += result.received
+        # print(f"{total_packet} / {self.total_expected}")
         
         base = self.group.get_openarm(config.base_can)
         for i, motor in enumerate(base.get_arm().get_motors()):
@@ -96,15 +104,15 @@ class HardwareNode:
 
         left_arm = self.group.get_openarm(config.left_arm_can)
         for i, motor in enumerate(left_arm.get_arm().get_motors()):
-            self.lowstate.motor_state[8+i].q  = motor.get_position()
-            self.lowstate.motor_state[8+i].dq = motor.get_velocity()
-            self.lowstate.motor_state[8+i].tau_est = motor.get_torque()
+            self.lowstate.motor_state[8+i].q  = motor.get_position() * left_arm_direction[i]
+            self.lowstate.motor_state[8+i].dq = motor.get_velocity() * left_arm_direction[i]
+            self.lowstate.motor_state[8+i].tau_est = motor.get_torque() * left_arm_direction[i]
 
         right_arm = self.group.get_openarm(config.right_arm_can)
         for i, motor in enumerate(right_arm.get_arm().get_motors()):
-            self.lowstate.motor_state[16+i].q  = motor.get_position()
-            self.lowstate.motor_state[16+i].dq = motor.get_velocity()
-            self.lowstate.motor_state[16+i].tau_est = motor.get_torque()
+            self.lowstate.motor_state[16+i].q  = motor.get_position() * right_arm_direction[i]
+            self.lowstate.motor_state[16+i].dq = motor.get_velocity() * right_arm_direction[i]
+            self.lowstate.motor_state[16+i].tau_est = motor.get_torque() * right_arm_direction[i]
         
         self.lowstate.imu_state = self.imustate
         self.lowstate_publisher.Write(self.lowstate)
@@ -118,21 +126,21 @@ class HardwareNode:
 
         left_cmds = [
             oa.MITParam(
-                q=self.lowcmd.motor_cmd[8+i].q,
-                dq=self.lowcmd.motor_cmd[8+i].dq,
+                q=self.lowcmd.motor_cmd[8+i].q * left_arm_direction[i],
+                dq=self.lowcmd.motor_cmd[8+i].dq * left_arm_direction[i],
                 kp=self.lowcmd.motor_cmd[8+i].kp,
                 kd=self.lowcmd.motor_cmd[8+i].kd,
-                tau=self.lowcmd.motor_cmd[8+i].tau,
+                tau=self.lowcmd.motor_cmd[8+i].tau * left_arm_direction[i],
             )
             for i in range(8)
         ]
         right_cmds = [
             oa.MITParam(
-                q=self.lowcmd.motor_cmd[16+i].q,
-                dq=self.lowcmd.motor_cmd[16+i].dq,
+                q=self.lowcmd.motor_cmd[16+i].q * right_arm_direction[i],
+                dq=self.lowcmd.motor_cmd[16+i].dq * right_arm_direction[i],
                 kp=self.lowcmd.motor_cmd[16+i].kp,
                 kd=self.lowcmd.motor_cmd[16+i].kd,
-                tau=self.lowcmd.motor_cmd[16+i].tau,
+                tau=self.lowcmd.motor_cmd[16+i].tau * right_arm_direction[i],
             )
             for i in range(8)
         ]
