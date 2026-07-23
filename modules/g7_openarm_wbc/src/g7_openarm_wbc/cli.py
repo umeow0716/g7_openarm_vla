@@ -8,6 +8,7 @@ from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, Cha
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 
+from .config import config
 from .ik_solver import G7OpenArmIKSolver
 
 
@@ -33,7 +34,7 @@ class Node:
         self.wbc_lowcmd_thraed = RecurrentThread(
             name="wbc_lowcmd_thraed",
             target=self.write_wbc_lowcmd,
-            interval=0.002,
+            interval=config.interval,
         )
         self.wbc_lowcmd_thraed.Start()
     
@@ -65,8 +66,8 @@ class Node:
 
 
 def main():
-    ChannelFactoryInitialize(0, "lo")
-    node = Node()
+    ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
+    _ = Node()
     while True:
         time.sleep(1)
 

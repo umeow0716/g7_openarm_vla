@@ -11,6 +11,8 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
 from unitree_sdk2py.idl.default  import unitree_hg_msg_dds__LowState_, unitree_hg_msg_dds__LowCmd_
 
+from .config import config
+
 
 DEFAULT_MODEL_XML_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "model" / "scene.xml"
 
@@ -18,6 +20,8 @@ DEFAULT_MODEL_XML_PATH = Path(__file__).resolve().parent.parent.parent.parent.pa
 class SimulationNode:
     def __init__(self):
         self.spec = mujoco.MjSpec.from_file(DEFAULT_MODEL_XML_PATH.as_posix())
+        self.spec.option.timestep = config.interval
+        print(config.interval)
         left_target = self.spec.worldbody.add_body(
             name='left_target',
             mocap=True,
@@ -113,14 +117,14 @@ class SimulationNode:
         
         self.simulation_thread = RecurrentThread(
             name="simulation_loop",
-            interval=0.002,
+            interval=config.interval,
             target=self.simulation_loop,
         )
         self.simulation_thread.Start()
         
         self.viewer_thread = RecurrentThread(
             name="viewer_loop",
-            interval=0.02,
+            interval=config.fps_interval,
             target=self.viewer_loop,
         )
         self.viewer_thread.Start()
@@ -129,7 +133,7 @@ class SimulationNode:
         self.lowstate_publisher.Init()
         self.write_lowstate_thread = RecurrentThread(
             name="write_lowstate",
-            interval=0.002,
+            interval=config.interval,
             target=self.write_lowstate,
         )
         self.write_lowstate_thread.Start()
@@ -139,7 +143,7 @@ class SimulationNode:
         self.eetarget_publisher.Init()
         self.write_eetarget_thread = RecurrentThread(
             name="write_eetarget",
-            interval=0.002,
+            interval=config.interval,
             target=self.write_eetarget,
         )
         self.write_eetarget_thread.Start()
@@ -216,17 +220,10 @@ class SimulationNode:
 
 
 def main():
-    ChannelFactoryInitialize(0, 'lo')
-    node = SimulationNode()
+    ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
+    _ = SimulationNode()
     while True:
-        t0_1 = node.data.time
-        t0_2 = time.perf_counter()
-        time.sleep(5)
-        t1_1 = node.data.time
-        t1_2 = time.perf_counter()
-        dt_1 = t1_1 - t0_1
-        dt_2 = t1_2 - t0_2
-        print(dt_1 - dt_2)
+        time.sleep(1)
 
 
 if __name__ == "__main__":

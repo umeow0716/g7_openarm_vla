@@ -487,6 +487,7 @@ class Controller:
             -self.config.arm_acc_limit_rad_s2,
             self.config.arm_acc_limit_rad_s2,
         )
+        
         return acc
 
     @staticmethod

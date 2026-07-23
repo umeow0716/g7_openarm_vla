@@ -1,4 +1,3 @@
-import argparse
 import time
 import threading
 import sys
@@ -7,6 +6,8 @@ from g7_openarm_idl import EETarget, Odom, WBCLowCmd
 from typing import Any
 from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_, LowCmd_
+
+from .config import config
 
 
 class HzMonitor:
@@ -42,15 +43,7 @@ class HzMonitor:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--interface",
-        default="lo",
-        help="DDS network interface, e.g. enp2s0",
-    )
-    args = parser.parse_args()
-    
-    ChannelFactoryInitialize(0, args.interface)
+    ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
     
     eetarget_monitor  = HzMonitor("rt/eetarget", EETarget)
     lowstate_monitor  = HzMonitor("rt/lowstate", LowState_)
@@ -76,7 +69,7 @@ def main() -> None:
             )
 
         sys.stdout.flush()
-        time.sleep(1.0)
+        time.sleep(config.hz)
 
 
 if __name__ == '__main__':

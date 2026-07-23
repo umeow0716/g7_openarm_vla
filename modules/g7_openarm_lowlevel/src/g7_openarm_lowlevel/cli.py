@@ -11,11 +11,14 @@ from g7_openarm_idl import        \
     WBCLowCmd, WBCLowCmd_default, \
     Odom
 
+from .config import config
 from .controller import Controller
 
 
 class LowLevelNode():
     def __init__(self):
+        self.base_enable = config.control_mode == 'wbc'
+        
         self.wbc_lowcmd = WBCLowCmd_default()
         self.wbc_lowcmd_subscriber = ChannelSubscriber("rt/wbclowcmd", WBCLowCmd)
         self.wbc_lowcmd_subscriber.Init(self.wbc_lowcmd_handler, 10)
@@ -37,7 +40,7 @@ class LowLevelNode():
         self.write_lowcmd_thread = RecurrentThread(
             name="write_lowcmd",
             target=self.write_lowcmd,
-            interval=0.002,
+            interval=config.interval,
         )
         self.write_lowcmd_thread.Start()
         
@@ -52,18 +55,19 @@ class LowLevelNode():
             openarm_cmd=self.wbc_lowcmd.openarm,
         )
         
-        for i, motor in enumerate(self.lowcmd.motor_cmd[:8:2]):
-            motor.q   = steer_pos_des[i]
-            motor.dq  = 0.0
-            motor.kp  = 100.0
-            motor.kd  = 1.0
-            motor.tau = 0.0
+        if self.base_enable:
+            for i, motor in enumerate(self.lowcmd.motor_cmd[:8:2]):
+                motor.q   = steer_pos_des[i]
+                motor.dq  = 0.0
+                motor.kp  = 100.0
+                motor.kd  = 1.0
+                motor.tau = 0.0
         
-        for i, motor in enumerate(self.lowcmd.motor_cmd[1:8:2]):
-            motor.dq  = wheel_vel_des[i]
-            motor.kp  = 0.0
-            motor.kd  = 6.0
-            motor.tau = 0.0
+            for i, motor in enumerate(self.lowcmd.motor_cmd[1:8:2]):
+                motor.dq  = wheel_vel_des[i]
+                motor.kp  = 0.0
+                motor.kd  = 6.0
+                motor.tau = 0.0
         
         for i, motor in enumerate(self.lowcmd.motor_cmd[8:24]):
             motor.kp = 0.0
@@ -97,8 +101,8 @@ class LowLevelNode():
 
 
 def main():
-    ChannelFactoryInitialize(0, 'lo')
-    node = LowLevelNode()
+    ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
+    _ = LowLevelNode()
     while True:
         time.sleep(1)
 

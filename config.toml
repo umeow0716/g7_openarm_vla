@@ -1,0 +1,20 @@
+[dds]
+domain_id = 0
+interface = "lo"
+
+[lowlevel]
+hz = 500.0
+control_mode = "arm-only" # wbc or arm-only
+
+[state_estimator]
+hz = 500.0
+
+[wbc]
+hz = 500.0
+
+[mujoco]
+hz = 500.0
+fps = 60.0
+
+[monitor]
+hz = 1.0

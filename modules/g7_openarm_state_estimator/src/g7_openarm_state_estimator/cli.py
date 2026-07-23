@@ -11,6 +11,8 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
 from .amr_ekf import AMREKF
+from .config import config
+
 
 def yaw_to_quat_wxyz(yaw: float) -> npt.NDArray[np.float64]:
     half = 0.5 * yaw
@@ -37,7 +39,7 @@ class OdomNode:
         self.update_thread = RecurrentThread(
             name="update_thread",
             target=self.update_state,
-            interval=0.002,
+            interval=config.interval,
         )
         self.update_thread.Start()
     
@@ -49,7 +51,7 @@ class OdomNode:
             print("None", end="\r", flush=True)
             return
         
-        x = self.ekf.update(lowstate=self.lowstate, dt=0.002)
+        x = self.ekf.update(lowstate=self.lowstate, dt=config.interval)
         
         self.odom.position.x = x.x
         self.odom.position.y = x.y
@@ -78,8 +80,8 @@ class OdomNode:
         
 
 def main():
-    ChannelFactoryInitialize(0, "lo")
-    node = OdomNode()
+    ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
+    _ = OdomNode()
     while True:
         time.sleep(1)
 
