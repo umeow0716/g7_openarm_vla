@@ -4,7 +4,7 @@ interface = "lo"
 
 [hardware]
 hz = 500.0
-imu_hz = 500.0
+imu_hz = 500
 base_can = "can_base"
 left_arm_can = "can_left"
 right_arm_can = "can_right"
