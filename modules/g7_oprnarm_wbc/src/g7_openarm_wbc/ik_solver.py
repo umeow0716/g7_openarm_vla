@@ -153,6 +153,12 @@ class G7OpenArmIKSolver:
         self.Q_hand_pos = 200.0
         self.Q_hand_ori = 0.5
         
+        self.R_du_base = np.diag([
+            8.0, 8.0, 1.0,
+        ]).astype(np.float64)
+        
+        self.prev_u_base = np.zeros(3, dtype=np.float64)
+        
         self.u_max = np.array([
             0.5, 0.5, 0.5,          # base vx, vy, omega
 
@@ -349,11 +355,16 @@ class G7OpenArmIKSolver:
 
         H = 0.01 * lxx + self.R_u
         g = 0.1 * lx
+        
+        H[:3, :3] += self.R_du_base
+        g[:3] -= self.R_du_base @ self.prev_u_base
 
         H = H + self.damping * np.eye(self.nx)
 
         u = -np.linalg.solve(H, g)
 
         u = np.clip(u, -self.u_max, self.u_max)
+        
+        self.prev_u_base = u[:3].copy()
 
         return u

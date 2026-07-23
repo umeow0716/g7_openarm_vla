@@ -160,6 +160,10 @@ class ControllerConfig:
     rr_pos: tuple[float, float] = (-0.198, -0.13)
 
     min_wheel_speed_m_s: float = 1e-4
+    steer_hold_speed_m_s: float = 2e-2
+    steer_branch_hysteresis_rad: float = np.deg2rad(15.0)
+    steer_rate_limit_rad_s: float = np.deg2rad(240.0)
+    steer_alignment_stop_rad: float = np.deg2rad(75.0)
 
     wheel_vel_limit_rad_s: float = 30.0
 
@@ -209,6 +213,12 @@ class Controller:
         ]
         
         self._prev_arm_vel_des = np.zeros(18, dtype=np.float64)
+
+        # Stateful swerve branch selection. +1 means the direct-angle branch,
+        # -1 means the angle+pi branch with reversed drive speed.
+        self._prev_steer_target: npt.NDArray[np.float64] | None = None
+        self._wheel_branch = np.ones(4, dtype=np.int8)
+        self._prev_swerve_time = time.perf_counter()
 
         self._wheel_xy = np.array(
             [
@@ -274,8 +284,10 @@ class Controller:
         base_command_is_idle = self.is_base_idle(amr_cmd)
         
         if base_command_is_idle:
-            steer_pos_des = x[7:7+8:2]
+            steer_pos_des = x[7:7+8:2].copy()
             wheel_vel_des = np.zeros((4,), dtype=np.float64)
+            # Synchronize the remembered target to the stopped physical pose.
+            self._prev_steer_target = steer_pos_des.copy()
         else:
             steer_pos_des, wheel_vel_des = self.swerve_inverse_kinematics(
                 lowstate=lowstate,
@@ -338,59 +350,104 @@ class Controller:
             dtype=np.float64,
         )
 
-        steer_pos_des = current_steer.copy()
+        now = time.perf_counter()
+        dt = max(now - self._prev_swerve_time, MIN_CONTROLLER_DT_S)
+        self._prev_swerve_time = now
+
+        if self._prev_steer_target is None:
+            self._prev_steer_target = current_steer.copy()
+
+        prev_target = self._prev_steer_target
+        steer_pos_des = prev_target.copy()
         wheel_vel_des = np.zeros(4, dtype=np.float64)
 
         steer_limit = np.deg2rad(100.0)
+        max_steer_step = self.config.steer_rate_limit_rad_s * dt
 
         for i, (wheel_x, wheel_y) in enumerate(self._wheel_xy):
             wheel_vx = vx - wz * wheel_y
             wheel_vy = vy + wz * wheel_x
-
             speed = float(np.hypot(wheel_vx, wheel_vy))
 
-            if speed < self.config.min_wheel_speed_m_s:
+            if speed < self.config.steer_hold_speed_m_s:
+                steer_pos_des[i] = prev_target[i]
+                wheel_vel_des[i] = 0.0
                 continue
 
             base_angle = float(np.atan2(wheel_vy, wheel_vx))
 
-            candidates: list[tuple[float, float]] = []
-
+            # (angle, signed linear speed, branch)
+            candidates: list[tuple[float, float, int]] = []
             for k in range(-2, 3):
                 candidate_angle = base_angle + k * np.pi
-
                 if -steer_limit <= candidate_angle <= steer_limit:
-                    candidate_speed = speed if k % 2 == 0 else -speed
-                    candidates.append((candidate_angle, candidate_speed))
+                    branch = 1 if k % 2 == 0 else -1
+                    candidates.append((candidate_angle, branch * speed, branch))
 
             if not candidates:
+                steer_pos_des[i] = prev_target[i]
                 wheel_vel_des[i] = 0.0
                 continue
 
-            angle, optimized_speed = min(
+            best = min(
                 candidates,
-                key=lambda candidate: abs(
-                    candidate[0] - current_steer[i]
-                ),
+                key=lambda candidate: abs(candidate[0] - current_steer[i]),
             )
 
-            steer_pos_des[i] = angle
-            wheel_vel_des[i] = (
-                optimized_speed / self.config.wheel_radius_m
+            previous_branch_candidates = [
+                candidate for candidate in candidates
+                if candidate[2] == int(self._wheel_branch[i])
+            ]
+
+            if previous_branch_candidates:
+                keep = min(
+                    previous_branch_candidates,
+                    key=lambda candidate: abs(candidate[0] - current_steer[i]),
+                )
+                keep_cost = abs(keep[0] - current_steer[i])
+                best_cost = abs(best[0] - current_steer[i])
+
+                if (
+                    best[2] != int(self._wheel_branch[i])
+                    and keep_cost - best_cost
+                    < self.config.steer_branch_hysteresis_rad
+                ):
+                    chosen = keep
+                else:
+                    chosen = best
+            else:
+                chosen = best
+
+            chosen_angle, chosen_speed, chosen_branch = chosen
+            self._wheel_branch[i] = chosen_branch
+
+            target_delta = chosen_angle - prev_target[i]
+            steer_pos_des[i] = prev_target[i] + np.clip(
+                target_delta,
+                -max_steer_step,
+                max_steer_step,
             )
+
+            steer_error = chosen_angle - current_steer[i]
+            if abs(steer_error) >= self.config.steer_alignment_stop_rad:
+                alignment_scale = 0.0
+            else:
+                alignment_scale = max(0.0, float(np.cos(steer_error)))
+
+            wheel_vel_des[i] = (
+                chosen_speed
+                * alignment_scale
+                / self.config.wheel_radius_m
+            )
+
+        self._prev_steer_target = steer_pos_des.copy()
 
         max_abs_wheel_vel = float(np.max(np.abs(wheel_vel_des)))
-
         if max_abs_wheel_vel > self.config.wheel_vel_limit_rad_s:
             wheel_vel_des *= (
                 self.config.wheel_vel_limit_rad_s
                 / max_abs_wheel_vel
             )
-
-        # steer_error = steer_pos_des - current_steer
-
-        # if np.any(np.abs(steer_error) > np.deg2rad(5.0)):
-        #     wheel_vel_des.fill(0.0)
 
         return steer_pos_des, wheel_vel_des
 
