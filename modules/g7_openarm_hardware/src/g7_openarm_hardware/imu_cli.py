@@ -85,7 +85,7 @@ class IMUNode:
 
 
 def main():
-    ChannelFactoryInitialize()
+    ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
     
     control = xspublic.XsControl()
     ports = xspublic.XsScanner.scan_ports()
@@ -117,7 +117,7 @@ def main():
     device.read_emts_and_device_configuration()
     device_id = device.device_id()
 
-    config = [
+    imu_config = [
         xspublic.XsOutputConfiguration(xspublic.PacketCounter,       0),
         xspublic.XsOutputConfiguration(xspublic.SampleTimeFine,      0),
         xspublic.XsOutputConfiguration(xspublic.StatusWord,          0),
@@ -128,7 +128,7 @@ def main():
         xspublic.XsOutputConfiguration(xspublic.Quaternion,        100),
     ]
 
-    if not device.set_output_configuration(config):
+    if not device.set_output_configuration(imu_config):
         control.close()
         raise RuntimeError("Could not configure MTi device. Aborting.")
 
