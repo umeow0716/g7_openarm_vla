@@ -6,12 +6,14 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "g7-openarm-config",
+    "g7-openarm-idl",
     "mujoco>=3.10.0",
     "unitree-sdk2py",
 ]
 
 [tool.uv.sources]
 g7-openarm-config = { workspace = true }
+g7-openarm-idl = { workspace = true }
 unitree-sdk2py = { path = "../../third_party/unitree_sdk2_python", editable = true }
 
 [project.scripts]
