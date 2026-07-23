@@ -1,10 +1,21 @@
 import multiprocessing as mp
 import os
 import signal
+import subprocess
 import time
 from collections.abc import Callable
 from multiprocessing.context import SpawnProcess
 
+
+def enable_can_fd() -> None:
+    try:
+        subprocess.run(
+            ["/usr/local/bin/can-fd-up"],
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(f"Enable CAN-FD Failed, Exit Code：{exc.returncode}")
+        raise
 
 def suppress_output() -> None:
     devnull_fd = os.open(os.devnull, os.O_WRONLY)
@@ -92,6 +103,7 @@ def stop_processes(
 
 
 def main() -> None:
+    enable_can_fd()
     ctx = mp.get_context("spawn")
 
     processes = [
