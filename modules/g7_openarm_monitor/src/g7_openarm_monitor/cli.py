@@ -5,7 +5,7 @@ import sys
 from g7_openarm_idl import EETarget, Odom, WBCLowCmd
 from typing import Any
 from unitree_sdk2py.core.channel import ChannelSubscriber, ChannelFactoryInitialize
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_, LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_, LowState_, LowCmd_
 
 from .config import config
 
@@ -46,6 +46,7 @@ def main() -> None:
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
     
     eetarget_monitor  = HzMonitor("rt/eetarget", EETarget)
+    imustate_monitor  = HzMonitor("rt/imustate", IMUState_)
     lowstate_monitor  = HzMonitor("rt/lowstate", LowState_)
     lowcmd_monitor    = HzMonitor("rt/lowcmd", LowCmd_)
     odom_monitor      = HzMonitor("rt/odom", Odom)
@@ -53,6 +54,7 @@ def main() -> None:
     
     monitors = [
         eetarget_monitor,
+        imustate_monitor,
         lowstate_monitor,
         lowcmd_monitor,
         odom_monitor,

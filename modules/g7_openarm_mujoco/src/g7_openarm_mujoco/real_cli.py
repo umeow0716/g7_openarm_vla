@@ -4,12 +4,12 @@ import mujoco.viewer
 
 from pathlib import Path
 
-from g7_openarm_idl import EETarget, EETarget_default
+from g7_openarm_idl import EETarget, EETarget_default, Odom, Odom_default
 from unitree_sdk2py.utils.thread import RecurrentThread
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, ChannelFactoryInitialize
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
-from unitree_sdk2py.idl.default  import unitree_hg_msg_dds__LowState_, unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.default  import unitree_hg_msg_dds__LowState_
 
 from .config import config
 
@@ -21,6 +21,7 @@ class SimulationNode:
     def __init__(self):
         self.spec = mujoco.MjSpec.from_file(DEFAULT_MODEL_XML_PATH.as_posix())
         self.spec.option.timestep = config.interval
+
         left_target = self.spec.worldbody.add_body(
             name='left_target',
             mocap=True,
@@ -111,16 +112,13 @@ class SimulationNode:
         self.gyro_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_gyro")
         self.acc_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_acc")
 
-        self.msg = unitree_hg_msg_dds__LowState_()
-        self.lowcmd = unitree_hg_msg_dds__LowCmd_()
-        
         self.simulation_thread = RecurrentThread(
             name="simulation_loop",
             interval=config.interval,
             target=self.simulation_loop,
         )
         self.simulation_thread.Start()
-        
+
         self.viewer_thread = RecurrentThread(
             name="viewer_loop",
             interval=config.fps_interval,
@@ -128,14 +126,13 @@ class SimulationNode:
         )
         self.viewer_thread.Start()
 
-        self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
-        self.lowstate_publisher.Init()
-        self.write_lowstate_thread = RecurrentThread(
-            name="write_lowstate",
-            interval=config.interval,
-            target=self.write_lowstate,
-        )
-        self.write_lowstate_thread.Start()
+        self.lowstate = unitree_hg_msg_dds__LowState_()
+        self.lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+        self.lowstate_subscriber.Init(self.lowstate_handler, 10)
+
+        self.odom = Odom_default()
+        self.odom_subscriber = ChannelSubscriber("rt/odom", Odom)
+        self.odom_subscriber.Init()
 
         self.eetarget = EETarget_default()
         self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
@@ -147,33 +144,11 @@ class SimulationNode:
         )
         self.write_eetarget_thread.Start()
 
-        self.lowcmd_subscriber = ChannelSubscriber("rt/lowcmd", LowCmd_)
-        self.lowcmd_subscriber.Init(self.lowcmd_handler, 10)
+    def lowstate_handler(self, msg: LowState_):
+        self.lowstate = msg
 
-    def lowcmd_handler(self, msg: LowCmd_):
-        self.lowcmd = msg
-
-    def write_lowstate(self):
-        with self.viewer.lock():
-            for i, _ in enumerate(self.motor_names):
-                pos_id = self.pos_ids[i]
-                vel_id = self.vel_ids[i]
-                torque_id = self.torque_ids[i]
-
-                self.msg.motor_state[i].q  = self.data.sensordata[pos_id]
-                self.msg.motor_state[i].dq = self.data.sensordata[vel_id]
-                self.msg.motor_state[i].tau_est = self.data.sensordata[torque_id]
-            self.msg.imu_state.quaternion[0]    = self.data.sensordata[self.quat_id]
-            self.msg.imu_state.quaternion[1]    = self.data.sensordata[self.quat_id+1]
-            self.msg.imu_state.quaternion[2]    = self.data.sensordata[self.quat_id+2]
-            self.msg.imu_state.quaternion[3]    = self.data.sensordata[self.quat_id+3]
-            self.msg.imu_state.gyroscope[0]     = self.data.sensordata[self.gyro_id]
-            self.msg.imu_state.gyroscope[1]     = self.data.sensordata[self.gyro_id+1]
-            self.msg.imu_state.gyroscope[2]     = self.data.sensordata[self.gyro_id+2]
-            self.msg.imu_state.accelerometer[0] = self.data.sensordata[self.acc_id]
-            self.msg.imu_state.accelerometer[1] = self.data.sensordata[self.acc_id+1]
-            self.msg.imu_state.accelerometer[2] = self.data.sensordata[self.acc_id+2]
-        self.lowstate_publisher.Write(self.msg)
+    def odom_handler(self, msg: Odom):
+        self.odom = msg
 
     def write_eetarget(self):
         with self.viewer.lock():
@@ -195,21 +170,21 @@ class SimulationNode:
 
     def simulation_loop(self):
         with self.viewer.lock():
-            for i, _ in enumerate(self.motor_names):
-                pos_id = self.pos_ids[i]
-                vel_id = self.vel_ids[i]
-
-                q_err  = self.lowcmd.motor_cmd[i].q  - self.data.sensordata[pos_id]
-                dq_err = self.lowcmd.motor_cmd[i].dq - self.data.sensordata[vel_id]
-
-                idx = i if i < 16 else i + 1
-                self.data.ctrl[idx] = q_err * self.lowcmd.motor_cmd[i].kp + dq_err * self.lowcmd.motor_cmd[i].kd + self.lowcmd.motor_cmd[i].tau
-                
-                if i == 15 or i == 23:
-                    q_err  = self.lowcmd.motor_cmd[i].q  - self.data.sensordata[pos_id+1]
-                    dq_err = self.lowcmd.motor_cmd[i].dq - self.data.sensordata[vel_id+1]
-                    self.data.ctrl[idx+1] = q_err * self.lowcmd.motor_cmd[i].kp + dq_err * self.lowcmd.motor_cmd[i].kd + self.lowcmd.motor_cmd[i].tau
-
+            self.data.qpos[0] = self.odom.position.x
+            self.data.qpos[1] = self.odom.position.y
+            self.data.qpos[2] = self.odom.position.z
+            self.data.qpos[3] = self.odom.quaternion.w
+            self.data.qpos[4] = self.odom.quaternion.x
+            self.data.qpos[5] = self.odom.quaternion.y
+            self.data.qpos[6] = self.odom.quaternion.z
+            for i in range(8):
+                self.data.qpos[7+i] = self.lowstate.motor_state[i].q
+            for i in range(8):
+                self.data.qpos[15+i] = self.lowstate.motor_state[i].q
+            for i in range(8):
+                self.data.qpos[24+i] = self.lowstate.motor_state[i].q
+            self.data.qvel[:] = 0.0
+            self.data.qacc[:] = 0.0
             mujoco.mj_step(self.model, self.data)
 
     def viewer_loop(self):

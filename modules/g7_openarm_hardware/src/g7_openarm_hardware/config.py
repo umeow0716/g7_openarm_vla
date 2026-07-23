@@ -13,21 +13,25 @@ class DDSConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class MujocoConfig(BaseConfig):
+class HardwareConfig(BaseConfig):
     hz: float
-    fps: float
-    
+    imu_hz: float
+    base_can: str
+    left_arm_can: str
+    right_arm_can: str
+    can_fd: bool
+
     dds: DDSConfig
 
     def __post_init__(self) -> None:
         if self.hz <= 0.0:
             raise ValueError(
-                f"mujoco.hz must be positive, got {self.hz}"
+                f"hardware.hz must be positive, got {self.hz}"
             )
 
-        if self.fps <= 0.0:
+        if self.imu_hz <= 0.0:
             raise ValueError(
-                f"mujoco.fps must be positive, got {self.fps}"
+                f"hardware.imu_hz must be positive, got {self.imu_hz}"
             )
 
         if not self.dds.interface:
@@ -38,22 +42,22 @@ class MujocoConfig(BaseConfig):
     @property
     def interval(self) -> float:
         return 1.0 / self.hz
-    
+
     @property
-    def fps_interval(self) -> float:
-        return 1.0 / self.fps
+    def imu_interval(self) -> float:
+        return 1.0 / self.imu_hz
 
     @classmethod
     def from_mapping(
         cls,
         data: Mapping[str, Any],
-    ) -> "MujocoConfig":
-        section = data.get("mujoco")
+    ) -> "HardwareConfig":
+        section = data.get("hardware")
         dds_section = data.get("dds")
 
         if not isinstance(section, Mapping):
             raise ValueError(
-                "Missing [mujoco] section"
+                "Missing [hardware] section"
             )
 
         if not isinstance(dds_section, Mapping):
@@ -63,7 +67,11 @@ class MujocoConfig(BaseConfig):
 
         return cls(
             hz=float(section["hz"]),
-            fps=float(section["fps"]),
+            imu_hz=float(section["imu_hz"]),
+            base_can=str(section["base_can"]),
+            left_arm_can=str(section["left_arm_can"]),
+            right_arm_can=str(section["right_arm_can"]),
+            can_fd=bool(section["can_fd"]),
             dds=DDSConfig(
                 domain_id=int(
                     dds_section.get("domain_id", 0)
@@ -75,4 +83,4 @@ class MujocoConfig(BaseConfig):
         )
 
 
-config = MujocoConfig.load()
+config = HardwareConfig.load()
