@@ -69,7 +69,7 @@ def main() -> None:
             )
 
         sys.stdout.flush()
-        time.sleep(config.hz)
+        time.sleep(config.interval)
 
 
 if __name__ == '__main__':
