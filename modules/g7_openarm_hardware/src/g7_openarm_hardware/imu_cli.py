@@ -13,7 +13,7 @@ from unitree_sdk2py.core.channel import (
 from unitree_sdk2py.idl.default import (
     unitree_go_msg_dds__IMUState_ as IMUState_default,
 )
-from unitree_sdk2py.idl.unitree_go.msg.dds_ import IMUState_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_
 
 from .config import config
 
