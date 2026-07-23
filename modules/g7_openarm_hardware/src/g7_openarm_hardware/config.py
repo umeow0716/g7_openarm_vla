@@ -15,6 +15,7 @@ class DDSConfig:
 @dataclass(frozen=True, slots=True)
 class HardwareConfig(BaseConfig):
     hz: float
+    imu_hz: float
     base_can: str
     left_arm_can: str
     right_arm_can: str
@@ -26,6 +27,11 @@ class HardwareConfig(BaseConfig):
         if self.hz <= 0.0:
             raise ValueError(
                 f"hardware.hz must be positive, got {self.hz}"
+            )
+
+        if self.imu_hz <= 0.0:
+            raise ValueError(
+                f"hardware.imu_hz must be positive, got {self.imu_hz}"
             )
 
         if not self.dds.interface:
@@ -57,6 +63,7 @@ class HardwareConfig(BaseConfig):
 
         return cls(
             hz=float(section["hz"]),
+            imu_hz=float(section["imu_hz"]),
             base_can=str(section["base_can"]),
             left_arm_can=str(section["left_arm_can"]),
             right_arm_can=str(section["right_arm_can"]),
