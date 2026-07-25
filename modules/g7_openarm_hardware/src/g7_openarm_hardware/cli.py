@@ -94,7 +94,7 @@ class HardwareNode:
     def control_loop(self):
         # time_start = time.perf_counter()
         total_packet = 0
-        for result in self.group.recv_wait_all(500):
+        for result in self.group.recv_wait_all(2000):
             total_packet += result.received
         # time_end = time.perf_counter()
         # print(total_packet)
@@ -133,8 +133,8 @@ class HardwareNode:
                 dq=self.lowcmd.motor_cmd[8+i].dq * left_arm_direction[i],
                 kp=self.lowcmd.motor_cmd[8+i].kp,
                 kd=self.lowcmd.motor_cmd[8+i].kd,
-                # tau=self.lowcmd.motor_cmd[8+i].tau * left_arm_direction[i],
-                tau=0.0,
+                tau=self.lowcmd.motor_cmd[8+i].tau * left_arm_direction[i],
+                # tau=0.0,
             )
             for i in range(8)
         ]
@@ -144,8 +144,8 @@ class HardwareNode:
                 dq=self.lowcmd.motor_cmd[16+i].dq * right_arm_direction[i],
                 kp=self.lowcmd.motor_cmd[16+i].kp,
                 kd=self.lowcmd.motor_cmd[16+i].kd,
-                # tau=self.lowcmd.motor_cmd[16+i].tau * right_arm_direction[i],
-                tau=0.0,
+                tau=self.lowcmd.motor_cmd[16+i].tau * right_arm_direction[i],
+                # tau=0.0,
             )
             for i in range(8)
         ]

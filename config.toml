@@ -11,17 +11,17 @@ right_arm_can = "can_right"
 can_fd = true
 
 [lowlevel]
-hz = 100.0
+hz = 200.0
 control_mode = "arm-only" # wbc or arm-only
 
 [state_estimator]
-hz = 100.0
+hz = 200.0
 
 [wbc]
-hz = 100.0
+hz = 200.0
 
 [mujoco]
-hz = 100.0
+hz = 200.0
 eetarget_hz = 50.0
 fps = 60.0
 
