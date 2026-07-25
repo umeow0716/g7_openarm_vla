@@ -142,13 +142,13 @@ class SimulationNode:
         self.eetarget_publisher.Init()
         self.write_eetarget_thread = RecurrentThread(
             name="write_eetarget",
-            interval=config.interval,
+            interval=config.eetarget_interval,
             target=self.write_eetarget,
         )
         self.write_eetarget_thread.Start()
 
         self.lowcmd_subscriber = ChannelSubscriber("rt/lowcmd", LowCmd_)
-        self.lowcmd_subscriber.Init(self.lowcmd_handler, 10)
+        self.lowcmd_subscriber.Init(self.lowcmd_handler, 0)
 
     def lowcmd_handler(self, msg: LowCmd_):
         self.lowcmd = msg

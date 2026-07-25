@@ -128,7 +128,7 @@ class SimulationNode:
 
         self.lowstate = unitree_hg_msg_dds__LowState_()
         self.lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
-        self.lowstate_subscriber.Init(self.lowstate_handler, 10)
+        self.lowstate_subscriber.Init(self.lowstate_handler, 0)
 
         self.odom = Odom_default()
         self.odom_subscriber = ChannelSubscriber("rt/odom", Odom)
@@ -139,7 +139,7 @@ class SimulationNode:
         self.eetarget_publisher.Init()
         self.write_eetarget_thread = RecurrentThread(
             name="write_eetarget",
-            interval=config.interval,
+            interval=config.eetarget_interval,
             target=self.write_eetarget,
         )
         self.write_eetarget_thread.Start()

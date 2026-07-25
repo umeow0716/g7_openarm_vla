@@ -15,6 +15,7 @@ class DDSConfig:
 @dataclass(frozen=True, slots=True)
 class MujocoConfig(BaseConfig):
     hz: float
+    eetarget_hz: float
     fps: float
     
     dds: DDSConfig
@@ -23,6 +24,11 @@ class MujocoConfig(BaseConfig):
         if self.hz <= 0.0:
             raise ValueError(
                 f"mujoco.hz must be positive, got {self.hz}"
+            )
+
+        if self.eetarget_hz <= 0.0:
+            raise ValueError(
+                f"mujoco.eetarget_hz must be positive, got {self.eetarget_hz}"
             )
 
         if self.fps <= 0.0:
@@ -38,6 +44,10 @@ class MujocoConfig(BaseConfig):
     @property
     def interval(self) -> float:
         return 1.0 / self.hz
+
+    @property
+    def eetarget_interval(self) -> float:
+        return 1.0 / self.eetarget_hz
     
     @property
     def fps_interval(self) -> float:
@@ -63,6 +73,7 @@ class MujocoConfig(BaseConfig):
 
         return cls(
             hz=float(section["hz"]),
+            eetarget_hz=float(section["eetarget_hz"]),
             fps=float(section["fps"]),
             dds=DDSConfig(
                 domain_id=int(

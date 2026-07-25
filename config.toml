@@ -3,25 +3,26 @@ domain_id = 0
 interface = "lo"
 
 [hardware]
-hz = 500.0
-imu_hz = 100
+hz = 200.0
+imu_hz = 100.0
 base_can = "can_base"
 left_arm_can = "can_left"
 right_arm_can = "can_right"
 can_fd = true
 
 [lowlevel]
-hz = 500.0
+hz = 100.0
 control_mode = "arm-only" # wbc or arm-only
 
 [state_estimator]
-hz = 500.0
+hz = 100.0
 
 [wbc]
-hz = 500.0
+hz = 100.0
 
 [mujoco]
-hz = 500.0
+hz = 100.0
+eetarget_hz = 50.0
 fps = 60.0
 
 [monitor]

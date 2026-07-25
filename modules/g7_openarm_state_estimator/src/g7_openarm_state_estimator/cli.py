@@ -30,7 +30,7 @@ class OdomNode:
         
         self.lowstate: Optional[LowState_] = None
         self.lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
-        self.lowstate_subscriber.Init(self.lowstate_handler, 10)
+        self.lowstate_subscriber.Init(self.lowstate_handler, 0)
         
         self.odom = Odom_default()
         self.odom_publisher = ChannelPublisher("rt/odom", Odom)

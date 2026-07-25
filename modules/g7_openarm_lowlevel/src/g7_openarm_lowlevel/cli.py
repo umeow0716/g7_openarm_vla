@@ -21,15 +21,15 @@ class LowLevelNode():
         
         self.wbc_lowcmd = WBCLowCmd_default()
         self.wbc_lowcmd_subscriber = ChannelSubscriber("rt/wbclowcmd", WBCLowCmd)
-        self.wbc_lowcmd_subscriber.Init(self.wbc_lowcmd_handler, 10)
+        self.wbc_lowcmd_subscriber.Init(self.wbc_lowcmd_handler, 0)
         
         self.lowstate: Optional[LowState_] = None
         self.lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
-        self.lowstate_subscriber.Init(self.lowstate_handler, 10)
+        self.lowstate_subscriber.Init(self.lowstate_handler, 0)
         
         self.odom: Optional[Odom] = None
         self.odom_subscriber = ChannelSubscriber("rt/odom", Odom)
-        self.odom_subscriber.Init(self.odom_handler, 10)
+        self.odom_subscriber.Init(self.odom_handler, 0)
         
         self.lowcmd = unitree_hg_msg_dds__LowCmd_()
         self.lowcmd_publisher = ChannelPublisher("rt/lowcmd", LowCmd_)
@@ -47,7 +47,7 @@ class LowLevelNode():
     def write_lowcmd(self):
         if self.lowstate is None or self.odom is None:
             return
-        
+
         steer_pos_des, wheel_vel_des, tau_act_cmd = self.controller.update(
             lowstate=self.lowstate,
             odom=self.odom,
@@ -77,15 +77,15 @@ class LowLevelNode():
         left_gripper = self.lowcmd.motor_cmd[15]
         left_gripper.q   = self.wbc_lowcmd.openarm.data[7]
         left_gripper.dq  = 0.0
-        left_gripper.kp  = 100.0
-        left_gripper.kd  = 1.0
+        left_gripper.kp  = 0.0
+        left_gripper.kd  = 0.0
         left_gripper.tau = 0.0
         
         right_gripper = self.lowcmd.motor_cmd[23]
         right_gripper.q   = self.wbc_lowcmd.openarm.data[15]
         right_gripper.dq  = 0.0
-        right_gripper.kp  = 100.0
-        right_gripper.kd  = 1.0
+        right_gripper.kp  = 0.0
+        right_gripper.kd  = 0.0
         right_gripper.tau = 0.0
         
         self.lowcmd_publisher.Write(self.lowcmd)

@@ -71,11 +71,11 @@ class HardwareNode:
 
         self.lowcmd = unitree_hg_msg_dds__LowCmd_()
         self.lowcmd_subscriber = ChannelSubscriber("rt/lowcmd", LowCmd_)
-        self.lowcmd_subscriber.Init(self.lowcmd_handler, 10)
+        self.lowcmd_subscriber.Init(self.lowcmd_handler, 0)
 
         self.imustate = unitree_hg_msg_dds__IMUState_()
         self.imustate_subscriber = ChannelSubscriber("rt/imustate", IMUState_)
-        self.imustate_subscriber.Init(self.imustate_handler, 10)
+        self.imustate_subscriber.Init(self.imustate_handler, 0)
         
         self.control_thread = RecurrentThread(
             name="control_thread",
@@ -89,12 +89,16 @@ class HardwareNode:
 
     def imustate_handler(self, msg: IMUState_):
         self.imustate = msg
+        self.lowstate.imu_state = self.imustate
 
     def control_loop(self):
+        # time_start = time.perf_counter()
         total_packet = 0
-        for result in self.group.refresh_all_and_recv(2000):
+        for result in self.group.recv_wait_all(500):
             total_packet += result.received
-        # print(f"{total_packet} / {self.total_expected}")
+        # time_end = time.perf_counter()
+        # print(total_packet)
+        # print(f"{(time_end - time_start) * 1e6:.2f}us")
         
         base = self.group.get_openarm(config.base_can)
         for i, motor in enumerate(base.get_arm().get_motors()):
@@ -113,15 +117,14 @@ class HardwareNode:
             self.lowstate.motor_state[16+i].q  = motor.get_position() * right_arm_direction[i]
             self.lowstate.motor_state[16+i].dq = motor.get_velocity() * right_arm_direction[i]
             self.lowstate.motor_state[16+i].tau_est = motor.get_torque() * right_arm_direction[i]
-        
-        self.lowstate.imu_state = self.imustate
+
         self.lowstate_publisher.Write(self.lowstate)
         
         for i in range(0, 8, 2):
-            cmd = oa.PosVelParam(q=self.lowcmd.motor_cmd[i].q, dq=20.0)
+            cmd = oa.PosVelParam(q=0.0, dq=0.0)
             base.get_arm().posvel_control_one(i, cmd)
         for i in range(1, 8, 2):
-            cmd = oa.VelParam(dq=self.lowcmd.motor_cmd[i].dq)
+            cmd = oa.VelParam(dq=0.0)
             base.get_arm().vel_control_one(i, cmd)
 
         left_cmds = [
@@ -130,7 +133,8 @@ class HardwareNode:
                 dq=self.lowcmd.motor_cmd[8+i].dq * left_arm_direction[i],
                 kp=self.lowcmd.motor_cmd[8+i].kp,
                 kd=self.lowcmd.motor_cmd[8+i].kd,
-                tau=self.lowcmd.motor_cmd[8+i].tau * left_arm_direction[i],
+                # tau=self.lowcmd.motor_cmd[8+i].tau * left_arm_direction[i],
+                tau=0.0,
             )
             for i in range(8)
         ]
@@ -140,7 +144,8 @@ class HardwareNode:
                 dq=self.lowcmd.motor_cmd[16+i].dq * right_arm_direction[i],
                 kp=self.lowcmd.motor_cmd[16+i].kp,
                 kd=self.lowcmd.motor_cmd[16+i].kd,
-                tau=self.lowcmd.motor_cmd[16+i].tau * right_arm_direction[i],
+                # tau=self.lowcmd.motor_cmd[16+i].tau * right_arm_direction[i],
+                tau=0.0,
             )
             for i in range(8)
         ]

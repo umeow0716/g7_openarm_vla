@@ -18,15 +18,15 @@ class Node:
         
         self.lowstate: Optional[LowState_] = None
         self.lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
-        self.lowstate_subscriber = self.lowstate_subscriber.Init(self.lowstate_handler, 10)
+        self.lowstate_subscriber = self.lowstate_subscriber.Init(self.lowstate_handler, 0)
         
         self.odom: Optional[Odom] = None
         self.odom_subscriber = ChannelSubscriber("rt/odom", Odom)
-        self.odom_subscriber.Init(self.odom_handler, 10)
+        self.odom_subscriber.Init(self.odom_handler, 0)
         
         self.ee_target: Optional[EETarget] = None
         self.ee_target_subscriber = ChannelSubscriber("rt/eetarget", EETarget)
-        self.ee_target_subscriber.Init(self.ee_target_handler, 10)
+        self.ee_target_subscriber.Init(self.ee_target_handler, 0)
         
         self.wbc_lowcmd = WBCLowCmd_default()
         self.wbc_lowcmd_publisher = ChannelPublisher("rt/wbclowcmd", WBCLowCmd)
