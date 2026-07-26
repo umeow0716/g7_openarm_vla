@@ -11,7 +11,7 @@ from unitree_sdk2py.idl.default import geometry_msgs_msg_dds__Point_, geometry_m
 @dataclass
 @annotate.final
 @annotate.autoid("sequential")
-class Odom(IdlStruct, typename="RightPoseCmd"):
+class Odom(IdlStruct, typename="Odom"):
     position: Point_
     quaternion: Quaternion_
     velocity: Point_

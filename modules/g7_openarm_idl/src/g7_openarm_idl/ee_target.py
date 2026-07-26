@@ -11,7 +11,7 @@ from unitree_sdk2py.idl.default import geometry_msgs_msg_dds__Pose_
 @dataclass
 @annotate.final
 @annotate.autoid("sequential")
-class EETarget(IdlStruct, typename="RightPoseCmd"):
+class EETarget(IdlStruct, typename="EETarget"):
     left_target: Pose_
     right_target: Pose_
 

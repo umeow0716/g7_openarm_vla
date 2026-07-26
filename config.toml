@@ -36,3 +36,6 @@ fps = 60.0
 
 [monitor]
 hz = 1.0
+
+[hommi_interface]
+hz = 50.0 # EEtarget

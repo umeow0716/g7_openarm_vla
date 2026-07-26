@@ -11,7 +11,7 @@ from .openarm_cmd import OpenArmCmd, OpenArmCmd_default
 @dataclass
 @annotate.final
 @annotate.autoid("sequential")
-class WBCLowCmd(IdlStruct, typename="RightPoseCmd"):
+class WBCLowCmd(IdlStruct, typename="WBCLowCmd"):
     amr: AMRCmd
     openarm: OpenArmCmd
 

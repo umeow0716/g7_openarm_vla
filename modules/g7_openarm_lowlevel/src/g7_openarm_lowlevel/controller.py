@@ -19,70 +19,8 @@ if TYPE_CHECKING:
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 
 
-class NotSupportedArchitecture(Exception):
-    pass
+DEFAULT_LIB_PATH = PinnZooModel.get_default_lib_path()
 
-def get_arch():
-    machine = platform.machine().lower()
-    
-    if machine in ('x86_64', 'amd64'):
-        return 'x86_64'
-    elif machine in ('aarch64', 'arm64'):
-        return 'aarch64'
-
-    raise NotSupportedArchitecture(f'{platform.machine().lower()} is not support')
-
-
-DEFAULT_LIB_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "include" / f"libg7_openarm_quat_{get_arch()}.so"
-
-
-def odom_velocity_world_to_body(
-    odom: "Odom",
-) -> npt.NDArray[np.float64]:
-    qw = odom.quaternion.w
-    qx = odom.quaternion.x
-    qy = odom.quaternion.y
-    qz = odom.quaternion.z
-
-    R_world_body = np.array([
-        [
-            1.0 - 2.0 * (qy * qy + qz * qz),
-            2.0 * (qx * qy - qw * qz),
-            2.0 * (qx * qz + qw * qy),
-        ],
-        [
-            2.0 * (qx * qy + qw * qz),
-            1.0 - 2.0 * (qx * qx + qz * qz),
-            2.0 * (qy * qz - qw * qx),
-        ],
-        [
-            2.0 * (qx * qz - qw * qy),
-            2.0 * (qy * qz + qw * qx),
-            1.0 - 2.0 * (qx * qx + qy * qy),
-        ],
-    ], dtype=np.float64)
-
-    R_body_world = R_world_body.T
-
-    velocity_world = np.array([
-        odom.velocity.x,
-        odom.velocity.y,
-        odom.velocity.z,
-    ], dtype=np.float64)
-
-    angular_velocity_world = np.array([
-        odom.angular_velocity.x,
-        odom.angular_velocity.y,
-        odom.angular_velocity.z,
-    ], dtype=np.float64)
-
-    velocity_body = R_body_world @ velocity_world
-    angular_velocity_body = R_body_world @ angular_velocity_world
-
-    return np.concatenate([
-        velocity_body,
-        angular_velocity_body,
-    ])
 
 def odom_vdot_world_to_body(odom: "Odom") -> npt.NDArray[np.float64]:
     qw = odom.quaternion.w
@@ -194,8 +132,8 @@ class ControllerConfig:
     ] * 2, dtype=np.float64)
 
     # --- PD / impedance control (arm) ---
-    arm_pd_zeta: float =  15.0
-    arm_pd_omega: float = 1.1
+    arm_pd_zeta: float =  1.2
+    arm_pd_omega: float = 1.0
 
     # Extra multiplier on Kd only, applied AFTER the zeta*omega*sqrt(M)
     # formula. This is the knob to reach for on overshoot: it raises
@@ -296,36 +234,6 @@ class Controller:
         generalized-velocity-ordered array to the 16-long motor_cmd[8:24]
         order."""
         return np.concatenate([v18[:8], v18[9:17]], dtype=np.float64)
-    
-    def build_x_lib(
-        self,
-        lowstate: "LowState_",
-        odom: "Odom"
-    ) -> npt.NDArray[np.float64]:
-        motor_state = lowstate.motor_state
-        
-        position         = np.array([odom.position.x, odom.position.y, odom.position.z], dtype=np.float64)
-        quat             = np.array([odom.quaternion.w, odom.quaternion.x, odom.quaternion.y, odom.quaternion.z], dtype=np.float64)
-
-        q_0_14 = np.array([m.q for m in motor_state[0:15]], dtype=np.float64)
-        q_16_22 = np.array([m.q for m in motor_state[16:23]], dtype=np.float64)
-
-        dq_0_14 = np.array([m.dq for m in motor_state[0:15]], dtype=np.float64)
-        dq_16_22 = np.array([m.dq for m in motor_state[16:23]], dtype=np.float64)
-
-        return np.concatenate((
-            position,
-            quat,
-            q_0_14,
-            np.zeros(2, dtype=np.float64),
-            q_16_22,
-            np.zeros(2, dtype=np.float64),
-            odom_velocity_world_to_body(odom),
-            dq_0_14,
-            np.zeros(2, dtype=np.float64),
-            dq_16_22,
-            np.zeros(2, dtype=np.float64),
-        ))
 
     def update(
         self,
@@ -334,7 +242,7 @@ class Controller:
         amr_cmd: "AMRCmd",
         openarm_cmd: "OpenArmCmd"
     ):
-        x = self.build_x_lib(lowstate, odom)
+        x = PinnZooModel.build_x_lib(lowstate, odom)
         base_command_is_idle = self.is_base_idle(amr_cmd)
         
         if base_command_is_idle:
