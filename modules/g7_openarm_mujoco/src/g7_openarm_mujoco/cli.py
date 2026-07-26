@@ -7,9 +7,8 @@ from pathlib import Path
 from g7_openarm_idl import EETarget, EETarget_default
 from unitree_sdk2py.utils.thread import RecurrentThread
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, ChannelFactoryInitialize
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
-from unitree_sdk2py.idl.default  import unitree_hg_msg_dds__LowState_, unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_, IMUState_
+from unitree_sdk2py.idl.default  import unitree_hg_msg_dds__LowState_, unitree_hg_msg_dds__LowCmd_, unitree_hg_msg_dds__IMUState_
 
 from .config import config
 
@@ -110,9 +109,7 @@ class SimulationNode:
         self.quat_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_quat")
         self.gyro_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_gyro")
         self.acc_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_acc")
-
-        self.msg = unitree_hg_msg_dds__LowState_()
-        self.lowcmd = unitree_hg_msg_dds__LowCmd_()
+        
         
         self.simulation_thread = RecurrentThread(
             name="simulation_loop",
@@ -128,14 +125,25 @@ class SimulationNode:
         )
         self.viewer_thread.Start()
 
+        self.lowstate = unitree_hg_msg_dds__LowState_()
         self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
         self.lowstate_publisher.Init()
-        self.write_lowstate_thread = RecurrentThread(
+        self.lowstate_thread = RecurrentThread(
             name="write_lowstate",
             interval=config.interval,
             target=self.write_lowstate,
         )
-        self.write_lowstate_thread.Start()
+        self.lowstate_thread.Start()
+
+        self.imustate = unitree_hg_msg_dds__IMUState_()
+        self.imustate_publisher = ChannelPublisher("rt/imustate", IMUState_)
+        self.imustate_publisher.Init()
+        self.imustate_thread = RecurrentThread(
+            name="write_imustate",
+            interval=config.imu_interval,
+            target=self.write_imustate,
+        )
+        self.imustate_thread.Start()
 
         self.eetarget = EETarget_default()
         self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
@@ -147,6 +155,7 @@ class SimulationNode:
         )
         self.write_eetarget_thread.Start()
 
+        self.lowcmd = unitree_hg_msg_dds__LowCmd_()
         self.lowcmd_subscriber = ChannelSubscriber("rt/lowcmd", LowCmd_)
         self.lowcmd_subscriber.Init(self.lowcmd_handler, 0)
 
@@ -160,20 +169,25 @@ class SimulationNode:
                 vel_id = self.vel_ids[i]
                 torque_id = self.torque_ids[i]
 
-                self.msg.motor_state[i].q  = self.data.sensordata[pos_id]
-                self.msg.motor_state[i].dq = self.data.sensordata[vel_id]
-                self.msg.motor_state[i].tau_est = self.data.sensordata[torque_id]
-            self.msg.imu_state.quaternion[0]    = self.data.sensordata[self.quat_id]
-            self.msg.imu_state.quaternion[1]    = self.data.sensordata[self.quat_id+1]
-            self.msg.imu_state.quaternion[2]    = self.data.sensordata[self.quat_id+2]
-            self.msg.imu_state.quaternion[3]    = self.data.sensordata[self.quat_id+3]
-            self.msg.imu_state.gyroscope[0]     = self.data.sensordata[self.gyro_id]
-            self.msg.imu_state.gyroscope[1]     = self.data.sensordata[self.gyro_id+1]
-            self.msg.imu_state.gyroscope[2]     = self.data.sensordata[self.gyro_id+2]
-            self.msg.imu_state.accelerometer[0] = self.data.sensordata[self.acc_id]
-            self.msg.imu_state.accelerometer[1] = self.data.sensordata[self.acc_id+1]
-            self.msg.imu_state.accelerometer[2] = self.data.sensordata[self.acc_id+2]
-        self.lowstate_publisher.Write(self.msg)
+                self.lowstate.motor_state[i].q  = self.data.sensordata[pos_id]
+                self.lowstate.motor_state[i].dq = self.data.sensordata[vel_id]
+                self.lowstate.motor_state[i].tau_est = self.data.sensordata[torque_id]
+        self.lowstate.imu_state = self.imustate
+        self.lowstate_publisher.Write(self.lowstate)
+
+    def write_imustate(self):
+        with self.viewer.lock():
+            self.imustate.quaternion[0]    = self.data.sensordata[self.quat_id]
+            self.imustate.quaternion[1]    = self.data.sensordata[self.quat_id+1]
+            self.imustate.quaternion[2]    = self.data.sensordata[self.quat_id+2]
+            self.imustate.quaternion[3]    = self.data.sensordata[self.quat_id+3]
+            self.imustate.gyroscope[0]     = self.data.sensordata[self.gyro_id]
+            self.imustate.gyroscope[1]     = self.data.sensordata[self.gyro_id+1]
+            self.imustate.gyroscope[2]     = self.data.sensordata[self.gyro_id+2]
+            self.imustate.accelerometer[0] = self.data.sensordata[self.acc_id]
+            self.imustate.accelerometer[1] = self.data.sensordata[self.acc_id+1]
+            self.imustate.accelerometer[2] = self.data.sensordata[self.acc_id+2]
+        self.imustate_publisher.Write(self.imustate)
 
     def write_eetarget(self):
         with self.viewer.lock():

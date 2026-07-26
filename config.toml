@@ -30,6 +30,7 @@ hz = 200.0
 
 [mujoco]
 hz = 500.0
+imu_hz = 500.0
 eetarget_hz = 50.0
 fps = 60.0
 
