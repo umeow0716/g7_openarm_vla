@@ -20,6 +20,10 @@ class HardwareConfig(BaseConfig):
     left_arm_can: str
     right_arm_can: str
     can_fd: bool
+    base_ids: list[int]
+    base_direction: list[float]
+    left_arm_direction: list[float]
+    right_arm_direction: list[float]
 
     dds: DDSConfig
 
@@ -38,6 +42,22 @@ class HardwareConfig(BaseConfig):
             raise ValueError(
                 "dds.interface must not be empty"
             )
+
+        for i, val in enumerate(self.base_ids):
+            if not isinstance(val, int):
+                ValueError(f"hardware.base_ids[{i}] must be int: {val}")
+
+        for i, val in enumerate(self.base_direction):
+            if not isinstance(val, float):
+                ValueError(f"hardware.base_direction[{i}] must be float: {val}")
+
+        for i, val in enumerate(self.left_arm_direction):
+            if not isinstance(val, float):
+                ValueError(f"hardware.left_arm_direction[{i}] must be float: {val}")
+
+        for i, val in enumerate(self.right_arm_direction):
+            if not isinstance(val, float):
+                ValueError(f"hardware.right_arm_direction[{i}] must be float: {val}")
 
     @property
     def interval(self) -> float:
@@ -68,6 +88,10 @@ class HardwareConfig(BaseConfig):
             left_arm_can=str(section["left_arm_can"]),
             right_arm_can=str(section["right_arm_can"]),
             can_fd=bool(section["can_fd"]),
+            base_ids=list(section["base_ids"]),
+            base_direction=list(section["base_direction"]),
+            left_arm_direction=list(section["left_arm_direction"]),
+            right_arm_direction=list(section["right_arm_direction"]),
             dds=DDSConfig(
                 domain_id=int(
                     dds_section.get("domain_id", 0)

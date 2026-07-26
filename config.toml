@@ -1,18 +1,26 @@
+[general]
+debugging = false
+
 [dds]
 domain_id = 0
 interface = "lo"
 
 [hardware]
-hz = 200.0
+hz = 100.0
 imu_hz = 100.0
 base_can = "can_base"
 left_arm_can = "can_left"
 right_arm_can = "can_right"
 can_fd = true
+# base ids: [FL, FLW, FR, FRW, RL, RLW, RR, RRW]
+base_ids            = [ 0x02, 0x08, 0x01, 0x07, 0x03, 0x05, 0x04, 0x06 ]
+base_direction      = [ -1.0,  1.0, -1.0, -1.0, -1.0,  1.0, -1.0,  1.0 ]
+left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0, -1.0 ]
+right_arm_direction = [  1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0 ]
 
 [lowlevel]
 hz = 200.0
-control_mode = "arm-only" # wbc or arm-only
+control_mode = "wbc" # wbc or arm-only
 
 [state_estimator]
 hz = 200.0
@@ -21,7 +29,7 @@ hz = 200.0
 hz = 200.0
 
 [mujoco]
-hz = 200.0
+hz = 500.0
 eetarget_hz = 50.0
 fps = 60.0
 

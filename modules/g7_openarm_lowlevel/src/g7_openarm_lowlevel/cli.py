@@ -48,7 +48,7 @@ class LowLevelNode():
         if self.lowstate is None or self.odom is None:
             return
 
-        steer_pos_des, wheel_vel_des, tau_act_cmd = self.controller.update(
+        steer_pos_des, wheel_vel_des, q_des, dq_des, Kp, Kd, tau_ff = self.controller.update(
             lowstate=self.lowstate,
             odom=self.odom,
             amr_cmd=self.wbc_lowcmd.amr,
@@ -70,9 +70,11 @@ class LowLevelNode():
                 motor.tau = 0.0
         
         for i, motor in enumerate(self.lowcmd.motor_cmd[8:24]):
-            motor.kp = 0.0
-            motor.kd = 0.0
-            motor.tau = tau_act_cmd[i]
+            motor.q   = q_des[i]
+            motor.dq  = dq_des[i]
+            motor.kp  = Kp[i]
+            motor.kd  = Kd[i]
+            motor.tau = tau_ff[i]
         
         left_gripper = self.lowcmd.motor_cmd[15]
         left_gripper.q   = self.wbc_lowcmd.openarm.data[7]

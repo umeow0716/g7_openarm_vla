@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 
 from g7_openarm_pinnzoo import PinnZooModel, mass_matrix, inverse_dynamics
 
+from .config import config
+
 if TYPE_CHECKING:
     from g7_openarm_idl import AMRCmd, Odom, OpenArmCmd
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
@@ -32,7 +34,6 @@ def get_arch():
 
 
 DEFAULT_LIB_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "include" / f"libg7_openarm_quat_{get_arch()}.so"
-MIN_CONTROLLER_DT_S = 1e-3
 
 
 def odom_velocity_world_to_body(
@@ -192,6 +193,35 @@ class ControllerConfig:
         0.15,
     ] * 2, dtype=np.float64)
 
+    # --- PD / impedance control (arm) ---
+    arm_pd_zeta: float =  15.0
+    arm_pd_omega: float = 1.1
+
+    # Extra multiplier on Kd only, applied AFTER the zeta*omega*sqrt(M)
+    # formula. This is the knob to reach for on overshoot: it raises
+    # damping without touching Kp (stiffness/bandwidth). Try raising
+    # arm_pd_zeta toward ~1.0 first (same effect, more principled); reach
+    # for this only if you need Kd beyond what zeta=1.0-1.5 gives you.
+    arm_kd_boost: float = 1.0
+
+    # Per-joint decoupling: applied ON TOP of the mass-matrix baseline
+    # (Kp = ω²·M_diag, Kd = 2ζω·√M_diag), NOT instead of it -- this keeps
+    # the automatic pose-dependent gain scheduling (an outstretched arm has
+    # much higher effective shoulder inertia than a folded one) while still
+    # letting you hand-correct individual joints whose real behaviour
+    # (friction, backlash, cable drag) the diagonal mass-matrix model
+    # doesn't capture. Index order matches motor_cmd[8:24]:
+    #   [L1..L7, L_gripper, R1..R7, R_gripper]
+    arm_kp_scale = np.ones(16, dtype=np.float64)
+    arm_kd_scale = np.ones(16, dtype=np.float64)
+
+    arm_pos_lead_torque_fraction: float = 0.5
+
+    arm_kp_protocol_max: float = 500.0
+    arm_kd_protocol_max: float = 6.0
+
+    arm_kd_floor: float = 0.05
+
 
 class Controller:
     def __init__(
@@ -212,6 +242,14 @@ class Controller:
             23, 24, 25, 26, 27, 28, 29, 30, 31,
         ]
         
+        # Indices into the 16-length motor_cmd[8:24]-shaped arrays that are
+        # grippers, not arm joints. PD gains/torque stay zero there; gripper
+        # channel keeps whatever separate position handling cli.py already does.
+        self._gripper_idx_16 = [7, 15]
+
+        self._q_des_need_init = True
+        self._q_des_16: npt.NDArray[np.float64] = np.zeros((16,), dtype=np.float64)
+
         self._prev_arm_vel_des = np.zeros(18, dtype=np.float64)
 
         # Stateful swerve branch selection. +1 means the direct-angle branch,
@@ -229,8 +267,6 @@ class Controller:
             ],
             dtype=np.float64,
         )
-        
-        self.prev_time = time.perf_counter()
     
     def compute_arm_kd(
         self,
@@ -242,6 +278,24 @@ class Controller:
         M_diag = np.diag(M)
         Kd = 2.0 * zeta * omega * np.sqrt(M_diag)
         return Kd[self._arm_v_idx]
+
+    def compute_arm_kp(
+        self,
+        x: npt.NDArray[np.float64],
+        omega=8.0,
+    ):
+        M = mass_matrix(self.model, x)
+        M_diag = np.diag(M)
+        Kp = (omega ** 2) * M_diag
+        return Kp[self._arm_v_idx]
+
+    @staticmethod
+    def _to_motor16(v18: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        """Drop the two gripper-slot zero-paddings, same slicing as the
+        existing tau_act -> tau_act_cmd conversion, to go from the 18-long
+        generalized-velocity-ordered array to the 16-long motor_cmd[8:24]
+        order."""
+        return np.concatenate([v18[:8], v18[9:17]], dtype=np.float64)
     
     def build_x_lib(
         self,
@@ -294,37 +348,22 @@ class Controller:
                 amr_cmd=amr_cmd
             )
 
-        acc_act_des = self.desired_actuator_acceleration(
+        dt = config.interval
+
+        q_des, dq_des, Kp, Kd = self.compute_pd_targets(
+            lowstate=lowstate,
             x=x,
             openarm_cmd=openarm_cmd,
+            dt=dt,
         )
-        
-        vdot = np.concatenate([
-            odom_vdot_world_to_body(odom), # (6,)
-            [ 0.0 ] * 8,  # (8,)
-            acc_act_des,  # (18,)
-        ], dtype=np.float64)
-        tau_act = inverse_dynamics(
-            model=self.model,
+        print(f"KP: {Kp}\nKD: {Kd}\n")
+        tau_ff = self.compute_gravity_friction_ff(
             x=x,
-            vdot=vdot,
-        )[6+8:]
-        tau_act_cmd = np.concatenate([
-            tau_act[:8],
-            tau_act[9:17],
-        ], dtype=np.float64) # (16,)
-        
-        if not np.all(np.isfinite(tau_act)):
-            self._prev_arm_vel_des[:] = 0.0
-            raise RuntimeError(f"tau_act has nan\n{repr(tau_act)}")
-        
-        want_move = np.abs(openarm_cmd.data) > 4e-2
-        tau_bias = self.config.tau_static * want_move * np.sign(openarm_cmd.data)
-        tau_act_cmd += tau_bias
-        tau_act_cmd[7]  = 0.0
-        tau_act_cmd[15] = 0.0
-        
-        return steer_pos_des, wheel_vel_des, tau_act_cmd
+            odom=odom,
+            openarm_cmd=openarm_cmd,
+        )
+
+        return steer_pos_des, wheel_vel_des, q_des, dq_des, Kp, Kd, tau_ff
 
     def is_base_idle(
         self,
@@ -350,9 +389,7 @@ class Controller:
             dtype=np.float64,
         )
 
-        now = time.perf_counter()
-        dt = max(now - self._prev_swerve_time, MIN_CONTROLLER_DT_S)
-        self._prev_swerve_time = now
+        dt = config.interval
 
         if self._prev_steer_target is None:
             self._prev_steer_target = current_steer.copy()
@@ -451,44 +488,103 @@ class Controller:
 
         return steer_pos_des, wheel_vel_des
 
-    def desired_actuator_acceleration(
+    def compute_pd_targets(
+        self,
+        lowstate: "LowState_",
+        x: npt.NDArray[np.float64],
+        openarm_cmd: "OpenArmCmd",
+        dt: float,
+    ) -> tuple[
+        npt.NDArray[np.float64],  # q_des      (16,)
+        npt.NDArray[np.float64],  # dq_des     (16,)
+        npt.NDArray[np.float64],  # Kp         (16,)
+        npt.NDArray[np.float64],  # Kd         (16,)
+    ]:
+        dq_des = np.array(openarm_cmd.data.copy(), dtype=np.float64)  # (16,), already in motor_cmd[8:24] order
+
+        q_meas = np.array(
+            [m.q for m in lowstate.motor_state[8:24]],
+            dtype=np.float64,
+        )
+
+        if self._q_des_need_init:
+            self._q_des_16 = q_meas.copy()
+            self._q_des_need_init = False
+
+        Kp = self._to_motor16(self.compute_arm_kp(x, omega=self.config.arm_pd_omega))
+        Kd = self._to_motor16(self.compute_arm_kd(
+            x, zeta=self.config.arm_pd_zeta, omega=self.config.arm_pd_omega,
+        ))
+        Kp = Kp * self.config.arm_kp_scale
+        Kd = Kd * self.config.arm_kd_scale * self.config.arm_kd_boost
+        Kp = np.clip(Kp, 0.0, self.config.arm_kp_protocol_max)
+        Kd = np.clip(Kd, 0.0, self.config.arm_kd_protocol_max)
+        # Datasheet: Kd must not be 0 while Kp > 0, or the motor can
+        # oscillate / lose control.
+        Kd = np.where(Kp > 0.0, np.maximum(Kd, self.config.arm_kd_floor), Kd)
+
+        # This is the anti-divergence mechanism. max_lead bounds how far
+        # q_des is allowed to sit ahead of the MEASURED position, re-derived
+        # every tick from the current (possibly clipped) Kp and the torque
+        # budget you're willing to spend on the P-term alone. So no matter
+        # how long the arm stalls, lags, or misses updates, the worst-case
+        # P-torque is capped by design -- it can never run away.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            max_lead = np.where(
+                Kp > 1e-6,
+                self.config.arm_pos_lead_torque_fraction
+                * self.config.arm_torque_limit
+                / np.maximum(Kp, 1e-6),
+                0.0,
+            )
+
+        q_des_raw = self._q_des_16 + dq_des * dt
+        q_des = q_meas + np.clip(q_des_raw - q_meas, -max_lead, max_lead)
+
+        for idx in self._gripper_idx_16:
+            q_des[idx] = q_meas[idx]
+            dq_des[idx] = 0.0
+            Kp[idx] = 0.0
+            Kd[idx] = 0.0
+
+        self._q_des_16 = q_des.copy()
+
+        return q_des, dq_des, Kp, Kd
+
+    def compute_gravity_friction_ff(
         self,
         x: npt.NDArray[np.float64],
-        openarm_cmd: 'OpenArmCmd'
+        odom: "Odom",
+        openarm_cmd: "OpenArmCmd",
     ) -> npt.NDArray[np.float64]:
-        now = time.perf_counter()
-        dt = max(now - self.prev_time, MIN_CONTROLLER_DT_S)
-        
-        arm_vel_des = np.concatenate([
-            openarm_cmd.data[:8],
-            [ 0.0 ],
-            openarm_cmd.data[8:],
-            [ 0.0 ],
+        vdot = np.concatenate([
+            odom_vdot_world_to_body(odom),  # (6,)
+            [0.0] * 8,                       # base wheels/steer, (8,)
+            [0.0] * 18,                      # arm accel = 0, (18,)
         ], dtype=np.float64)
-        arm_acc_ff = (arm_vel_des - self._prev_arm_vel_des) / dt
-        
-        self._prev_arm_vel_des[:] = arm_vel_des
-        self.prev_time = now
-        
-        arm_vel_err = arm_vel_des - x[-18:]
-        
-        KDs = self.compute_arm_kd(
-            x,
-            zeta=0.7,
-            omega=8.0,
+
+        tau_ff = inverse_dynamics(model=self.model, x=x, vdot=vdot)[6 + 8:]
+
+        if not np.all(np.isfinite(tau_ff)):
+            self._q_des_16 = np.zeros((16,), dtype=np.float64)
+            self._q_des_need_init = True
+            raise RuntimeError(f"tau_ff has nan\n{repr(tau_ff)}")
+
+        tau_ff_16 = self._to_motor16(tau_ff)
+
+        want_move = np.abs(openarm_cmd.data) > 4e-2
+        tau_ff_16 = tau_ff_16 + self.config.tau_static * want_move * np.sign(openarm_cmd.data)
+
+        tau_ff_16 = np.clip(
+            tau_ff_16,
+            -self.config.arm_torque_limit,
+            self.config.arm_torque_limit,
         )
-        
-        acc = np.zeros(18, dtype=np.float64)
-        acc = arm_acc_ff + KDs * arm_vel_err
-        acc[7:9] = 0.0
-        acc[16:] = 0.0
-        acc = np.clip(
-            acc,
-            -self.config.arm_acc_limit_rad_s2,
-            self.config.arm_acc_limit_rad_s2,
-        )
-        
-        return acc
+
+        for idx in self._gripper_idx_16:
+            tau_ff_16[idx] = 0.0
+
+        return tau_ff_16
 
     @staticmethod
     def wrap_to_pi(angle: float) -> float:

@@ -7,6 +7,8 @@ from datetime import datetime
 from multiprocessing.context import SpawnProcess
 from pathlib import Path
 
+from g7_openarm_config import general_config
+
 LOG_ROOT = Path("logs")
 
 
@@ -24,18 +26,26 @@ def build_log_path(folder_name: str) -> Path:
     return LOG_ROOT / folder_name / f"{timestamp}.log"
 
 def redirect_output_to_file(log_path: Path) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if general_config.debugging:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    log_fd = os.open(
-        str(log_path),
-        os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-        0o644,
-    )
+        log_fd = os.open(
+            str(log_path),
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+            0o644,
+        )
 
-    os.dup2(log_fd, 1)  # stdout
-    os.dup2(log_fd, 2)  # stderr
+        os.dup2(log_fd, 1)  # stdout
+        os.dup2(log_fd, 2)  # stderr
 
-    os.close(log_fd)
+        os.close(log_fd)
+    else:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+
+        os.dup2(devnull_fd, 1)  # stdout
+        os.dup2(devnull_fd, 2)  # stderr
+
+        os.close(devnull_fd)
 
 
 def run_silently(target: Callable[[], None], folder_name: str) -> None:

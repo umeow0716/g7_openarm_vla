@@ -132,7 +132,7 @@ class SimulationNode:
 
         self.odom = Odom_default()
         self.odom_subscriber = ChannelSubscriber("rt/odom", Odom)
-        self.odom_subscriber.Init()
+        self.odom_subscriber.Init(self.odom_handler, 0)
 
         self.eetarget = EETarget_default()
         self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
