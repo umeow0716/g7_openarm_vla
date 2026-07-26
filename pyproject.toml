@@ -22,4 +22,5 @@ members = [
     "modules/g7_openarm_config",
     "modules/g7_openarm_hardware",
     "modules/g7_openarm_hommi_interface",
+    "modules/g7_openarm_utils",
 ]

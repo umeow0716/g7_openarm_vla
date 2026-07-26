@@ -11,14 +11,7 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 FloatArray = npt.NDArray[np.float64]
 
 
-def _rotation_body_to_world(q_wxyz: FloatArray) -> FloatArray:
-    q = np.asarray(q_wxyz, dtype=np.float64)
-
-    norm = np.linalg.norm(q)
-    if norm < 1e-12:
-        raise ValueError("IMU quaternion norm is zero")
-
-    q = q / norm
+def _rotation_body_to_world(q: FloatArray) -> FloatArray:
     w, x, y, z = q
 
     return np.array([
@@ -223,7 +216,7 @@ class AMREKF:
             wz_body,
         ], dtype=np.float64)
 
-        if self.previous_linear_velocity_body is None:
+        if self.previous_linear_velocity_body is None or self.previous_wz_body is None:
             linear_vdot_body = np.zeros(3, dtype=np.float64)
             angular_vdot_body = np.zeros(3, dtype=np.float64)
         else:
