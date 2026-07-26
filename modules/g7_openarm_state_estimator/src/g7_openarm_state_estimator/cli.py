@@ -14,16 +14,6 @@ from .amr_ekf import AMREKF
 from .config import config
 
 
-def yaw_to_quat_wxyz(yaw: float) -> npt.NDArray[np.float64]:
-    half = 0.5 * yaw
-
-    return np.array([
-        np.cos(half),  # w
-        0.0,           # x
-        0.0,           # y
-        np.sin(half),  # z
-    ], dtype=np.float64)
-
 class OdomNode:
     def __init__(self):
         self.ekf = AMREKF()

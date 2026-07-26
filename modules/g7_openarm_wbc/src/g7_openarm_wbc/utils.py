@@ -4,11 +4,6 @@ import numpy.typing as npt
 from g7_openarm_utils.quat import quat_conj, quat_mul, quat_normalize
 
 
-def yaw_to_quat_wxyz(yaw: np.float64 | float) -> npt.NDArray[np.float64]:
-    half = 0.5 * float(yaw)
-    return np.array([np.cos(half), 0.0, 0.0, np.sin(half)], dtype=np.float64)
-
-
 def quat_err_current_to_target(
     state_quat: npt.NDArray[np.float64],
     target_quat: npt.NDArray[np.float64],
