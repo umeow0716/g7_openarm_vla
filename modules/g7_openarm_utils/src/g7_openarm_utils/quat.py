@@ -11,6 +11,8 @@ def quat_normalize(q: npt.ArrayLike) -> FloatArray:
 
     if quaternion.shape != (4,):
         raise ValueError(f"Quaternion must have shape (4,), got {quaternion.shape}")
+    if not np.all(np.isfinite(quaternion)):
+        raise ValueError("Quaternion must contain only finite values")
 
     norm = float(np.linalg.norm(quaternion))
     if norm < 1e-12:

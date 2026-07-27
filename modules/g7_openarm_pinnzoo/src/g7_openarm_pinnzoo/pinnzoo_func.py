@@ -94,10 +94,13 @@ def dynamics_deriv(
     x: npt.NDArray[np.float64],
     tau: npt.NDArray[np.float64],
 ):
-    dx_buffer = np.empty(model.nx * model.nx, dtype=np.float64)
-    dtau_buffer = np.empty(model.nx * model.nv, dtype=np.float64)
-    dxdot_dx = dx_buffer.reshape((model.nx, model.nx), order="F")
-    dxdot_dtau = dtau_buffer.reshape((model.nx, model.nv), order="F")
+    rows = model.nv * 2
+
+    dx_buffer = np.empty(rows * model.nx, dtype=np.float64)
+    dtau_buffer = np.empty(rows * model.nv, dtype=np.float64)
+
+    dxdot_dx = dx_buffer.reshape((rows, model.nx), order="F")
+    dxdot_dtau = dtau_buffer.reshape((rows, model.nv), order="F")
 
     p_x = model.ffi.cast("double*", x.ctypes.data)
     p_tau = model.ffi.cast("double*", tau.ctypes.data)
