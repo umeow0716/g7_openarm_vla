@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "g7-openarm-config",
     "g7-openarm-idl",
+    "g7-openarm-utils",
     "g7-openarm-pinnzoo",
     "unitree-sdk2py",
 ]
@@ -14,6 +15,7 @@ dependencies = [
 [tool.uv.sources]
 g7-openarm-config = { workspace = true }
 g7-openarm-idl = { workspace = true }
+g7-openarm-utils = { workspace = true }
 g7-openarm-pinnzoo = { workspace = true }
 unitree-sdk2py = { path = "../../third_party/unitree_sdk2_python", editable = true }
 

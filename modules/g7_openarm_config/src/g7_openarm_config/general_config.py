@@ -4,7 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from g7_openarm_config import BaseConfig
+from .base import BaseConfig
+from .parsing import parse_bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,8 +13,8 @@ class GeneralConfig(BaseConfig):
     debugging: bool
 
     def __post_init__(self) -> None:
-        if not isinstance(self.debugging, bool):
-            raise ValueError(f"general.hz must be bool, got {self.debugging}")
+        if type(self.debugging) is not bool:
+            raise ValueError(f"general.debugging must be bool, got {self.debugging!r}")
 
     @classmethod
     def from_mapping(
@@ -26,7 +27,10 @@ class GeneralConfig(BaseConfig):
             raise ValueError("Missing [general] section")
 
         return cls(
-            debugging=bool(section["debugging"]),
+            debugging=parse_bool(
+                section.get("debugging", False),
+                field="general.debugging",
+            ),
         )
 
 

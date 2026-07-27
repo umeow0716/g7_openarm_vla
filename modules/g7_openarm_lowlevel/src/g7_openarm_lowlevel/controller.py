@@ -7,6 +7,7 @@ import numpy as np
 import numpy.typing as npt
 
 from g7_openarm_pinnzoo import PinnZooModel, inverse_dynamics, mass_matrix
+from g7_openarm_utils import quat_to_rotation_matrix
 
 from .config import config
 
@@ -16,47 +17,22 @@ if TYPE_CHECKING:
     from g7_openarm_idl import AMRCmd, Odom, OpenArmCmd
 
 
-DEFAULT_LIB_PATH = PinnZooModel.get_default_lib_path()
-
-
 def odom_vdot_world_to_body(odom: Odom) -> npt.NDArray[np.float64]:
-    qw = odom.quaternion.w
-    qx = odom.quaternion.x
-    qy = odom.quaternion.y
-    qz = odom.quaternion.z
-
-    R_world_body = np.array(
+    quaternion = np.array(
         [
-            [
-                1.0 - 2.0 * (qy * qy + qz * qz),
-                2.0 * (qx * qy - qw * qz),
-                2.0 * (qx * qz + qw * qy),
-            ],
-            [
-                2.0 * (qx * qy + qw * qz),
-                1.0 - 2.0 * (qx * qx + qz * qz),
-                2.0 * (qy * qz - qw * qx),
-            ],
-            [
-                2.0 * (qx * qz - qw * qy),
-                2.0 * (qy * qz + qw * qx),
-                1.0 - 2.0 * (qx * qx + qy * qy),
-            ],
+            odom.quaternion.w,
+            odom.quaternion.x,
+            odom.quaternion.y,
+            odom.quaternion.z,
         ],
         dtype=np.float64,
     )
-
-    R_body_world = R_world_body.T
+    rotation_world_to_body = quat_to_rotation_matrix(quaternion).T
 
     velocity_world = np.array(
-        [
-            odom.velocity.x,
-            odom.velocity.y,
-            odom.velocity.z,
-        ],
+        [odom.velocity.x, odom.velocity.y, odom.velocity.z],
         dtype=np.float64,
     )
-
     angular_velocity_world = np.array(
         [
             odom.angular_velocity.x,
@@ -65,40 +41,24 @@ def odom_vdot_world_to_body(odom: Odom) -> npt.NDArray[np.float64]:
         ],
         dtype=np.float64,
     )
-
     acceleration_world = np.array(
-        [
-            odom.vdot.x,
-            odom.vdot.y,
-            odom.vdot.z,
-        ],
+        [odom.vdot.x, odom.vdot.y, odom.vdot.z],
         dtype=np.float64,
     )
-
     angular_acceleration_world = np.array(
-        [
-            odom.angular_vdot.x,
-            odom.angular_vdot.y,
-            odom.angular_vdot.z,
-        ],
+        [odom.angular_vdot.x, odom.angular_vdot.y, odom.angular_vdot.z],
         dtype=np.float64,
     )
 
-    velocity_body = R_body_world @ velocity_world
-    angular_velocity_body = R_body_world @ angular_velocity_world
-
-    linear_vdot_body = R_body_world @ acceleration_world - np.cross(
-        angular_velocity_body, velocity_body
+    velocity_body = rotation_world_to_body @ velocity_world
+    angular_velocity_body = rotation_world_to_body @ angular_velocity_world
+    linear_vdot_body = rotation_world_to_body @ acceleration_world - np.cross(
+        angular_velocity_body,
+        velocity_body,
     )
+    angular_vdot_body = rotation_world_to_body @ angular_acceleration_world
 
-    angular_vdot_body = R_body_world @ angular_acceleration_world
-
-    return np.concatenate(
-        [
-            linear_vdot_body,
-            angular_vdot_body,
-        ]
-    )
+    return np.concatenate([linear_vdot_body, angular_vdot_body])
 
 
 @dataclass(slots=True)
@@ -109,7 +69,6 @@ class ControllerConfig:
     rl_pos: tuple[float, float] = (-0.198, 0.13)
     rr_pos: tuple[float, float] = (-0.198, -0.13)
 
-    min_wheel_speed_m_s: float = 1e-4
     steer_hold_speed_m_s: float = 2e-2
     steer_branch_hysteresis_rad: float = np.deg2rad(15.0)
     steer_rate_limit_rad_s: float = np.deg2rad(240.0)
@@ -117,11 +76,6 @@ class ControllerConfig:
 
     wheel_vel_limit_rad_s: float = 30.0
 
-    arm_acc_limit_rad_s2: float = 80.0
-
-    base_steering_kp: float = 20.0
-    base_steering_kd: float = 0.02
-    base_wheel_kd: float = 5.0
 
     base_idle_linear_threshold_m_s: float = 3e-2
     base_idle_angular_threshold_rad_s: float = 1e-2
@@ -200,8 +154,7 @@ class Controller:
         lib_path: str | None = None,
     ) -> None:
         self.config = config if config is not None else ControllerConfig()
-        self.lib_path = str(DEFAULT_LIB_PATH if lib_path is None else lib_path)
-        self.model = PinnZooModel(self.lib_path)
+        self.model = PinnZooModel(lib_path)
 
         self._arm_v_idx = [
             14,
@@ -294,7 +247,6 @@ class Controller:
             openarm_cmd=openarm_cmd,
             dt=dt,
         )
-        print(f"KP: {Kp}\nKD: {Kd}\n")
         tau_ff = self.compute_gravity_friction_ff(
             x=x,
             odom=odom,

@@ -14,9 +14,6 @@ if TYPE_CHECKING:
     from g7_openarm_idl import EETarget, Odom
 
 
-DEFAULT_LIB_PATH = PinnZooModel.get_default_lib_path()
-
-
 @dataclass
 class PoseState:
     pos: npt.NDArray[np.float64]
@@ -90,8 +87,7 @@ class G7OpenArmIKSolver:
         self,
         lib_path: str | None = None,
     ) -> None:
-        self.lib_path = str(DEFAULT_LIB_PATH if lib_path is None else lib_path)
-        self.model = PinnZooModel(self.lib_path)
+        self.model = PinnZooModel(lib_path)
 
         self.nx = 17
 
@@ -178,8 +174,8 @@ class G7OpenArmIKSolver:
     def state_cost(
         self,
         task_evaluation: TaskEvaluation,
-    ) -> npt.NDArray[np.float64]:
-        return (
+    ) -> float:
+        return float(
             0.5 * self.Q_hand_pos * (task_evaluation.left_pos_err @ task_evaluation.left_pos_err)
             + 0.5 * self.Q_hand_ori * (task_evaluation.left_ori_err @ task_evaluation.left_ori_err)
             + 0.5

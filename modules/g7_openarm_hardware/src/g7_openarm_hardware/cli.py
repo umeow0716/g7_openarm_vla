@@ -1,6 +1,5 @@
 import atexit
 import signal
-import sys
 import time
 
 import openarm_can as oa
@@ -78,18 +77,16 @@ BUS_CONFIGS = {
 
 
 class HardwareNode:
-    def __init__(self):
+    def __init__(self) -> None:
         can_interfaces = list(BUS_CONFIGS)
         self.group = oa.OpenArmGroup(can_interfaces=can_interfaces, enable_fd=config.can_fd)
-        self.total_expected = 0
-
         for can_interface, can_config in BUS_CONFIGS.items():
             arm = self.group.get_openarm(can_interface)
 
             if can_interface == config.base_can:
                 for i in range(8):
-                    id = config.base_ids[i]
-                    can_config["control_modes"][id - 1] = (
+                    motor_id = config.base_ids[i]
+                    can_config["control_modes"][motor_id - 1] = (
                         oa.ControlMode.VEL if i % 2 else oa.ControlMode.POS_VEL
                     )
 
@@ -102,9 +99,14 @@ class HardwareNode:
             arm.set_callback_mode_all(oa.CallbackMode.STATE)
 
             print(f"{can_interface}: expected responses = {arm.expected_response_count()}")
-            self.total_expected += arm.expected_response_count()
 
         self.group.enable_all()
+
+        # Register cleanup immediately after enabling motors. Any later DDS or
+        # thread-construction failure must still disable the hardware at exit.
+        self._cleanup_done = False
+        signal.signal(signal.SIGTERM, self._handle_sigterm)
+        atexit.register(self.cleanup)
 
         self.lowstate = unitree_hg_msg_dds__LowState_()
         self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
@@ -123,29 +125,29 @@ class HardwareNode:
             target=self.control_loop,
             interval=config.interval,
         )
+
         self.control_thread.Start()
 
-        def cleanup(*args, **kwargs) -> None:
-            self.group.disable_all()
+    def cleanup(self) -> None:
+        if self._cleanup_done:
+            return
 
-        def at_exit(*args, **kwargs) -> None:
-            self.group.disable_all()
-            sys.exit(0)
+        self._cleanup_done = True
+        self.group.disable_all()
 
-        signal.signal(signal.SIGTERM, at_exit)
-        atexit.register(cleanup)
+    def _handle_sigterm(self, _signum: int, _frame: object) -> None:
+        raise SystemExit(0)
 
-    def lowcmd_handler(self, msg: LowCmd_):
+    def lowcmd_handler(self, msg: LowCmd_) -> None:
         self.lowcmd = msg
 
-    def imustate_handler(self, msg: IMUState_):
+    def imustate_handler(self, msg: IMUState_) -> None:
         self.imustate = msg
         self.lowstate.imu_state = self.imustate
 
-    def control_loop(self):
-        total_packet = 0
-        for result in self.group.recv_wait_all(5000):
-            total_packet += result.received
+    def control_loop(self) -> None:
+        for _ in self.group.recv_wait_all(5000):
+            pass
 
         base = self.group.get_openarm(config.base_can)
 
@@ -219,7 +221,7 @@ class HardwareNode:
         right_arm.get_arm().mit_control_all(right_cmds)
 
 
-def main():
+def main() -> None:
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
     _ = HardwareNode()
     while True:

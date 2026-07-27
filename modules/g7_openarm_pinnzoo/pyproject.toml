@@ -6,13 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "cffi>=2.1.0",
-    "g7-openarm-idl",
-    "unitree-sdk2py",
+    "g7-openarm-utils",
 ]
 
 [tool.uv.sources]
-g7-openarm-idl = { workspace = true }
-unitree-sdk2py = { path = "../../third_party/unitree_sdk2_python", editable = true }
+g7-openarm-utils = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -20,3 +18,4 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/g7_openarm_pinnzoo"]
+artifacts = ["src/g7_openarm_pinnzoo/lib/*.so"]

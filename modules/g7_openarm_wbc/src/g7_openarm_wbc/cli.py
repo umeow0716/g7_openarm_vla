@@ -34,12 +34,12 @@ class Node:
         self.wbc_lowcmd = WBCLowCmd_default()
         self.wbc_lowcmd_publisher = ChannelPublisher("rt/wbclowcmd", WBCLowCmd)
         self.wbc_lowcmd_publisher.Init()
-        self.wbc_lowcmd_thraed = RecurrentThread(
-            name="wbc_lowcmd_thraed",
+        self.wbc_lowcmd_thread = RecurrentThread(
+            name="wbc_lowcmd_thread",
             target=self.write_wbc_lowcmd,
             interval=config.interval,
         )
-        self.wbc_lowcmd_thraed.Start()
+        self.wbc_lowcmd_thread.Start()
 
     def lowstate_handler(self, msg: LowState_):
         self.lowstate = msg

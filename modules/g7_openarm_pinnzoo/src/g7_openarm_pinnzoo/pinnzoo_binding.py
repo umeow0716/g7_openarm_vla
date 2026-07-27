@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from functools import cached_property
 from pathlib import Path
@@ -7,7 +9,9 @@ import numpy as np
 import numpy.typing as npt
 from cffi import FFI
 
-from .pinnzoo_utils import get_arch
+from g7_openarm_utils import quat_to_rotation_matrix
+
+from .resources import native_library_path
 
 if TYPE_CHECKING:
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
@@ -16,35 +20,18 @@ if TYPE_CHECKING:
 
 
 def odom_velocity_world_to_body(
-    odom: "Odom",
+    odom: Odom,
 ) -> npt.NDArray[np.float64]:
-    qw = odom.quaternion.w
-    qx = odom.quaternion.x
-    qy = odom.quaternion.y
-    qz = odom.quaternion.z
-
-    R_world_body = np.array(
+    quaternion = np.array(
         [
-            [
-                1.0 - 2.0 * (qy * qy + qz * qz),
-                2.0 * (qx * qy - qw * qz),
-                2.0 * (qx * qz + qw * qy),
-            ],
-            [
-                2.0 * (qx * qy + qw * qz),
-                1.0 - 2.0 * (qx * qx + qz * qz),
-                2.0 * (qy * qz - qw * qx),
-            ],
-            [
-                2.0 * (qx * qz - qw * qy),
-                2.0 * (qy * qz + qw * qx),
-                1.0 - 2.0 * (qx * qx + qy * qy),
-            ],
+            odom.quaternion.w,
+            odom.quaternion.x,
+            odom.quaternion.y,
+            odom.quaternion.z,
         ],
         dtype=np.float64,
     )
-
-    R_body_world = R_world_body.T
+    rotation_body_to_world = quat_to_rotation_matrix(quaternion)
 
     velocity_world = np.array(
         [
@@ -54,7 +41,6 @@ def odom_velocity_world_to_body(
         ],
         dtype=np.float64,
     )
-
     angular_velocity_world = np.array(
         [
             odom.angular_velocity.x,
@@ -64,25 +50,18 @@ def odom_velocity_world_to_body(
         dtype=np.float64,
     )
 
-    velocity_body = R_body_world @ velocity_world
-    angular_velocity_body = R_body_world @ angular_velocity_world
-
+    rotation_world_to_body = rotation_body_to_world.T
     return np.concatenate(
         [
-            velocity_body,
-            angular_velocity_body,
+            rotation_world_to_body @ velocity_world,
+            rotation_world_to_body @ angular_velocity_world,
         ]
     )
 
 
 class PinnZooModel:
-    def __init__(self, lib_path: str):
-        if not os.path.exists(lib_path):
-            raise FileNotFoundError(f"file `{lib_path}` not found!")
-
-        self.lib_path = lib_path
+    def __init__(self, lib_path: str | Path | None = None) -> None:
         self.ffi = FFI()
-
         self.ffi.cdef("""
 extern const char* config_names[];
 extern const char* vel_names[];
@@ -92,43 +71,53 @@ void M_func_wrapper(double* x_in, double* M_out);
 void kinematics_wrapper(double* x, double* locs);
 void kinematics_jacobian_wrapper(double* x, double* J);
 void forward_dynamics_wrapper(double* x_in, double* tau_in, double* vdot_out);
-void forward_dynamics_deriv_wrapper(double* x_in, double* tau_in, double* dvdot_dx_out, double* dvdout_dtau_out);
+void forward_dynamics_deriv_wrapper(
+    double* x_in,
+    double* tau_in,
+    double* dvdot_dx_out,
+    double* dvdout_dtau_out
+);
 void inverse_dynamics_wrapper(double* x_in, double* vdot_in, double* tau_out);
-void dynamics_deriv_wrapper(double* x_in, double* tau_in, double* dxdot_dx_out, double* dxdout_dtau_out);
+void dynamics_deriv_wrapper(
+    double* x_in,
+    double* tau_in,
+    double* dxdot_dx_out,
+    double* dxdout_dtau_out
+);
         """)
 
-        self.lib = self.ffi.dlopen(os.path.abspath(self.lib_path))
+        if lib_path is None:
+            with native_library_path() as packaged_path:
+                self.lib_path = str(packaged_path)
+                self.lib = self.ffi.dlopen(self.lib_path)
+        else:
+            resolved_path = Path(lib_path).expanduser().resolve()
+            if not resolved_path.is_file():
+                raise FileNotFoundError(f"file `{resolved_path}` not found!")
 
-        self.nq = self._get_c_array_len(self.lib.config_names)  # type: ignore
-        self.nv = self._get_c_array_len(self.lib.vel_names)  # type: ignore
+            self.lib_path = os.fspath(resolved_path)
+            self.lib = self.ffi.dlopen(self.lib_path)
+
+        self.nq = self._get_c_array_len(self.lib.config_names)  # type: ignore[attr-defined]
+        self.nv = self._get_c_array_len(self.lib.vel_names)  # type: ignore[attr-defined]
         self.nx = self.nq + self.nv
         self.nu = self.nv
-
-        self.bodies_count = self._get_c_array_len(self.lib.kinematics_bodies)  # type: ignore
+        self.bodies_count = self._get_c_array_len(  # type: ignore[attr-defined]
+            self.lib.kinematics_bodies
+        )
 
     @cached_property
-    def kinematics_size(self):
-        if "quat" in self.lib_path:
-            return 7 * self.bodies_count
-        else:
-            return 3 * self.bodies_count
+    def kinematics_size(self) -> int:
+        return 7 * self.bodies_count if "quat" in self.lib_path else 3 * self.bodies_count
 
-    def _get_c_array_len(self, ptr):
+    def _get_c_array_len(self, ptr: object) -> int:
         count = 0
-        while ptr[count] != self.ffi.NULL:
+        while ptr[count] != self.ffi.NULL:  # type: ignore[index]
             count += 1
         return count
 
     @staticmethod
-    def get_default_lib_path():
-        return (
-            Path(__file__).resolve().parent.parent.parent.parent.parent
-            / "include"
-            / f"libg7_openarm_quat_{get_arch()}.so"
-        )
-
-    @staticmethod
-    def build_x_lib(lowstate: "LowState_", odom: "Odom") -> npt.NDArray[np.float64]:
+    def build_x_lib(lowstate: LowState_, odom: Odom) -> npt.NDArray[np.float64]:
         motor_state = lowstate.motor_state
 
         position = np.array([odom.position.x, odom.position.y, odom.position.z], dtype=np.float64)
@@ -137,11 +126,10 @@ void dynamics_deriv_wrapper(double* x_in, double* tau_in, double* dxdot_dx_out, 
             dtype=np.float64,
         )
 
-        q_0_14 = np.array([m.q for m in motor_state[0:15]], dtype=np.float64)
-        q_16_22 = np.array([m.q for m in motor_state[16:23]], dtype=np.float64)
-
-        dq_0_14 = np.array([m.dq for m in motor_state[0:15]], dtype=np.float64)
-        dq_16_22 = np.array([m.dq for m in motor_state[16:23]], dtype=np.float64)
+        q_0_14 = np.array([motor.q for motor in motor_state[0:15]], dtype=np.float64)
+        q_16_22 = np.array([motor.q for motor in motor_state[16:23]], dtype=np.float64)
+        dq_0_14 = np.array([motor.dq for motor in motor_state[0:15]], dtype=np.float64)
+        dq_16_22 = np.array([motor.dq for motor in motor_state[16:23]], dtype=np.float64)
 
         return np.concatenate(
             (

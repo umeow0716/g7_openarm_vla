@@ -4,27 +4,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from g7_openarm_config import BaseConfig
-
-
-@dataclass(frozen=True, slots=True)
-class DDSConfig:
-    domain_id: int
-    interface: str
+from g7_openarm_config import BaseConfig, DDSConfig
 
 
 @dataclass(frozen=True, slots=True)
 class EKFConfig(BaseConfig):
     hz: float
-
     dds: DDSConfig
 
     def __post_init__(self) -> None:
         if self.hz <= 0.0:
             raise ValueError(f"state_estimator.hz must be positive, got {self.hz}")
-
-        if not self.dds.interface:
-            raise ValueError("dds.interface must not be empty")
 
     @property
     def interval(self) -> float:
@@ -36,20 +26,13 @@ class EKFConfig(BaseConfig):
         data: Mapping[str, Any],
     ) -> EKFConfig:
         section = data.get("state_estimator")
-        dds_section = data.get("dds")
 
         if not isinstance(section, Mapping):
             raise ValueError("Missing [state_estimator] section")
 
-        if not isinstance(dds_section, Mapping):
-            raise ValueError("Missing [dds] section")
-
         return cls(
             hz=float(section["hz"]),
-            dds=DDSConfig(
-                domain_id=int(dds_section.get("domain_id", 0)),
-                interface=str(dds_section.get("interface", "lo")),
-            ),
+            dds=DDSConfig.from_mapping(data),
         )
 
 

@@ -4,13 +4,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from g7_openarm_config import BaseConfig
+from g7_openarm_config import BaseConfig, DDSConfig, parse_bool
+
+_EXPECTED_MOTOR_IDS = set(range(1, 9))
+_ALLOWED_DIRECTIONS = {-1.0, 1.0}
 
 
-@dataclass(frozen=True, slots=True)
-class DDSConfig:
-    domain_id: int
-    interface: str
+def _require_sequence_length(values: list[Any], *, field: str, length: int) -> None:
+    if len(values) != length:
+        raise ValueError(f"{field} must contain {length} values, got {len(values)}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +27,6 @@ class HardwareConfig(BaseConfig):
     base_direction: list[float]
     left_arm_direction: list[float]
     right_arm_direction: list[float]
-
     dds: DDSConfig
 
     def __post_init__(self) -> None:
@@ -35,24 +36,33 @@ class HardwareConfig(BaseConfig):
         if self.imu_hz <= 0:
             raise ValueError(f"hardware.imu_hz must be positive, got {self.imu_hz}")
 
-        if not self.dds.interface:
-            raise ValueError("dds.interface must not be empty")
+        for field, value in (
+            ("hardware.base_can", self.base_can),
+            ("hardware.left_arm_can", self.left_arm_can),
+            ("hardware.right_arm_can", self.right_arm_can),
+        ):
+            if not value:
+                raise ValueError(f"{field} must not be empty")
 
-        for i, val in enumerate(self.base_ids):
-            if not isinstance(val, int):
-                raise ValueError(f"hardware.base_ids[{i}] must be int: {val}")
+        _require_sequence_length(self.base_ids, field="hardware.base_ids", length=8)
+        if any(type(value) is not int for value in self.base_ids):
+            raise ValueError(f"hardware.base_ids must contain only integers: {self.base_ids!r}")
+        if set(self.base_ids) != _EXPECTED_MOTOR_IDS:
+            raise ValueError(
+                "hardware.base_ids must be a permutation of motor IDs 1..8, "
+                f"got {self.base_ids!r}"
+            )
 
-        for i, val in enumerate(self.base_direction):
-            if not isinstance(val, float):
-                raise ValueError(f"hardware.base_direction[{i}] must be float: {val}")
-
-        for i, val in enumerate(self.left_arm_direction):
-            if not isinstance(val, float):
-                raise ValueError(f"hardware.left_arm_direction[{i}] must be float: {val}")
-
-        for i, val in enumerate(self.right_arm_direction):
-            if not isinstance(val, float):
-                raise ValueError(f"hardware.right_arm_direction[{i}] must be float: {val}")
+        direction_fields = (
+            ("hardware.base_direction", self.base_direction),
+            ("hardware.left_arm_direction", self.left_arm_direction),
+            ("hardware.right_arm_direction", self.right_arm_direction),
+        )
+        for field, values in direction_fields:
+            _require_sequence_length(values, field=field, length=8)
+            invalid = [value for value in values if value not in _ALLOWED_DIRECTIONS]
+            if invalid:
+                raise ValueError(f"{field} values must be -1.0 or 1.0, got {invalid!r}")
 
     @property
     def interval(self) -> float:
@@ -64,29 +74,22 @@ class HardwareConfig(BaseConfig):
         data: Mapping[str, Any],
     ) -> HardwareConfig:
         section = data.get("hardware")
-        dds_section = data.get("dds")
 
         if not isinstance(section, Mapping):
             raise ValueError("Missing [hardware] section")
 
-        if not isinstance(dds_section, Mapping):
-            raise ValueError("Missing [dds] section")
-
         return cls(
             hz=float(section["hz"]),
             imu_hz=int(section["imu_hz"]),
-            base_can=str(section["base_can"]),
-            left_arm_can=str(section["left_arm_can"]),
-            right_arm_can=str(section["right_arm_can"]),
-            can_fd=bool(section["can_fd"]),
+            base_can=str(section["base_can"]).strip(),
+            left_arm_can=str(section["left_arm_can"]).strip(),
+            right_arm_can=str(section["right_arm_can"]).strip(),
+            can_fd=parse_bool(section["can_fd"], field="hardware.can_fd"),
             base_ids=list(section["base_ids"]),
-            base_direction=list(section["base_direction"]),
-            left_arm_direction=list(section["left_arm_direction"]),
-            right_arm_direction=list(section["right_arm_direction"]),
-            dds=DDSConfig(
-                domain_id=int(dds_section.get("domain_id", 0)),
-                interface=str(dds_section.get("interface", "lo")),
-            ),
+            base_direction=[float(value) for value in section["base_direction"]],
+            left_arm_direction=[float(value) for value in section["left_arm_direction"]],
+            right_arm_direction=[float(value) for value in section["right_arm_direction"]],
+            dds=DDSConfig.from_mapping(data),
         )
 
 

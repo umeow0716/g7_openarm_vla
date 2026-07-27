@@ -16,11 +16,11 @@ class HzMonitor:
         self.topic = topic
         self.msg_type = msg_type
         self._count = 0
-        self._sub = ChannelSubscriber(self.topic, self.msg_type)
-        self._sub.Init(self.callback, 10)
         self._start = time.monotonic()
         self._lock = threading.Lock()
         self._hz = 0.0
+        self._sub = ChannelSubscriber(self.topic, self.msg_type)
+        self._sub.Init(self.callback, 10)
 
     def callback(self, _: Any) -> None:
         with self._lock:

@@ -6,32 +6,9 @@ import numpy as np
 import numpy.typing as npt
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 
+from g7_openarm_utils import quat_normalize, quat_to_rotation_matrix
+
 FloatArray = npt.NDArray[np.float64]
-
-
-def _rotation_body_to_world(q: FloatArray) -> FloatArray:
-    w, x, y, z = q
-
-    return np.array(
-        [
-            [
-                1.0 - 2.0 * (y * y + z * z),
-                2.0 * (x * y - w * z),
-                2.0 * (x * z + w * y),
-            ],
-            [
-                2.0 * (x * y + w * z),
-                1.0 - 2.0 * (x * x + z * z),
-                2.0 * (y * z - w * x),
-            ],
-            [
-                2.0 * (x * z - w * y),
-                2.0 * (y * z + w * x),
-                1.0 - 2.0 * (x * x + y * y),
-            ],
-        ],
-        dtype=np.float64,
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,12 +108,8 @@ class AMREKF:
             dtype=np.float64,
         ).copy()
 
-        quat_norm = np.linalg.norm(quat)
-        if quat_norm < 1e-12:
-            raise ValueError("IMU quaternion norm is zero")
-        quat /= quat_norm
-
-        rotation = _rotation_body_to_world(quat)
+        quat = quat_normalize(quat)
+        rotation = quat_to_rotation_matrix(quat)
 
         wheel_velocity_body = self._swerve_velocity(lowstate)
 

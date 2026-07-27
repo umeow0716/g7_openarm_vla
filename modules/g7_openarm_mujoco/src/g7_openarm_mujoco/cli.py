@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import time
-from pathlib import Path
 
 import mujoco
 import mujoco.viewer
@@ -19,17 +20,16 @@ from unitree_sdk2py.utils.thread import RecurrentThread
 from g7_openarm_idl import EETarget, EETarget_default
 
 from .config import config
-
-DEFAULT_MODEL_XML_PATH = (
-    Path(__file__).resolve().parent.parent.parent.parent.parent / "model" / "scene.xml"
-)
+from .resources import model_directory
+from .sensors import scalar_sensor_address, sensor_slice
 
 
-class SimulationNode:
-    def __init__(self):
-        self.spec = mujoco.MjSpec.from_file(DEFAULT_MODEL_XML_PATH.as_posix())
-        self.spec.option.timestep = config.interval
-        left_target = self.spec.worldbody.add_body(
+def _build_model() -> mujoco.MjModel:
+    with model_directory() as model_dir:
+        spec = mujoco.MjSpec.from_file((model_dir / "scene.xml").as_posix())
+        spec.option.timestep = config.interval
+
+        left_target = spec.worldbody.add_body(
             name="left_target",
             mocap=True,
             pos=[0.0, 0.0, 0.0],
@@ -43,7 +43,7 @@ class SimulationNode:
             conaffinity=0,
         )
 
-        right_target = self.spec.worldbody.add_body(
+        right_target = spec.worldbody.add_body(
             name="right_target",
             mocap=True,
             pos=[0.0, 0.0, 0.0],
@@ -57,23 +57,25 @@ class SimulationNode:
             conaffinity=0,
         )
 
-        self.model = self.spec.compile()
-        self.data = mujoco.MjData(self.model)
+        return spec.compile()
 
+
+class SimulationNode:
+    def __init__(self) -> None:
+        self.model = _build_model()
+        self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
 
-        left_hand_pos = self.data.body("L_gripper_tcp_link").xpos.copy()
-        right_hand_pos = self.data.body("R_gripper_tcp_link").xpos.copy()
-        left_hand_quat = self.data.body("L_gripper_tcp_link").xquat.copy()
-        right_hand_quat = self.data.body("R_gripper_tcp_link").xquat.copy()
-
+        left_hand = self.data.body("L_gripper_tcp_link")
+        right_hand = self.data.body("R_gripper_tcp_link")
         self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
-        self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
-
-        self.data.mocap_pos[self.left_target_mocap_id] = left_hand_pos
-        self.data.mocap_quat[self.left_target_mocap_id] = left_hand_quat
-        self.data.mocap_pos[self.right_target_mocap_id] = right_hand_pos
-        self.data.mocap_quat[self.right_target_mocap_id] = right_hand_quat
+        self.right_target_mocap_id = self.model.body_mocapid[
+            self.model.body("right_target").id
+        ]
+        self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
+        self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
+        self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
+        self.data.mocap_quat[self.right_target_mocap_id] = right_hand.xquat.copy()
 
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
@@ -103,60 +105,41 @@ class SimulationNode:
             "R_7",
             "gripper_R",
         ]
-        self.pos_ids = [
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name + "_pos")
-            for sensor_name in self.motor_names
+        self.pos_addresses = [
+            scalar_sensor_address(self.model, f"{name}_pos") for name in self.motor_names
         ]
-        self.vel_ids = [
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name + "_vel")
-            for sensor_name in self.motor_names
+        self.vel_addresses = [
+            scalar_sensor_address(self.model, f"{name}_vel") for name in self.motor_names
         ]
-        self.torque_ids = [
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, sensor_name + "_torque")
-            for sensor_name in self.motor_names
+        self.torque_addresses = [
+            scalar_sensor_address(self.model, f"{name}_torque") for name in self.motor_names
         ]
-        self.quat_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_quat")
-        self.gyro_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_gyro")
-        self.acc_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_acc")
+        self.secondary_gripper_pos_addresses = {
+            15: scalar_sensor_address(self.model, "gripper_LR_pos"),
+            23: scalar_sensor_address(self.model, "gripper_RR_pos"),
+        }
+        self.secondary_gripper_vel_addresses = {
+            15: scalar_sensor_address(self.model, "gripper_LR_vel"),
+            23: scalar_sensor_address(self.model, "gripper_RR_vel"),
+        }
+        self.quat_slice = sensor_slice(self.model, "imu_quat", expected_dim=4)
+        self.gyro_slice = sensor_slice(self.model, "imu_gyro", expected_dim=3)
+        self.acc_slice = sensor_slice(self.model, "imu_acc", expected_dim=3)
 
-        self.viewer_thread = RecurrentThread(
-            name="viewer_loop",
-            interval=config.fps_interval,
-            target=self.viewer_loop,
-        )
-        self.viewer_thread.Start()
-
+        # All callback-visible state is created before any ChannelSubscriber.Init()
+        # or RecurrentThread.Start() call.
         self.lowstate = unitree_hg_msg_dds__LowState_()
+        self.imustate = unitree_hg_msg_dds__IMUState_()
+        self.eetarget = EETarget_default()
+        self.lowcmd = unitree_hg_msg_dds__LowCmd_()
+
         self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
         self.lowstate_publisher.Init()
-        self.lowstate_thread = RecurrentThread(
-            name="write_lowstate",
-            interval=config.interval,
-            target=self.write_lowstate,
-        )
-        self.lowstate_thread.Start()
-
-        self.imustate = unitree_hg_msg_dds__IMUState_()
         self.imustate_publisher = ChannelPublisher("rt/imustate", IMUState_)
         self.imustate_publisher.Init()
-        self.imustate_thread = RecurrentThread(
-            name="write_imustate",
-            interval=config.imu_interval,
-            target=self.write_imustate,
-        )
-        self.imustate_thread.Start()
-
-        self.eetarget = EETarget_default()
         self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
         self.eetarget_publisher.Init()
-        self.write_eetarget_thread = RecurrentThread(
-            name="write_eetarget",
-            interval=config.eetarget_interval,
-            target=self.write_eetarget,
-        )
-        self.write_eetarget_thread.Start()
 
-        self.lowcmd = unitree_hg_msg_dds__LowCmd_()
         self.lowcmd_subscriber = ChannelSubscriber("rt/lowcmd", LowCmd_)
         self.lowcmd_subscriber.Init(self.lowcmd_handler, 0)
 
@@ -165,113 +148,129 @@ class SimulationNode:
             interval=config.interval,
             target=self.simulation_loop,
         )
-        self.simulation_thread.Start()
+        self.lowstate_thread = RecurrentThread(
+            name="write_lowstate",
+            interval=config.interval,
+            target=self.write_lowstate,
+        )
+        self.imustate_thread = RecurrentThread(
+            name="write_imustate",
+            interval=config.imu_interval,
+            target=self.write_imustate,
+        )
+        self.write_eetarget_thread = RecurrentThread(
+            name="write_eetarget",
+            interval=config.eetarget_interval,
+            target=self.write_eetarget,
+        )
+        self.viewer_thread = RecurrentThread(
+            name="viewer_loop",
+            interval=config.fps_interval,
+            target=self.viewer_loop,
+        )
 
-    def lowcmd_handler(self, msg: LowCmd_):
+        # Start only after every state object, channel and thread object exists.
+        self.simulation_thread.Start()
+        self.lowstate_thread.Start()
+        self.imustate_thread.Start()
+        self.write_eetarget_thread.Start()
+        self.viewer_thread.Start()
+
+    def lowcmd_handler(self, msg: LowCmd_) -> None:
         self.lowcmd = msg
 
-    def write_lowstate(self):
+    def write_lowstate(self) -> None:
         with self.viewer.lock():
-            for i, _ in enumerate(self.motor_names):
-                pos_id = self.pos_ids[i]
-                vel_id = self.vel_ids[i]
-                torque_id = self.torque_ids[i]
+            for index in range(len(self.motor_names)):
+                self.lowstate.motor_state[index].q = self.data.sensordata[
+                    self.pos_addresses[index]
+                ]
+                self.lowstate.motor_state[index].dq = self.data.sensordata[
+                    self.vel_addresses[index]
+                ]
+                self.lowstate.motor_state[index].tau_est = self.data.sensordata[
+                    self.torque_addresses[index]
+                ]
 
-                self.lowstate.motor_state[i].q = self.data.sensordata[pos_id]
-                self.lowstate.motor_state[i].dq = self.data.sensordata[vel_id]
-                self.lowstate.motor_state[i].tau_est = self.data.sensordata[torque_id]
-        self.lowstate.imu_state = self.imustate
+            self.lowstate.imu_state = self.imustate
+
         self.lowstate_publisher.Write(self.lowstate)
 
-    def write_imustate(self):
+    def write_imustate(self) -> None:
         with self.viewer.lock():
-            self.imustate.quaternion[0] = self.data.sensordata[self.quat_id]
-            self.imustate.quaternion[1] = self.data.sensordata[self.quat_id + 1]
-            self.imustate.quaternion[2] = self.data.sensordata[self.quat_id + 2]
-            self.imustate.quaternion[3] = self.data.sensordata[self.quat_id + 3]
-            self.imustate.gyroscope[0] = self.data.sensordata[self.gyro_id]
-            self.imustate.gyroscope[1] = self.data.sensordata[self.gyro_id + 1]
-            self.imustate.gyroscope[2] = self.data.sensordata[self.gyro_id + 2]
-            self.imustate.accelerometer[0] = self.data.sensordata[self.acc_id]
-            self.imustate.accelerometer[1] = self.data.sensordata[self.acc_id + 1]
-            self.imustate.accelerometer[2] = self.data.sensordata[self.acc_id + 2]
+            quaternion = self.data.sensordata[self.quat_slice].copy()
+            gyroscope = self.data.sensordata[self.gyro_slice].copy()
+            accelerometer = self.data.sensordata[self.acc_slice].copy()
+
+            for index in range(4):
+                self.imustate.quaternion[index] = quaternion[index]
+            for index in range(3):
+                self.imustate.gyroscope[index] = gyroscope[index]
+                self.imustate.accelerometer[index] = accelerometer[index]
+
         self.imustate_publisher.Write(self.imustate)
 
-    def write_eetarget(self):
+    def write_eetarget(self) -> None:
         with self.viewer.lock():
-            self.eetarget.left_target.position.x = self.data.mocap_pos[self.left_target_mocap_id][0]
-            self.eetarget.left_target.position.y = self.data.mocap_pos[self.left_target_mocap_id][1]
-            self.eetarget.left_target.position.z = (
-                self.data.mocap_pos[self.left_target_mocap_id][2] - self.data.qpos[2]
-            )
-            self.eetarget.left_target.orientation.w = self.data.mocap_quat[
-                self.left_target_mocap_id
-            ][0]
-            self.eetarget.left_target.orientation.x = self.data.mocap_quat[
-                self.left_target_mocap_id
-            ][1]
-            self.eetarget.left_target.orientation.y = self.data.mocap_quat[
-                self.left_target_mocap_id
-            ][2]
-            self.eetarget.left_target.orientation.z = self.data.mocap_quat[
-                self.left_target_mocap_id
-            ][3]
-            self.eetarget.right_target.position.x = self.data.mocap_pos[self.right_target_mocap_id][
-                0
-            ]
-            self.eetarget.right_target.position.y = self.data.mocap_pos[self.right_target_mocap_id][
-                1
-            ]
-            self.eetarget.right_target.position.z = (
-                self.data.mocap_pos[self.right_target_mocap_id][2] - self.data.qpos[2]
-            )
-            self.eetarget.right_target.orientation.w = self.data.mocap_quat[
-                self.right_target_mocap_id
-            ][0]
-            self.eetarget.right_target.orientation.x = self.data.mocap_quat[
-                self.right_target_mocap_id
-            ][1]
-            self.eetarget.right_target.orientation.y = self.data.mocap_quat[
-                self.right_target_mocap_id
-            ][2]
-            self.eetarget.right_target.orientation.z = self.data.mocap_quat[
-                self.right_target_mocap_id
-            ][3]
+            left_position = self.data.mocap_pos[self.left_target_mocap_id]
+            left_quaternion = self.data.mocap_quat[self.left_target_mocap_id]
+            right_position = self.data.mocap_pos[self.right_target_mocap_id]
+            right_quaternion = self.data.mocap_quat[self.right_target_mocap_id]
+
+            self.eetarget.left_target.position.x = left_position[0]
+            self.eetarget.left_target.position.y = left_position[1]
+            self.eetarget.left_target.position.z = left_position[2] - self.data.qpos[2]
+            self.eetarget.left_target.orientation.w = left_quaternion[0]
+            self.eetarget.left_target.orientation.x = left_quaternion[1]
+            self.eetarget.left_target.orientation.y = left_quaternion[2]
+            self.eetarget.left_target.orientation.z = left_quaternion[3]
+
+            self.eetarget.right_target.position.x = right_position[0]
+            self.eetarget.right_target.position.y = right_position[1]
+            self.eetarget.right_target.position.z = right_position[2] - self.data.qpos[2]
+            self.eetarget.right_target.orientation.w = right_quaternion[0]
+            self.eetarget.right_target.orientation.x = right_quaternion[1]
+            self.eetarget.right_target.orientation.y = right_quaternion[2]
+            self.eetarget.right_target.orientation.z = right_quaternion[3]
+
         self.eetarget_publisher.Write(self.eetarget)
 
-    def simulation_loop(self):
+    def simulation_loop(self) -> None:
         with self.viewer.lock():
-            for i, _ in enumerate(self.motor_names):
-                pos_id = self.pos_ids[i]
-                vel_id = self.vel_ids[i]
+            for index in range(len(self.motor_names)):
+                position_address = self.pos_addresses[index]
+                velocity_address = self.vel_addresses[index]
+                motor_command = self.lowcmd.motor_cmd[index]
 
-                q_err = self.lowcmd.motor_cmd[i].q - self.data.sensordata[pos_id]
-                dq_err = self.lowcmd.motor_cmd[i].dq - self.data.sensordata[vel_id]
+                q_error = motor_command.q - self.data.sensordata[position_address]
+                dq_error = motor_command.dq - self.data.sensordata[velocity_address]
 
-                idx = i if i < 16 else i + 1
-                self.data.ctrl[idx] = (
-                    q_err * self.lowcmd.motor_cmd[i].kp
-                    + dq_err * self.lowcmd.motor_cmd[i].kd
-                    + self.lowcmd.motor_cmd[i].tau
+                actuator_index = index if index < 16 else index + 1
+                self.data.ctrl[actuator_index] = (
+                    q_error * motor_command.kp
+                    + dq_error * motor_command.kd
+                    + motor_command.tau
                 )
 
-                if i == 15 or i == 23:
-                    q_err = self.lowcmd.motor_cmd[i].q - self.data.sensordata[pos_id + 1]
-                    dq_err = self.lowcmd.motor_cmd[i].dq - self.data.sensordata[vel_id + 1]
-                    self.data.ctrl[idx + 1] = (
-                        q_err * self.lowcmd.motor_cmd[i].kp
-                        + dq_err * self.lowcmd.motor_cmd[i].kd
-                        + self.lowcmd.motor_cmd[i].tau
+                secondary_position = self.secondary_gripper_pos_addresses.get(index)
+                if secondary_position is not None:
+                    secondary_velocity = self.secondary_gripper_vel_addresses[index]
+                    q_error = motor_command.q - self.data.sensordata[secondary_position]
+                    dq_error = motor_command.dq - self.data.sensordata[secondary_velocity]
+                    self.data.ctrl[actuator_index + 1] = (
+                        q_error * motor_command.kp
+                        + dq_error * motor_command.kd
+                        + motor_command.tau
                     )
 
             mujoco.mj_step(self.model, self.data)
 
-    def viewer_loop(self):
+    def viewer_loop(self) -> None:
         with self.viewer.lock():
             self.viewer.sync(state_only=True)
 
 
-def main():
+def main() -> None:
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
     _ = SimulationNode()
     while True:

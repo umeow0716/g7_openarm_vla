@@ -49,9 +49,10 @@ def forward_dynamics_deriv(
     x: npt.NDArray[np.float64],
     tau: npt.NDArray[np.float64],
 ):
-    buffer = np.empty(model.nv * model.nx, dtype=np.float64)
-    dvdot_dx = buffer.reshape((model.nv, model.nx), order="F")
-    dvdot_dtau = np.empty((model.nv, model.nv), dtype=np.float64)
+    dx_buffer = np.empty(model.nv * model.nx, dtype=np.float64)
+    dtau_buffer = np.empty(model.nv * model.nv, dtype=np.float64)
+    dvdot_dx = dx_buffer.reshape((model.nv, model.nx), order="F")
+    dvdot_dtau = dtau_buffer.reshape((model.nv, model.nv), order="F")
 
     p_x = model.ffi.cast("double*", x.ctypes.data)
     p_tau = model.ffi.cast("double*", tau.ctypes.data)
@@ -93,8 +94,10 @@ def dynamics_deriv(
     x: npt.NDArray[np.float64],
     tau: npt.NDArray[np.float64],
 ):
-    dxdot_dx = np.empty((model.nx, model.nx), dtype=np.float64)
-    dxdot_dtau = np.empty((model.nx, model.nv), dtype=np.float64)
+    dx_buffer = np.empty(model.nx * model.nx, dtype=np.float64)
+    dtau_buffer = np.empty(model.nx * model.nv, dtype=np.float64)
+    dxdot_dx = dx_buffer.reshape((model.nx, model.nx), order="F")
+    dxdot_dtau = dtau_buffer.reshape((model.nx, model.nv), order="F")
 
     p_x = model.ffi.cast("double*", x.ctypes.data)
     p_tau = model.ffi.cast("double*", tau.ctypes.data)
@@ -115,7 +118,8 @@ def mass_matrix(
     model: "PinnZooModel",
     x_in: npt.NDArray[np.float64],
 ):
-    M_out = np.empty((model.nv, model.nv), dtype=np.float64)
+    buffer = np.empty(model.nv * model.nv, dtype=np.float64)
+    M_out = buffer.reshape((model.nv, model.nv), order="F")
 
     p_x_in = model.ffi.cast("double*", x_in.ctypes.data)
     p_M_out = model.ffi.cast("double*", M_out.ctypes.data)

@@ -17,7 +17,7 @@ from .controller import Controller
 
 class LowLevelNode:
     def __init__(self):
-        self.base_enable = config.control_mode == "wbc"
+        self.base_enable = config.base_enabled
 
         self.wbc_lowcmd = WBCLowCmd_default()
         self.wbc_lowcmd_subscriber = ChannelSubscriber("rt/wbclowcmd", WBCLowCmd)

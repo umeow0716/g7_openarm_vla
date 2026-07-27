@@ -4,13 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from g7_openarm_config import BaseConfig
-
-
-@dataclass(frozen=True, slots=True)
-class DDSConfig:
-    domain_id: int
-    interface: str
+from g7_openarm_config import BaseConfig, DDSConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,24 +13,17 @@ class MujocoConfig(BaseConfig):
     imu_hz: float
     eetarget_hz: float
     fps: float
-
     dds: DDSConfig
 
     def __post_init__(self) -> None:
-        if self.hz <= 0.0:
-            raise ValueError(f"mujoco.hz must be positive, got {self.hz}")
-
-        if self.imu_hz <= 0.0:
-            raise ValueError(f"mujoco.imu_hz must be positive, got {self.imu_hz}")
-
-        if self.eetarget_hz <= 0.0:
-            raise ValueError(f"mujoco.eetarget_hz must be positive, got {self.eetarget_hz}")
-
-        if self.fps <= 0.0:
-            raise ValueError(f"mujoco.fps must be positive, got {self.fps}")
-
-        if not self.dds.interface:
-            raise ValueError("dds.interface must not be empty")
+        for field, value in (
+            ("mujoco.hz", self.hz),
+            ("mujoco.imu_hz", self.imu_hz),
+            ("mujoco.eetarget_hz", self.eetarget_hz),
+            ("mujoco.fps", self.fps),
+        ):
+            if value <= 0.0:
+                raise ValueError(f"{field} must be positive, got {value}")
 
     @property
     def interval(self) -> float:
@@ -60,23 +47,16 @@ class MujocoConfig(BaseConfig):
         data: Mapping[str, Any],
     ) -> MujocoConfig:
         section = data.get("mujoco")
-        dds_section = data.get("dds")
 
         if not isinstance(section, Mapping):
             raise ValueError("Missing [mujoco] section")
-
-        if not isinstance(dds_section, Mapping):
-            raise ValueError("Missing [dds] section")
 
         return cls(
             hz=float(section["hz"]),
             imu_hz=float(section["imu_hz"]),
             eetarget_hz=float(section["eetarget_hz"]),
             fps=float(section["fps"]),
-            dds=DDSConfig(
-                domain_id=int(dds_section.get("domain_id", 0)),
-                interface=str(dds_section.get("interface", "lo")),
-            ),
+            dds=DDSConfig.from_mapping(data),
         )
 
 

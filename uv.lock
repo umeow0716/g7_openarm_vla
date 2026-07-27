@@ -276,6 +276,7 @@ dependencies = [
     { name = "g7-openarm-config" },
     { name = "g7-openarm-idl" },
     { name = "g7-openarm-pinnzoo" },
+    { name = "g7-openarm-utils" },
     { name = "unitree-sdk2py" },
 ]
 
@@ -284,6 +285,7 @@ requires-dist = [
     { name = "g7-openarm-config", editable = "modules/g7_openarm_config" },
     { name = "g7-openarm-idl", editable = "modules/g7_openarm_idl" },
     { name = "g7-openarm-pinnzoo", editable = "modules/g7_openarm_pinnzoo" },
+    { name = "g7-openarm-utils", editable = "modules/g7_openarm_utils" },
     { name = "unitree-sdk2py", editable = "third_party/unitree_sdk2_python" },
 ]
 
@@ -329,15 +331,13 @@ version = "0.1.0"
 source = { editable = "modules/g7_openarm_pinnzoo" }
 dependencies = [
     { name = "cffi" },
-    { name = "g7-openarm-idl" },
-    { name = "unitree-sdk2py" },
+    { name = "g7-openarm-utils" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "cffi", specifier = ">=2.1.0" },
-    { name = "g7-openarm-idl", editable = "modules/g7_openarm_idl" },
-    { name = "unitree-sdk2py", editable = "third_party/unitree_sdk2_python" },
+    { name = "g7-openarm-utils", editable = "modules/g7_openarm_utils" },
 ]
 
 [[package]]
@@ -347,6 +347,7 @@ source = { editable = "modules/g7_openarm_state_estimator" }
 dependencies = [
     { name = "g7-openarm-config" },
     { name = "g7-openarm-idl" },
+    { name = "g7-openarm-utils" },
     { name = "unitree-sdk2py" },
 ]
 
@@ -354,6 +355,7 @@ dependencies = [
 requires-dist = [
     { name = "g7-openarm-config", editable = "modules/g7_openarm_config" },
     { name = "g7-openarm-idl", editable = "modules/g7_openarm_idl" },
+    { name = "g7-openarm-utils", editable = "modules/g7_openarm_utils" },
     { name = "unitree-sdk2py", editable = "third_party/unitree_sdk2_python" },
 ]
 

@@ -12,15 +12,6 @@ from g7_openarm_config import general_config
 LOG_ROOT = Path("logs")
 
 
-def suppress_output() -> None:
-    devnull_fd = os.open(os.devnull, os.O_WRONLY)
-
-    os.dup2(devnull_fd, 1)  # stdout
-    os.dup2(devnull_fd, 2)  # stderr
-
-    os.close(devnull_fd)
-
-
 def build_log_path(folder_name: str) -> Path:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return LOG_ROOT / folder_name / f"{timestamp}.log"
