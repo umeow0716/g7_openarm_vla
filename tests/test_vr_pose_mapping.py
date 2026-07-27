@@ -1,8 +1,11 @@
 import numpy as np
-import pytest
 
-from g7_openarm_utils import quat_from_yaw, quat_to_rotation_matrix, quat_yaw
-from g7_openarm_vr.pose_mapping import remap_pose_yaw_only
+from g7_openarm_utils import (
+    quat_from_yaw,
+    quat_mul,
+    quat_to_rotation_matrix,
+)
+from g7_openarm_vr.pose_mapping import RelativePoseMapper
 from g7_openarm_vr.udp_response import (
     VR_RH_TO_MUJOCO_QUAT,
     VRControllerPose,
@@ -30,11 +33,8 @@ def test_udp_response_parses_controller_objects() -> None:
 
 
 def test_vr_position_axes_map_to_mujoco_forward_left_up() -> None:
-    # Unity +Z forward -> MuJoCo +X forward.
     np.testing.assert_allclose(_unity_pose(z=1.0).as_mujoco_pose()[:3], [1, 0, 0])
-    # Unity +X right -> MuJoCo -Y (right).
     np.testing.assert_allclose(_unity_pose(x=1.0).as_mujoco_pose()[:3], [0, -1, 0])
-    # Unity +Y up -> MuJoCo +Z up.
     np.testing.assert_allclose(_unity_pose(y=1.0).as_mujoco_pose()[:3], [0, 0, 1])
 
 
@@ -59,12 +59,47 @@ def test_identity_unity_orientation_gets_fixed_mujoco_basis_rotation() -> None:
     )
 
 
-def test_yaw_only_mapping_rotates_translation_and_preserves_relative_pitch_roll() -> None:
-    first = np.concatenate(([1.0, 2.0, 3.0], quat_from_yaw(0.0)))
-    origin = np.concatenate(([10.0, 20.0, 30.0], quat_from_yaw(np.pi / 2.0)))
-    current = np.concatenate(([2.0, 2.0, 3.0], quat_from_yaw(0.25)))
+def test_mapper_maps_captured_pose_exactly_to_robot_origin() -> None:
+    first = np.concatenate(([1.0, 2.0, 3.0], quat_from_yaw(0.4)))
+    origin = np.concatenate(([10.0, 20.0, 30.0], quat_from_yaw(-0.7)))
 
-    target = remap_pose_yaw_only(current, first, origin)
+    mapper = RelativePoseMapper.from_poses(first, origin)
 
-    np.testing.assert_allclose(target[:3], [10.0, 21.0, 30.0], atol=1e-12)
-    assert quat_yaw(target[3:]) == pytest.approx(np.pi / 2.0 + 0.25)
+    np.testing.assert_allclose(mapper.map(first), origin, atol=1e-12)
+
+
+def test_mapper_preserves_world_axis_translation_directions() -> None:
+    first = np.concatenate(([1.0, 2.0, 3.0], quat_from_yaw(0.8)))
+    origin = np.concatenate(([10.0, 20.0, 30.0], quat_from_yaw(-0.3)))
+    mapper = RelativePoseMapper.from_poses(first, origin)
+
+    forward = first.copy()
+    forward[0] += 0.2
+    right = first.copy()
+    right[1] -= 0.2
+    up = first.copy()
+    up[2] += 0.2
+
+    np.testing.assert_allclose(mapper.map(forward)[:3], origin[:3] + [0.2, 0, 0])
+    np.testing.assert_allclose(mapper.map(right)[:3], origin[:3] + [0, -0.2, 0])
+    np.testing.assert_allclose(mapper.map(up)[:3], origin[:3] + [0, 0, 0.2])
+
+
+def test_mapper_applies_rotation_relative_to_captured_orientation() -> None:
+    first_q = quat_from_yaw(0.4)
+    origin_q = quat_from_yaw(-0.7)
+    relative_rotation = quat_from_yaw(0.25)
+    current_q = quat_mul(relative_rotation, first_q)
+
+    first = np.concatenate(([1.0, 2.0, 3.0], first_q))
+    origin = np.concatenate(([10.0, 20.0, 30.0], origin_q))
+    current = np.concatenate(([1.0, 2.0, 3.0], current_q))
+
+    target = RelativePoseMapper.from_poses(first, origin).map(current)
+    expected_q = quat_mul(relative_rotation, origin_q)
+
+    np.testing.assert_allclose(
+        quat_to_rotation_matrix(target[3:]),
+        quat_to_rotation_matrix(expected_q),
+        atol=1e-12,
+    )
