@@ -1,32 +1,31 @@
 [project]
-name = "g7-openarm-mujoco"
+name = "g7-openarm-vr"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "g7-openarm-config",
-    "g7-openarm-idl",
-    "g7-openarm-utils",
-    "mujoco>=3.10.0",
-    "unitree-sdk2py",
+  "g7-openarm-config",
+  "g7-openarm-idl",
+  "g7-openarm-mujoco",
+  "g7-openarm-utils[mujoco]",
+  "numpy",
+  "unitree-sdk2py",
 ]
 
 [tool.uv.sources]
 g7-openarm-config = { workspace = true }
 g7-openarm-idl = { workspace = true }
+g7-openarm-mujoco = { workspace = true }
 g7-openarm-utils = { workspace = true }
 unitree-sdk2py = { path = "../../third_party/unitree_sdk2_python", editable = true }
 
 [project.scripts]
-g7-mujoco = "g7_openarm_mujoco.simulation_node:main"
-g7-mujoco-real = "g7_openarm_mujoco.real_node:main"
-g7-mujoco-vr-sim = "g7_openarm_mujoco.vr_sim_node:main"
-g7-mujoco-vr-real = "g7_openarm_mujoco.vr_real_node:main"
+g7-vr = "g7_openarm_vr.vr_node:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/g7_openarm_mujoco"]
+packages = ["src/g7_openarm_vr"]

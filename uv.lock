@@ -19,6 +19,7 @@ members = [
     "g7-openarm-state-estimator",
     "g7-openarm-utils",
     "g7-openarm-vla",
+    "g7-openarm-vr",
     "g7-openarm-wbc",
 ]
 
@@ -313,6 +314,7 @@ source = { editable = "modules/g7_openarm_mujoco" }
 dependencies = [
     { name = "g7-openarm-config" },
     { name = "g7-openarm-idl" },
+    { name = "g7-openarm-utils" },
     { name = "mujoco" },
     { name = "unitree-sdk2py" },
 ]
@@ -321,6 +323,7 @@ dependencies = [
 requires-dist = [
     { name = "g7-openarm-config", editable = "modules/g7_openarm_config" },
     { name = "g7-openarm-idl", editable = "modules/g7_openarm_idl" },
+    { name = "g7-openarm-utils", editable = "modules/g7_openarm_utils" },
     { name = "mujoco", specifier = ">=3.10.0" },
     { name = "unitree-sdk2py", editable = "third_party/unitree_sdk2_python" },
 ]
@@ -363,6 +366,23 @@ requires-dist = [
 name = "g7-openarm-utils"
 version = "0.1.0"
 source = { editable = "modules/g7_openarm_utils" }
+dependencies = [
+    { name = "g7-openarm-idl" },
+    { name = "numpy" },
+]
+
+[package.optional-dependencies]
+mujoco = [
+    { name = "mujoco" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "g7-openarm-idl", editable = "modules/g7_openarm_idl" },
+    { name = "numpy" },
+    { name = "mujoco", marker = "extra == 'mujoco'", specifier = ">=3.10.0" },
+]
+provides-extras = ["mujoco"]
 
 [[package]]
 name = "g7-openarm-vla"
@@ -377,14 +397,35 @@ dev = [
     { name = "ruff" },
 ]
 
-[package.metadata]
-
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=2.3.0" },
     { name = "pybind11-stubgen", specifier = ">=2.5.5" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.0" },
+]
+
+[[package]]
+name = "g7-openarm-vr"
+version = "0.1.0"
+source = { editable = "modules/g7_openarm_vr" }
+dependencies = [
+    { name = "g7-openarm-config" },
+    { name = "g7-openarm-idl" },
+    { name = "g7-openarm-mujoco" },
+    { name = "g7-openarm-utils", extra = ["mujoco"] },
+    { name = "numpy" },
+    { name = "unitree-sdk2py" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "g7-openarm-config", editable = "modules/g7_openarm_config" },
+    { name = "g7-openarm-idl", editable = "modules/g7_openarm_idl" },
+    { name = "g7-openarm-mujoco", editable = "modules/g7_openarm_mujoco" },
+    { name = "g7-openarm-utils", extras = ["mujoco"], editable = "modules/g7_openarm_utils" },
+    { name = "numpy" },
+    { name = "unitree-sdk2py", editable = "third_party/unitree_sdk2_python" },
 ]
 
 [[package]]
@@ -814,6 +855,7 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b2/a3/d5e4ef7a56be3f928ffb90b94c25ba7d3cb9c7fe0736aeaaedf361770712/ruff-0.16.0-py3-none-win_amd64.whl", hash = "sha256:429c117f022bf481fabd9d551e7a3952b24c65e6ef44337ea09d90bebef14472", size = 11923141, upload-time = "2026-07-23T19:11:26.409Z" },
     { url = "https://files.pythonhosted.org/packages/cb/9a/8415f2657cbe200f41a4531ccededf135505a92d4a012229121f885b26f9/ruff-0.16.0-py3-none-win_arm64.whl", hash = "sha256:14296fedcd2705c77ab8235439278bbb38f285cf7da5528b00b3e330c3d4872d", size = 11273407, upload-time = "2026-07-23T19:11:28.705Z" },
 ]
+
 
 [[package]]
 name = "typing-extensions"

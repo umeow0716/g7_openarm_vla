@@ -6,9 +6,9 @@ import numpy as np
 import numpy.typing as npt
 
 from g7_openarm_idl import EETarget
-from g7_openarm_idl.utils import array_to_pose, pose_to_array
 from g7_openarm_pinnzoo import PinnZooModel, kinematics
-from g7_openarm_utils import quat_mul, quat_normalize, quat_rotate
+from g7_openarm_utils.idl import array_to_pose, pose_to_array
+from g7_openarm_utils.quat import quat_mul, quat_normalize, quat_rotate
 
 if TYPE_CHECKING:
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_

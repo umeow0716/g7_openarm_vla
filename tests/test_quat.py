@@ -27,3 +27,10 @@ def test_quat_mul_remains_a_raw_hamilton_product() -> None:
 def test_quat_normalize_rejects_zero_quaternion() -> None:
     with pytest.raises(ValueError, match="norm"):
         quat_normalize([0.0, 0.0, 0.0, 0.0])
+
+
+def test_quat_yaw_round_trip() -> None:
+    from g7_openarm_utils import quat_from_yaw, quat_yaw
+
+    yaw = 0.73
+    assert quat_yaw(quat_from_yaw(yaw)) == pytest.approx(yaw)

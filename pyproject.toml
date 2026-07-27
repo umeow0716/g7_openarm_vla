@@ -8,17 +8,18 @@ dependencies = []
 
 [tool.uv.workspace]
 members = [
+    "modules/g7_openarm_config",
+    "modules/g7_openarm_hardware",
+    "modules/g7_openarm_hommi_interface",
     "modules/g7_openarm_idl",
     "modules/g7_openarm_lowlevel",
     "modules/g7_openarm_monitor",
     "modules/g7_openarm_mujoco",
     "modules/g7_openarm_pinnzoo",
     "modules/g7_openarm_state_estimator",
-    "modules/g7_openarm_wbc",
-    "modules/g7_openarm_config",
-    "modules/g7_openarm_hardware",
-    "modules/g7_openarm_hommi_interface",
     "modules/g7_openarm_utils",
+    "modules/g7_openarm_vr",
+    "modules/g7_openarm_wbc",
 ]
 
 [dependency-groups]
@@ -35,11 +36,13 @@ package = false
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+extend-exclude = ["third_party", "artifacts", "logs"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["E741"]
 fixable = ["ALL"]
+unsafe-fixes = false
 
 [tool.ruff.lint.isort]
 known-first-party = [
@@ -53,6 +56,7 @@ known-first-party = [
     "g7_openarm_pinnzoo",
     "g7_openarm_state_estimator",
     "g7_openarm_utils",
+    "g7_openarm_vr",
     "g7_openarm_wbc",
 ]
 

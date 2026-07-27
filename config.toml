@@ -39,3 +39,6 @@ hz = 1.0
 
 [hommi_interface]
 hz = 50.0 # EEtarget
+
+[vr]
+hz = 50.0 # EETarget

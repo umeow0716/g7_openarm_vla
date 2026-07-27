@@ -83,3 +83,15 @@ def quat_rotate(q: npt.ArrayLike, vector: npt.ArrayLike) -> FloatArray:
         raise ValueError(f"Vector must have shape (3,), got {vector_array.shape}")
 
     return quat_to_rotation_matrix(q) @ vector_array
+
+
+def quat_from_yaw(yaw: float) -> FloatArray:
+    """Return a wxyz quaternion containing only a world-Z yaw rotation."""
+    half_yaw = 0.5 * float(yaw)
+    return np.array([np.cos(half_yaw), 0.0, 0.0, np.sin(half_yaw)], dtype=np.float64)
+
+
+def quat_yaw(q: npt.ArrayLike) -> float:
+    """Extract world-Z yaw from a wxyz body-to-world quaternion."""
+    w, x, y, z = quat_normalize(q)
+    return float(np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))
