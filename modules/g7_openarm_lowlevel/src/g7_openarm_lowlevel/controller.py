@@ -131,7 +131,7 @@ class ControllerConfig:
 
     # --- PD / impedance control (arm) ---
     arm_pd_zeta: float =  1.2
-    arm_pd_omega: float = 1.0
+    arm_pd_omega: float = 4.0
 
     # Extra multiplier on Kd only, applied AFTER the zeta*omega*sqrt(M)
     # formula. This is the knob to reach for on overshoot: it raises
