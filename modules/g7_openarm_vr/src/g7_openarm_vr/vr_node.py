@@ -13,7 +13,7 @@ from g7_openarm_utils.idl import array_to_pose, pose_to_array
 from g7_openarm_utils.mujoco import load_hand_default_pose
 
 from .config import config
-from .pose_mapping import remap_pose_yaw_only, yaw_alignment_quaternion
+from .pose_mapping import RelativePoseMapper
 from .udp_receiver import JsonUdpReceiver
 from .udp_response import VRUDPResponse
 
@@ -36,12 +36,12 @@ class VRNode:
 
         self.left_origin_pose = pose_to_array(hand_default_pose.left_target)
         self.right_origin_pose = pose_to_array(hand_default_pose.right_target)
-        self.left_first_pose, self.right_first_pose = self._controller_poses(message)
-        self.left_yaw_alignment = yaw_alignment_quaternion(
-            self.left_first_pose, self.left_origin_pose
+        left_first_pose, right_first_pose = self._controller_poses(message)
+        self.left_pose_mapper = RelativePoseMapper.from_poses(
+            left_first_pose, self.left_origin_pose
         )
-        self.right_yaw_alignment = yaw_alignment_quaternion(
-            self.right_first_pose, self.right_origin_pose
+        self.right_pose_mapper = RelativePoseMapper.from_poses(
+            right_first_pose, self.right_origin_pose
         )
 
         self.eetarget_thread = RecurrentThread(
@@ -74,18 +74,8 @@ class VRNode:
             return
 
         left_pose, right_pose = self._controller_poses(message)
-        left_target = remap_pose_yaw_only(
-            left_pose,
-            self.left_first_pose,
-            self.left_origin_pose,
-            self.left_yaw_alignment,
-        )
-        right_target = remap_pose_yaw_only(
-            right_pose,
-            self.right_first_pose,
-            self.right_origin_pose,
-            self.right_yaw_alignment,
-        )
+        left_target = self.left_pose_mapper.map(left_pose)
+        right_target = self.right_pose_mapper.map(right_pose)
 
         self.eetarget_publisher.Write(
             EETarget(array_to_pose(left_target), array_to_pose(right_target))
