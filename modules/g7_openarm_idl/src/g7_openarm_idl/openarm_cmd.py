@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
+import cyclonedds.idl.annotations as annotate
 from cyclonedds.idl import IdlStruct
 from cyclonedds.idl.types import array, float32
-
-import cyclonedds.idl.annotations as annotate
 
 
 @dataclass
@@ -16,8 +15,9 @@ class OpenArmCmd(IdlStruct, typename="OpenArmCmd"):
         R_1, R_2, R_3, R_4, R_5, R_6, R_7, R_gripper,
     ]
     """
-    
+
     data: array[float32, 16]
 
+
 def OpenArmCmd_default():
-    return OpenArmCmd([0.0] * 16) # type: ignore
+    return OpenArmCmd([0.0] * 16)  # type: ignore

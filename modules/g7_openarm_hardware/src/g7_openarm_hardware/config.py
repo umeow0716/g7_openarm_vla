@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from g7_openarm_config import BaseConfig
 
@@ -29,35 +30,29 @@ class HardwareConfig(BaseConfig):
 
     def __post_init__(self) -> None:
         if self.hz <= 0.0:
-            raise ValueError(
-                f"hardware.hz must be positive, got {self.hz}"
-            )
+            raise ValueError(f"hardware.hz must be positive, got {self.hz}")
 
         if self.imu_hz <= 0:
-            raise ValueError(
-                f"hardware.imu_hz must be positive, got {self.imu_hz}"
-            )
+            raise ValueError(f"hardware.imu_hz must be positive, got {self.imu_hz}")
 
         if not self.dds.interface:
-            raise ValueError(
-                "dds.interface must not be empty"
-            )
+            raise ValueError("dds.interface must not be empty")
 
         for i, val in enumerate(self.base_ids):
             if not isinstance(val, int):
-                ValueError(f"hardware.base_ids[{i}] must be int: {val}")
+                raise ValueError(f"hardware.base_ids[{i}] must be int: {val}")
 
         for i, val in enumerate(self.base_direction):
             if not isinstance(val, float):
-                ValueError(f"hardware.base_direction[{i}] must be float: {val}")
+                raise ValueError(f"hardware.base_direction[{i}] must be float: {val}")
 
         for i, val in enumerate(self.left_arm_direction):
             if not isinstance(val, float):
-                ValueError(f"hardware.left_arm_direction[{i}] must be float: {val}")
+                raise ValueError(f"hardware.left_arm_direction[{i}] must be float: {val}")
 
         for i, val in enumerate(self.right_arm_direction):
             if not isinstance(val, float):
-                ValueError(f"hardware.right_arm_direction[{i}] must be float: {val}")
+                raise ValueError(f"hardware.right_arm_direction[{i}] must be float: {val}")
 
     @property
     def interval(self) -> float:
@@ -67,19 +62,15 @@ class HardwareConfig(BaseConfig):
     def from_mapping(
         cls,
         data: Mapping[str, Any],
-    ) -> "HardwareConfig":
+    ) -> HardwareConfig:
         section = data.get("hardware")
         dds_section = data.get("dds")
 
         if not isinstance(section, Mapping):
-            raise ValueError(
-                "Missing [hardware] section"
-            )
+            raise ValueError("Missing [hardware] section")
 
         if not isinstance(dds_section, Mapping):
-            raise ValueError(
-                "Missing [dds] section"
-            )
+            raise ValueError("Missing [dds] section")
 
         return cls(
             hz=float(section["hz"]),
@@ -93,12 +84,8 @@ class HardwareConfig(BaseConfig):
             left_arm_direction=list(section["left_arm_direction"]),
             right_arm_direction=list(section["right_arm_direction"]),
             dds=DDSConfig(
-                domain_id=int(
-                    dds_section.get("domain_id", 0)
-                ),
-                interface=str(
-                    dds_section.get("interface", "lo")
-                ),
+                domain_id=int(dds_section.get("domain_id", 0)),
+                interface=str(dds_section.get("interface", "lo")),
             ),
         )
 

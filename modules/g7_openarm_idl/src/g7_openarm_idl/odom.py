@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 
-from cyclonedds.idl import IdlStruct
-
 import cyclonedds.idl.annotations as annotate
-
+from cyclonedds.idl import IdlStruct
+from unitree_sdk2py.idl.default import (
+    geometry_msgs_msg_dds__Point_,
+    geometry_msgs_msg_dds__Quaternion_,
+)
 from unitree_sdk2py.idl.geometry_msgs.msg.dds_ import Point_, Quaternion_
-from unitree_sdk2py.idl.default import geometry_msgs_msg_dds__Point_, geometry_msgs_msg_dds__Quaternion_
 
 
 @dataclass
@@ -19,6 +20,7 @@ class Odom(IdlStruct, typename="Odom"):
     vdot: Point_
     angular_vdot: Point_
 
+
 def Odom_default():
     return Odom(
         geometry_msgs_msg_dds__Point_(),
@@ -26,4 +28,5 @@ def Odom_default():
         geometry_msgs_msg_dds__Point_(),
         geometry_msgs_msg_dds__Point_(),
         geometry_msgs_msg_dds__Point_(),
-        geometry_msgs_msg_dds__Point_()) # type: ignore
+        geometry_msgs_msg_dds__Point_(),
+    )  # type: ignore

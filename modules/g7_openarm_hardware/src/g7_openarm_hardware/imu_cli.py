@@ -2,7 +2,6 @@ import math
 import threading
 
 import xspublic
-
 from unitree_sdk2py.core.channel import (
     ChannelFactoryInitialize,
     ChannelPublisher,
@@ -13,7 +12,6 @@ from unitree_sdk2py.idl.default import (
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_
 
 from .config import config
-
 
 DEG_TO_RAD = math.pi / 180.0
 

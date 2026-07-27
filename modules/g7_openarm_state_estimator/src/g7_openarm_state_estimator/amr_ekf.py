@@ -4,9 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
-
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-
 
 FloatArray = npt.NDArray[np.float64]
 
@@ -14,23 +12,26 @@ FloatArray = npt.NDArray[np.float64]
 def _rotation_body_to_world(q: FloatArray) -> FloatArray:
     w, x, y, z = q
 
-    return np.array([
+    return np.array(
         [
-            1.0 - 2.0 * (y * y + z * z),
-            2.0 * (x * y - w * z),
-            2.0 * (x * z + w * y),
+            [
+                1.0 - 2.0 * (y * y + z * z),
+                2.0 * (x * y - w * z),
+                2.0 * (x * z + w * y),
+            ],
+            [
+                2.0 * (x * y + w * z),
+                1.0 - 2.0 * (x * x + z * z),
+                2.0 * (y * z - w * x),
+            ],
+            [
+                2.0 * (x * z - w * y),
+                2.0 * (y * z + w * x),
+                1.0 - 2.0 * (x * x + y * y),
+            ],
         ],
-        [
-            2.0 * (x * y + w * z),
-            1.0 - 2.0 * (x * x + z * z),
-            2.0 * (y * z - w * x),
-        ],
-        [
-            2.0 * (x * z - w * y),
-            2.0 * (y * z + w * x),
-            1.0 - 2.0 * (x * x + y * y),
-        ],
-    ], dtype=np.float64)
+        dtype=np.float64,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,24 +90,32 @@ class AMREKF:
         self.wheel_radius = wheel_radius
 
         # FL, FR, RL, RR
-        self.wheel_position = np.array([
-            [front_x, left_y],
-            [front_x, right_y],
-            [rear_x, left_y],
-            [rear_x, right_y],
-        ], dtype=np.float64)
+        self.wheel_position = np.array(
+            [
+                [front_x, left_y],
+                [front_x, right_y],
+                [rear_x, left_y],
+                [rear_x, right_y],
+            ],
+            dtype=np.float64,
+        )
 
         # [px_world, py_world, vx_world, vy_world, wz_body, gyro_z_bias]
         self.x = np.zeros(6, dtype=np.float64)
 
-        self.P = np.diag([
-            0.01,
-            0.01,
-            0.05,
-            0.05,
-            np.deg2rad(1.0),
-            np.deg2rad(1.0),
-        ]) ** 2
+        self.P = (
+            np.diag(
+                [
+                    0.01,
+                    0.01,
+                    0.05,
+                    0.05,
+                    np.deg2rad(1.0),
+                    np.deg2rad(1.0),
+                ]
+            )
+            ** 2
+        )
 
         self.previous_linear_velocity_body: FloatArray | None = None
         self.previous_wz_body: float | None = None
@@ -131,11 +140,14 @@ class AMREKF:
 
         wheel_velocity_body = self._swerve_velocity(lowstate)
 
-        wheel_linear_velocity_world = rotation @ np.array([
-            wheel_velocity_body[0],
-            wheel_velocity_body[1],
-            0.0,
-        ], dtype=np.float64)
+        wheel_linear_velocity_world = rotation @ np.array(
+            [
+                wheel_velocity_body[0],
+                wheel_velocity_body[1],
+                0.0,
+            ],
+            dtype=np.float64,
+        )
 
         gyro_wz_body = float(lowstate.imu_state.gyroscope[2])
 
@@ -147,32 +159,40 @@ class AMREKF:
         F[0, 2] = dt
         F[1, 3] = dt
 
-        Q = np.diag([
-            (0.02 * dt) ** 2,
-            (0.02 * dt) ** 2,
-            (self.config.linear_velocity_process_std * dt) ** 2,
-            (self.config.linear_velocity_process_std * dt) ** 2,
-            (self.config.angular_velocity_process_std * dt) ** 2,
-            self.config.gyro_bias_walk_std ** 2 * dt,
-        ])
+        Q = np.diag(
+            [
+                (0.02 * dt) ** 2,
+                (0.02 * dt) ** 2,
+                (self.config.linear_velocity_process_std * dt) ** 2,
+                (self.config.linear_velocity_process_std * dt) ** 2,
+                (self.config.angular_velocity_process_std * dt) ** 2,
+                self.config.gyro_bias_walk_std**2 * dt,
+            ]
+        )
 
         self.P = F @ self.P @ F.T + Q
 
         # Wheel wz measures true yaw rate.
         # Gyroscope wz measures true yaw rate plus gyro bias.
-        measurement = np.array([
-            wheel_linear_velocity_world[0],
-            wheel_linear_velocity_world[1],
-            wheel_velocity_body[2],
-            gyro_wz_body,
-        ], dtype=np.float64)
+        measurement = np.array(
+            [
+                wheel_linear_velocity_world[0],
+                wheel_linear_velocity_world[1],
+                wheel_velocity_body[2],
+                gyro_wz_body,
+            ],
+            dtype=np.float64,
+        )
 
-        prediction = np.array([
-            self.x[2],
-            self.x[3],
-            self.x[4],
-            self.x[4] + self.x[5],
-        ], dtype=np.float64)
+        prediction = np.array(
+            [
+                self.x[2],
+                self.x[3],
+                self.x[4],
+                self.x[4] + self.x[5],
+            ],
+            dtype=np.float64,
+        )
 
         H = np.zeros((4, 6), dtype=np.float64)
         H[0, 2] = 1.0
@@ -181,12 +201,14 @@ class AMREKF:
         H[3, 4] = 1.0
         H[3, 5] = 1.0
 
-        R = np.diag([
-            self.config.wheel_velocity_std ** 2,
-            self.config.wheel_velocity_std ** 2,
-            self.config.wheel_wz_std ** 2,
-            self.config.gyro_wz_std ** 2,
-        ])
+        R = np.diag(
+            [
+                self.config.wheel_velocity_std**2,
+                self.config.wheel_velocity_std**2,
+                self.config.wheel_wz_std**2,
+                self.config.gyro_wz_std**2,
+            ]
+        )
 
         innovation = measurement - prediction
         S = H @ self.P @ H.T + R
@@ -201,35 +223,41 @@ class AMREKF:
         IKH = I - K @ H
         self.P = IKH @ self.P @ IKH.T + K @ R @ K.T
 
-        linear_velocity_world = np.array([
-            self.x[2],
-            self.x[3],
-            0.0,
-        ], dtype=np.float64)
+        linear_velocity_world = np.array(
+            [
+                self.x[2],
+                self.x[3],
+                0.0,
+            ],
+            dtype=np.float64,
+        )
 
         linear_velocity_body = rotation.T @ linear_velocity_world
 
         wz_body = float(self.x[4])
-        angular_velocity_body = np.array([
-            0.0,
-            0.0,
-            wz_body,
-        ], dtype=np.float64)
+        angular_velocity_body = np.array(
+            [
+                0.0,
+                0.0,
+                wz_body,
+            ],
+            dtype=np.float64,
+        )
 
         if self.previous_linear_velocity_body is None or self.previous_wz_body is None:
             linear_vdot_body = np.zeros(3, dtype=np.float64)
             angular_vdot_body = np.zeros(3, dtype=np.float64)
         else:
-            linear_vdot_body = (
-                linear_velocity_body
-                - self.previous_linear_velocity_body
-            ) / dt
+            linear_vdot_body = (linear_velocity_body - self.previous_linear_velocity_body) / dt
 
-            angular_vdot_body = np.array([
-                0.0,
-                0.0,
-                (wz_body - self.previous_wz_body) / dt,
-            ], dtype=np.float64)
+            angular_vdot_body = np.array(
+                [
+                    0.0,
+                    0.0,
+                    (wz_body - self.previous_wz_body) / dt,
+                ],
+                dtype=np.float64,
+            )
 
         self.previous_linear_velocity_body = linear_velocity_body.copy()
         self.previous_wz_body = wz_body
@@ -262,14 +290,12 @@ class AMREKF:
         )
 
     def _swerve_velocity(self, lowstate: LowState_) -> FloatArray:
-        steering = np.array([
-            motor.q for motor in lowstate.motor_state[:8:2]
-        ], dtype=np.float64)
+        steering = np.array([motor.q for motor in lowstate.motor_state[:8:2]], dtype=np.float64)
 
-        wheel_speed = np.array([
-            motor.dq * self.wheel_radius
-            for motor in lowstate.motor_state[1:8:2]
-        ], dtype=np.float64)
+        wheel_speed = np.array(
+            [motor.dq * self.wheel_radius for motor in lowstate.motor_state[1:8:2]],
+            dtype=np.float64,
+        )
 
         A = np.zeros((8, 3), dtype=np.float64)
         b = np.zeros(8, dtype=np.float64)
@@ -279,6 +305,7 @@ class AMREKF:
                 self.wheel_position,
                 steering,
                 wheel_speed,
+                strict=True
             )
         ):
             c = np.cos(angle)

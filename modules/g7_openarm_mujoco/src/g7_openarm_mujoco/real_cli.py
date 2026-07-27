@@ -1,20 +1,24 @@
 import time
-import mujoco
-import mujoco.viewer
-
 from pathlib import Path
 
-from g7_openarm_idl import EETarget, EETarget_default, Odom, Odom_default
-from unitree_sdk2py.utils.thread import RecurrentThread
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, ChannelFactoryInitialize
+import mujoco
+import mujoco.viewer
+from unitree_sdk2py.core.channel import (
+    ChannelFactoryInitialize,
+    ChannelPublisher,
+    ChannelSubscriber,
+)
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_
-from unitree_sdk2py.idl.default  import unitree_hg_msg_dds__LowState_
+from unitree_sdk2py.utils.thread import RecurrentThread
+
+from g7_openarm_idl import EETarget, EETarget_default, Odom, Odom_default
 
 from .config import config
 
-
-DEFAULT_MODEL_XML_PATH = Path(__file__).resolve().parent.parent.parent.parent.parent / "model" / "scene.xml"
+DEFAULT_MODEL_XML_PATH = (
+    Path(__file__).resolve().parent.parent.parent.parent.parent / "model" / "scene.xml"
+)
 
 
 class SimulationNode:
@@ -23,7 +27,7 @@ class SimulationNode:
         self.spec.option.timestep = config.interval
 
         left_target = self.spec.worldbody.add_body(
-            name='left_target',
+            name="left_target",
             mocap=True,
             pos=[0.0, 0.0, 0.0],
             quat=[1.0, 0.0, 0.0, 0.0],
@@ -37,7 +41,7 @@ class SimulationNode:
         )
 
         right_target = self.spec.worldbody.add_body(
-            name='right_target',
+            name="right_target",
             mocap=True,
             pos=[0.0, 0.0, 0.0],
             quat=[1.0, 0.0, 0.0, 0.0],
@@ -51,7 +55,7 @@ class SimulationNode:
         )
 
         self.model = self.spec.compile()
-        self.data  = mujoco.MjData(self.model)
+        self.data = mujoco.MjData(self.model)
 
         mujoco.mj_forward(self.model, self.data)
 
@@ -60,8 +64,8 @@ class SimulationNode:
         left_hand_quat = self.data.body("L_gripper_tcp_link").xquat.copy()
         right_hand_quat = self.data.body("R_gripper_tcp_link").xquat.copy()
 
-        self.left_target_mocap_id = self.model.body_mocapid[self.model.body('left_target').id]
-        self.right_target_mocap_id = self.model.body_mocapid[self.model.body('right_target').id]
+        self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
+        self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
 
         self.data.mocap_pos[self.left_target_mocap_id] = left_hand_pos
         self.data.mocap_quat[self.left_target_mocap_id] = left_hand_quat
@@ -112,13 +116,6 @@ class SimulationNode:
         self.gyro_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_gyro")
         self.acc_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SENSOR, "imu_acc")
 
-        self.simulation_thread = RecurrentThread(
-            name="simulation_loop",
-            interval=config.interval,
-            target=self.simulation_loop,
-        )
-        self.simulation_thread.Start()
-
         self.viewer_thread = RecurrentThread(
             name="viewer_loop",
             interval=config.fps_interval,
@@ -144,6 +141,13 @@ class SimulationNode:
         )
         self.write_eetarget_thread.Start()
 
+        self.simulation_thread = RecurrentThread(
+            name="simulation_loop",
+            interval=config.interval,
+            target=self.simulation_loop,
+        )
+        self.simulation_thread.Start()
+
     def lowstate_handler(self, msg: LowState_):
         self.lowstate = msg
 
@@ -154,18 +158,42 @@ class SimulationNode:
         with self.viewer.lock():
             self.eetarget.left_target.position.x = self.data.mocap_pos[self.left_target_mocap_id][0]
             self.eetarget.left_target.position.y = self.data.mocap_pos[self.left_target_mocap_id][1]
-            self.eetarget.left_target.position.z = self.data.mocap_pos[self.left_target_mocap_id][2] - self.data.qpos[2]
-            self.eetarget.left_target.orientation.w = self.data.mocap_quat[self.left_target_mocap_id][0]
-            self.eetarget.left_target.orientation.x = self.data.mocap_quat[self.left_target_mocap_id][1]
-            self.eetarget.left_target.orientation.y = self.data.mocap_quat[self.left_target_mocap_id][2]
-            self.eetarget.left_target.orientation.z = self.data.mocap_quat[self.left_target_mocap_id][3]
-            self.eetarget.right_target.position.x = self.data.mocap_pos[self.right_target_mocap_id][0]
-            self.eetarget.right_target.position.y = self.data.mocap_pos[self.right_target_mocap_id][1]
-            self.eetarget.right_target.position.z = self.data.mocap_pos[self.right_target_mocap_id][2] - self.data.qpos[2]
-            self.eetarget.right_target.orientation.w = self.data.mocap_quat[self.right_target_mocap_id][0]
-            self.eetarget.right_target.orientation.x = self.data.mocap_quat[self.right_target_mocap_id][1]
-            self.eetarget.right_target.orientation.y = self.data.mocap_quat[self.right_target_mocap_id][2]
-            self.eetarget.right_target.orientation.z = self.data.mocap_quat[self.right_target_mocap_id][3]
+            self.eetarget.left_target.position.z = (
+                self.data.mocap_pos[self.left_target_mocap_id][2] - self.data.qpos[2]
+            )
+            self.eetarget.left_target.orientation.w = self.data.mocap_quat[
+                self.left_target_mocap_id
+            ][0]
+            self.eetarget.left_target.orientation.x = self.data.mocap_quat[
+                self.left_target_mocap_id
+            ][1]
+            self.eetarget.left_target.orientation.y = self.data.mocap_quat[
+                self.left_target_mocap_id
+            ][2]
+            self.eetarget.left_target.orientation.z = self.data.mocap_quat[
+                self.left_target_mocap_id
+            ][3]
+            self.eetarget.right_target.position.x = self.data.mocap_pos[self.right_target_mocap_id][
+                0
+            ]
+            self.eetarget.right_target.position.y = self.data.mocap_pos[self.right_target_mocap_id][
+                1
+            ]
+            self.eetarget.right_target.position.z = (
+                self.data.mocap_pos[self.right_target_mocap_id][2] - self.data.qpos[2]
+            )
+            self.eetarget.right_target.orientation.w = self.data.mocap_quat[
+                self.right_target_mocap_id
+            ][0]
+            self.eetarget.right_target.orientation.x = self.data.mocap_quat[
+                self.right_target_mocap_id
+            ][1]
+            self.eetarget.right_target.orientation.y = self.data.mocap_quat[
+                self.right_target_mocap_id
+            ][2]
+            self.eetarget.right_target.orientation.z = self.data.mocap_quat[
+                self.right_target_mocap_id
+            ][3]
         self.eetarget_publisher.Write(self.eetarget)
 
     def simulation_loop(self):
@@ -178,11 +206,11 @@ class SimulationNode:
             self.data.qpos[5] = self.odom.quaternion.y
             self.data.qpos[6] = self.odom.quaternion.z
             for i in range(8):
-                self.data.qpos[7+i] = self.lowstate.motor_state[i].q
+                self.data.qpos[7 + i] = self.lowstate.motor_state[i].q
             for i in range(7):
-                self.data.qpos[15+i] = self.lowstate.motor_state[8+i].q
+                self.data.qpos[15 + i] = self.lowstate.motor_state[8 + i].q
             for i in range(7):
-                self.data.qpos[24+i] = self.lowstate.motor_state[16+i].q
+                self.data.qpos[24 + i] = self.lowstate.motor_state[16 + i].q
             self.data.qpos[22:24] = 0.0
             self.data.qpos[31:33] = 0.0
             self.data.qvel[:] = 0.0

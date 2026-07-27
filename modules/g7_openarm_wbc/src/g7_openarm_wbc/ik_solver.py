@@ -1,16 +1,17 @@
-import numpy as np
-import numpy.typing as npt
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+import numpy as np
+import numpy.typing as npt
 
 from g7_openarm_pinnzoo import PinnZooModel, kinematics, kinematics_jacobian
 
 from .utils import ori_err_quat, quat_jac_to_ori_err_jac
 
 if TYPE_CHECKING:
-    from g7_openarm_idl import Odom, EETarget
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+
+    from g7_openarm_idl import EETarget, Odom
 
 
 DEFAULT_LIB_PATH = PinnZooModel.get_default_lib_path()
@@ -21,17 +22,20 @@ class PoseState:
     pos: npt.NDArray[np.float64]
     quat: npt.NDArray[np.float64]
 
+
 @dataclass
 class TaskState:
     left_pose: PoseState
     right_pose: PoseState
 
+
 @dataclass
 class TaskEvaluation:
-    left_pos_err:  npt.NDArray[np.float64]
-    left_ori_err:  npt.NDArray[np.float64]
+    left_pos_err: npt.NDArray[np.float64]
+    left_ori_err: npt.NDArray[np.float64]
     right_pos_err: npt.NDArray[np.float64]
     right_ori_err: npt.NDArray[np.float64]
+
 
 def task_kinematic_jacobian(
     model: PinnZooModel,
@@ -41,10 +45,12 @@ def task_kinematic_jacobian(
 
     qw, qx, qy, qz = x_lib[3:7]
 
-    yaw = float(np.arctan2(
-        2.0 * (qw * qz + qx * qy),
-        1.0 - 2.0 * (qy * qy + qz * qz),
-    ))
+    yaw = float(
+        np.arctan2(
+            2.0 * (qw * qz + qx * qy),
+            1.0 - 2.0 * (qy * qy + qz * qz),
+        )
+    )
 
     c = float(np.cos(yaw))
     s = float(np.sin(yaw))
@@ -52,12 +58,15 @@ def task_kinematic_jacobian(
     J_vx_body = c * Jkin[:, 0:1] + s * Jkin[:, 1:2]
     J_vy_body = -s * Jkin[:, 0:1] + c * Jkin[:, 1:2]
 
-    dq_dwz = 0.5 * np.array([
-        -qz,
-         qy,
-        -qx,
-         qw,
-    ], dtype=np.float64)
+    dq_dwz = 0.5 * np.array(
+        [
+            -qz,
+            qy,
+            -qx,
+            qw,
+        ],
+        dtype=np.float64,
+    )
 
     J_wz_body = (Jkin[:, 3:7] @ dq_dwz)[:, None]
 
@@ -83,46 +92,71 @@ class G7OpenArmIKSolver:
     ) -> None:
         self.lib_path = str(DEFAULT_LIB_PATH if lib_path is None else lib_path)
         self.model = PinnZooModel(self.lib_path)
-        
+
         self.nx = 17
-        
+
         self.Q_hand_pos = 200.0
         self.Q_hand_ori = 0.5
-        
-        self.R_du_base = np.diag([
-            8.0, 8.0, 1.0,
-        ]).astype(np.float64)
-        
+
+        self.R_du_base = np.diag(
+            [
+                8.0,
+                8.0,
+                1.0,
+            ]
+        ).astype(np.float64)
+
         self.prev_u_base = np.zeros(3, dtype=np.float64)
-        
-        self.u_max = np.array([
-            0.5, 0.5, 0.5,          # base vx, vy, omega
 
-            # left arm: J1~J7
-            2.0, 2.0,               # J1, J2: DM-J8009P
-            1.5, 1.5,               # J3, J4: DM-J4340P / DM-J4340
-            3.0, 3.0, 3.0,          # J5, J6, J7: DM-J4310
+        self.u_max = np.array(
+            [
+                0.5,
+                0.5,
+                0.5,  # base vx, vy, omega
+                # left arm: J1~J7
+                2.0,
+                2.0,  # J1, J2: DM-J8009P
+                1.5,
+                1.5,  # J3, J4: DM-J4340P / DM-J4340
+                3.0,
+                3.0,
+                3.0,  # J5, J6, J7: DM-J4310
+                # right arm: J1~J7
+                2.0,
+                2.0,  # J1, J2: DM-J8009P
+                1.5,
+                1.5,  # J3, J4: DM-J4340P / DM-J4340
+                3.0,
+                3.0,
+                3.0,  # J5, J6, J7: DM-J4310
+            ],
+            dtype=np.float64,
+        )
 
-            # right arm: J1~J7
-            2.0, 2.0,               # J1, J2: DM-J8009P
-            1.5, 1.5,               # J3, J4: DM-J4340P / DM-J4340
-            3.0, 3.0, 3.0,          # J5, J6, J7: DM-J4310
-        ], dtype=np.float64)
-        
         self.damping = 1e-4
 
-        self.R_u = np.diag([
-            2.5, 2.5, 0.1,          # base vx, vy, omega
+        self.R_u = np.diag(
+            [
+                2.5,
+                2.5,
+                0.1,  # base vx, vy, omega
+                0.05,
+                0.05,  # left J1, J2: shoulder, 8009
+                0.08,
+                0.08,  # left J3, J4: 4340
+                0.03,
+                0.03,
+                0.03,  # left J5, J6, J7: wrist, 4310
+                0.05,
+                0.05,  # right J1, J2
+                0.08,
+                0.08,  # right J3, J4
+                0.03,
+                0.03,
+                0.03,  # right J5, J6, J7
+            ]
+        ).astype(np.float64)
 
-            0.05, 0.05,             # left J1, J2: shoulder, 8009
-            0.08, 0.08,             # left J3, J4: 4340
-            0.03, 0.03, 0.03,       # left J5, J6, J7: wrist, 4310
-
-            0.05, 0.05,             # right J1, J2
-            0.08, 0.08,             # right J3, J4
-            0.03, 0.03, 0.03,       # right J5, J6, J7
-        ]).astype(np.float64)
-    
     def task_evaluate(
         self,
         state: TaskState,
@@ -133,38 +167,43 @@ class G7OpenArmIKSolver:
 
         left_ori_err = ori_err_quat(state.left_pose.quat, target.left_pose.quat)
         right_ori_err = ori_err_quat(state.right_pose.quat, target.right_pose.quat)
-        
+
         return TaskEvaluation(
             left_pos_err=left_pos_err,
             left_ori_err=left_ori_err,
             right_pos_err=right_pos_err,
             right_ori_err=right_ori_err,
         )
-        
+
     def state_cost(
         self,
         task_evaluation: TaskEvaluation,
     ) -> npt.NDArray[np.float64]:
-        return \
-            0.5 * self.Q_hand_pos * (task_evaluation.left_pos_err  @ task_evaluation.left_pos_err) + \
-            0.5 * self.Q_hand_ori * (task_evaluation.left_ori_err  @ task_evaluation.left_ori_err) + \
-            0.5 * self.Q_hand_pos * (task_evaluation.right_pos_err @ task_evaluation.right_pos_err) + \
-            0.5 * self.Q_hand_ori * (task_evaluation.right_ori_err @ task_evaluation.right_ori_err)
+        return (
+            0.5 * self.Q_hand_pos * (task_evaluation.left_pos_err @ task_evaluation.left_pos_err)
+            + 0.5 * self.Q_hand_ori * (task_evaluation.left_ori_err @ task_evaluation.left_ori_err)
+            + 0.5
+            * self.Q_hand_pos
+            * (task_evaluation.right_pos_err @ task_evaluation.right_pos_err)
+            + 0.5
+            * self.Q_hand_ori
+            * (task_evaluation.right_ori_err @ task_evaluation.right_ori_err)
+        )
 
     def state_cost_deriv(
         self,
         state: TaskState,
         target: TaskState,
         task_evaluation: TaskEvaluation,
-        Jkin: npt.NDArray[np.float64]
+        Jkin: npt.NDArray[np.float64],
     ) -> tuple[
         npt.NDArray[np.float64],
         npt.NDArray[np.float64],
         npt.NDArray[np.float64],
     ]:
-        Jp_left  = Jkin[0:3,   :]
-        Jq_left  = Jkin[3:7,   :]
-        Jp_right = Jkin[7:10,  :]
+        Jp_left = Jkin[0:3, :]
+        Jq_left = Jkin[3:7, :]
+        Jp_right = Jkin[7:10, :]
         Jq_right = Jkin[10:14, :]
 
         _, Jr_left = quat_jac_to_ori_err_jac(
@@ -187,7 +226,7 @@ class G7OpenArmIKSolver:
 
         lx = np.zeros(self.nx, dtype=np.float64)
         lxx = np.zeros((self.nx, self.nx), dtype=np.float64)
-        
+
         lx += self.Q_hand_pos * (Je_left_pos.T @ task_evaluation.left_pos_err)
         lxx += self.Q_hand_pos * (Je_left_pos.T @ Je_left_pos)
 
@@ -202,38 +241,30 @@ class G7OpenArmIKSolver:
 
         return l, lx, lxx
 
-    def task_state_from_x_lib(
-        self,
-        x_lib: npt.NDArray[np.float64]
-    ):
+    def task_state_from_x_lib(self, x_lib: npt.NDArray[np.float64]):
         kin = kinematics(self.model, x_lib)
         return TaskState(
-            left_pose=PoseState(
-                pos=kin[:3],
-                quat=kin[3:7]
-            ),
-            right_pose=PoseState(
-                pos=kin[7:10],
-                quat=kin[10:14]
-            )
+            left_pose=PoseState(pos=kin[:3], quat=kin[3:7]),
+            right_pose=PoseState(pos=kin[7:10], quat=kin[10:14]),
         )
 
-    def task_state_from_target(
-        self,
-        ee_target: "EETarget"
-    ):
-        left_pos   = ee_target.left_target.position
-        left_quat  = ee_target.left_target.orientation
-        right_pos  = ee_target.right_target.position
+    def task_state_from_target(self, ee_target: "EETarget"):
+        left_pos = ee_target.left_target.position
+        left_quat = ee_target.left_target.orientation
+        right_pos = ee_target.right_target.position
         right_quat = ee_target.right_target.orientation
         return TaskState(
             left_pose=PoseState(
                 pos=np.array([left_pos.x, left_pos.y, left_pos.z], dtype=np.float64),
-                quat=np.array([left_quat.w, left_quat.x, left_quat.y, left_quat.z], dtype=np.float64),
+                quat=np.array(
+                    [left_quat.w, left_quat.x, left_quat.y, left_quat.z], dtype=np.float64
+                ),
             ),
             right_pose=PoseState(
                 pos=np.array([right_pos.x, right_pos.y, right_pos.z], dtype=np.float64),
-                quat=np.array([right_quat.w, right_quat.x, right_quat.y, right_quat.z], dtype=np.float64),
+                quat=np.array(
+                    [right_quat.w, right_quat.x, right_quat.y, right_quat.z], dtype=np.float64
+                ),
             ),
         )
 
@@ -244,10 +275,10 @@ class G7OpenArmIKSolver:
         ee_target: "EETarget",
     ) -> npt.NDArray[np.float64]:
         x_lib = PinnZooModel.build_x_lib(lowstate, odom)
-        
-        state  = self.task_state_from_x_lib(x_lib)
+
+        state = self.task_state_from_x_lib(x_lib)
         task_target = self.task_state_from_target(ee_target)
-        
+
         task_eval = self.task_evaluate(state, task_target)
 
         Jkin = task_kinematic_jacobian(self.model, x_lib)
@@ -261,7 +292,7 @@ class G7OpenArmIKSolver:
 
         H = 0.01 * lxx + self.R_u
         g = 0.1 * lx
-        
+
         H[:3, :3] += self.R_du_base
         g[:3] -= self.R_du_base @ self.prev_u_base
 
@@ -270,7 +301,7 @@ class G7OpenArmIKSolver:
         u = -np.linalg.solve(H, g)
 
         u = np.clip(u, -self.u_max, self.u_max)
-        
+
         self.prev_u_base = u[:3].copy()
 
         return u

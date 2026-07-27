@@ -7,12 +7,11 @@ from .loader import (
     reload_config_file,
 )
 
-
 __all__ = [
     "BaseConfig",
     "ConfigError",
-    "general_config",
     "find_config_path",
+    "general_config",
     "load_config_file",
     "reload_config_file",
 ]

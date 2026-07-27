@@ -221,5 +221,4 @@ __marimo__/
 
 typings/
 MUJOCO_LOG.TXT
-uv.lock
 .python-version

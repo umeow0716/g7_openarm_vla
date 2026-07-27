@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
-from cyclonedds.idl import IdlStruct
-
 import cyclonedds.idl.annotations as annotate
+from cyclonedds.idl import IdlStruct
 
 from .amr_cmd import AMRCmd, AMRCmd_default
 from .openarm_cmd import OpenArmCmd, OpenArmCmd_default
@@ -15,7 +14,6 @@ class WBCLowCmd(IdlStruct, typename="WBCLowCmd"):
     amr: AMRCmd
     openarm: OpenArmCmd
 
+
 def WBCLowCmd_default():
-    return WBCLowCmd(
-        AMRCmd_default(),
-        OpenArmCmd_default()) # type: ignore
+    return WBCLowCmd(AMRCmd_default(), OpenArmCmd_default())  # type: ignore

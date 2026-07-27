@@ -4,14 +4,10 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "pip>=26.1.2",
-    "pybind11-stubgen>=2.5.5",
-]
+dependencies = []
 
 [tool.uv.workspace]
 members = [
-    "modules/g7_openarm_gr00t",
     "modules/g7_openarm_idl",
     "modules/g7_openarm_lowlevel",
     "modules/g7_openarm_monitor",
@@ -24,3 +20,44 @@ members = [
     "modules/g7_openarm_hommi_interface",
     "modules/g7_openarm_utils",
 ]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.0",
+    "pybind11-stubgen>=2.5.5",
+    "pytest>=9.1.1",
+    "ruff>=0.16.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E741"]
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "g7_openarm_config",
+    "g7_openarm_hardware",
+    "g7_openarm_hommi_interface",
+    "g7_openarm_idl",
+    "g7_openarm_lowlevel",
+    "g7_openarm_monitor",
+    "g7_openarm_mujoco",
+    "g7_openarm_pinnzoo",
+    "g7_openarm_state_estimator",
+    "g7_openarm_utils",
+    "g7_openarm_wbc",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+skip-magic-trailing-comma = false

@@ -1,14 +1,17 @@
+from typing import TYPE_CHECKING
+
 import numpy as np
 import numpy.typing as npt
 
-from g7_openarm_idl.utils import pose_to_array, array_to_pose
+from g7_openarm_idl import EETarget
+from g7_openarm_idl.utils import array_to_pose, pose_to_array
 from g7_openarm_pinnzoo import PinnZooModel, kinematics
 from g7_openarm_utils.quat import quat_mul, quat_normalize
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from g7_openarm_idl import EETarget, Odom
     from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+
+    from g7_openarm_idl import EETarget, Odom
 
 
 DEFAULT_LIB_PATH = PinnZooModel.get_default_lib_path()
@@ -58,10 +61,7 @@ def compose_pose_wxyz(
     local_position = local_pose[:3]
     local_quaternion = quat_normalize(local_pose[3:7])
 
-    world_position = (
-        parent_position
-        + quat_rotate_wxyz(parent_quaternion, local_position)
-    )
+    world_position = parent_position + quat_rotate_wxyz(parent_quaternion, local_position)
 
     world_quaternion = quat_mul(
         parent_quaternion,
@@ -85,7 +85,7 @@ class FrameTransformer:
 
     def transfer(
         self,
-        hommi_frame: "EETarget",
+        hommi_frame: EETarget,
         lowstate: "LowState_",
         odom: "Odom",
     ) -> EETarget:

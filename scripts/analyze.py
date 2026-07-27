@@ -72,10 +72,7 @@ def main() -> None:
         while True:
             for process in processes:
                 if not process.is_alive():
-                    print(
-                        f"\n{process.name} exited "
-                        f"with code {process.exitcode}"
-                    )
+                    print(f"\n{process.name} exited with code {process.exitcode}")
                     return
 
             time.sleep(0.2)

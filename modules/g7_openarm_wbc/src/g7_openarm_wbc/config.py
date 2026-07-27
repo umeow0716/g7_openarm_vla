@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from g7_openarm_config import BaseConfig
 
@@ -15,19 +16,15 @@ class DDSConfig:
 @dataclass(frozen=True, slots=True)
 class WBCConfig(BaseConfig):
     hz: float
-    
+
     dds: DDSConfig
 
     def __post_init__(self) -> None:
         if self.hz <= 0.0:
-            raise ValueError(
-                f"wbc.hz must be positive, got {self.hz}"
-            )
+            raise ValueError(f"wbc.hz must be positive, got {self.hz}")
 
         if not self.dds.interface:
-            raise ValueError(
-                "dds.interface must not be empty"
-            )
+            raise ValueError("dds.interface must not be empty")
 
     @property
     def interval(self) -> float:
@@ -37,29 +34,21 @@ class WBCConfig(BaseConfig):
     def from_mapping(
         cls,
         data: Mapping[str, Any],
-    ) -> "WBCConfig":
+    ) -> WBCConfig:
         section = data.get("wbc")
         dds_section = data.get("dds")
 
         if not isinstance(section, Mapping):
-            raise ValueError(
-                "Missing [wbc] section"
-            )
+            raise ValueError("Missing [wbc] section")
 
         if not isinstance(dds_section, Mapping):
-            raise ValueError(
-                "Missing [dds] section"
-            )
+            raise ValueError("Missing [dds] section")
 
         return cls(
             hz=float(section["hz"]),
             dds=DDSConfig(
-                domain_id=int(
-                    dds_section.get("domain_id", 0)
-                ),
-                interface=str(
-                    dds_section.get("interface", "lo")
-                ),
+                domain_id=int(dds_section.get("domain_id", 0)),
+                interface=str(dds_section.get("interface", "lo")),
             ),
         )
 

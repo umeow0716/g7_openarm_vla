@@ -1,10 +1,14 @@
 import time
 
-from g7_openarm_idl import EETarget, Odom
-from typing import Optional
-from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber, ChannelFactoryInitialize
+from unitree_sdk2py.core.channel import (
+    ChannelFactoryInitialize,
+    ChannelPublisher,
+    ChannelSubscriber,
+)
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
+
+from g7_openarm_idl import EETarget, Odom
 
 from .config import config
 from .frame_transformer import FrameTransformer
@@ -16,23 +20,21 @@ class HommiInterfaceNode:
 
         self.hommi_subscriber = ChannelSubscriber("rt/hommi", EETarget)
         self.hommi_subscriber.Init(self.hommi_handler, 0)
-        
-        self.lowstate: Optional[LowState_] = None
+
+        self.lowstate: LowState_ | None = None
         self.lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
         self.lowstate_subscriber.Init(self.lowstate_handler, 0)
-        
-        self.odom: Optional[Odom] = None
+
+        self.odom: Odom | None = None
         self.odom_subscriber = ChannelSubscriber("rt/odom", Odom)
         self.odom_subscriber.Init(self.odom_handler, 0)
 
-        self.eetarget: Optional[EETarget] = None
+        self.eetarget: EETarget | None = None
         self.eetarget_publisher = ChannelPublisher("rt/eetarget", Odom)
         self.eetarget_publisher.Init()
-        
+
         self.eetarget_thread = RecurrentThread(
-            name="eetarget_thread",
-            interval=config.interval,
-            target=self.write_eetarget
+            name="eetarget_thread", interval=config.interval, target=self.write_eetarget
         )
         self.eetarget_thread.Start()
 
@@ -40,10 +42,7 @@ class HommiInterfaceNode:
         if self.lowstate is None or self.odom is None:
             return
 
-        self.eetarget = self.frame_transformer.transfer(
-                            msg,
-                            self.lowstate,
-                            self.odom)
+        self.eetarget = self.frame_transformer.transfer(msg, self.lowstate, self.odom)
 
     def lowstate_handler(self, msg: LowState_):
         self.lowstate = msg
@@ -63,6 +62,7 @@ def main():
     _ = HommiInterfaceNode()
     while True:
         time.sleep(1.0)
+
 
 if __name__ == "__main__":
     main()

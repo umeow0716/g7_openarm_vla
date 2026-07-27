@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping, Self
+from typing import Any, Self
 
 from .loader import load_config_file
 

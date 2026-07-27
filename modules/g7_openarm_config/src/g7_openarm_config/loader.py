@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import os
 import tomllib
-
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-
 
 CONFIG_FILENAME = "config.toml"
 
@@ -37,9 +34,7 @@ def find_config_path(
         resolved = Path(path).expanduser().resolve()
 
         if not resolved.is_file():
-            raise ConfigError(
-                f"Config file does not exist: {resolved}"
-            )
+            raise ConfigError(f"Config file does not exist: {resolved}")
 
         return resolved
 
@@ -52,9 +47,7 @@ def find_config_path(
         if found is not None:
             return found
 
-    raise ConfigError(
-        f"Unable to locate {CONFIG_FILENAME}. "
-    )
+    raise ConfigError(f"Unable to locate {CONFIG_FILENAME}. ")
 
 
 @lru_cache(maxsize=1)

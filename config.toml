@@ -1,5 +1,5 @@
 [general]
-debugging = false
+debugging = true
 
 [dds]
 domain_id = 0

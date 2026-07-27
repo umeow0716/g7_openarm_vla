@@ -25,6 +25,7 @@ def build_log_path(folder_name: str) -> Path:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return LOG_ROOT / folder_name / f"{timestamp}.log"
 
+
 def redirect_output_to_file(log_path: Path) -> None:
     if general_config.debugging:
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -76,7 +77,7 @@ def run_state_estimator() -> None:
 
 def run_wbc() -> None:
     from g7_openarm_wbc.cli import main
-    
+
     run_silently(main, "wbc")
 
 
@@ -124,7 +125,7 @@ def main() -> None:
         ctx.Process(target=run_lowlevel, name="g7-lowlevel"),
         ctx.Process(target=run_state_estimator, name="g7-state-est"),
         ctx.Process(target=run_monitor, name="g7-monitor"),
-        ctx.Process(target=run_wbc, name="g7-wbc")
+        ctx.Process(target=run_wbc, name="g7-wbc"),
     ]
 
     for process in processes:
@@ -134,10 +135,7 @@ def main() -> None:
         while True:
             for process in processes:
                 if not process.is_alive():
-                    print(
-                        f"\n{process.name} exited "
-                        f"with code {process.exitcode}"
-                    )
+                    print(f"\n{process.name} exited with code {process.exitcode}")
                     return
 
             time.sleep(0.2)

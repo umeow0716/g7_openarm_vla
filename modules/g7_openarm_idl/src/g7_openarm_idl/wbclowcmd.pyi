@@ -6,7 +6,6 @@ from cyclonedds.internal import SampleInfo
 from .amr_cmd import AMRCmd
 from .openarm_cmd import OpenArmCmd
 
-
 class WBCLowCmd(IdlStruct):
     amr: AMRCmd
     openarm: OpenArmCmd
@@ -17,9 +16,6 @@ class WBCLowCmd(IdlStruct):
         self,
         amr: AMRCmd,
         openarm: OpenArmCmd,
-    ) -> None:
-        ...
+    ) -> None: ...
 
-
-def WBCLowCmd_default() -> WBCLowCmd:
-    ...
+def WBCLowCmd_default() -> WBCLowCmd: ...
