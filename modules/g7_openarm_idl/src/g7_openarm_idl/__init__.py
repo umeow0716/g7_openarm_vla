@@ -1,4 +1,3 @@
-from . import utils
 from .amr_cmd import AMRCmd, AMRCmd_default
 from .ee_target import EETarget, EETarget_default
 from .odom import Odom, Odom_default
@@ -16,5 +15,4 @@ __all__ = [
     "OpenArmCmd_default",
     "WBCLowCmd",
     "WBCLowCmd_default",
-    "utils",
 ]
