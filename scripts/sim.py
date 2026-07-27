@@ -49,25 +49,25 @@ def run_silently(target: Callable[[], None], folder_name: str) -> None:
 
 
 def run_mujoco() -> None:
-    from g7_openarm_mujoco.cli import main
+    from g7_openarm_mujoco.simulation_node import main
 
     run_silently(main, "mujoco")
 
 
 def run_lowlevel() -> None:
-    from g7_openarm_lowlevel.cli import main
+    from g7_openarm_lowlevel.lowlevel_node import main
 
     run_silently(main, "lowlevel")
 
 
 def run_state_estimator() -> None:
-    from g7_openarm_state_estimator.cli import main
+    from g7_openarm_state_estimator.odom_node import main
 
     run_silently(main, "state_estimator")
 
 
 def run_wbc() -> None:
-    from g7_openarm_wbc.cli import main
+    from g7_openarm_wbc.wbc_node import main
 
     run_silently(main, "wbc")
 
@@ -75,7 +75,7 @@ def run_wbc() -> None:
 def run_monitor() -> None:
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    from g7_openarm_monitor.cli import main
+    from g7_openarm_monitor.monitor_node import main
 
     main()
 

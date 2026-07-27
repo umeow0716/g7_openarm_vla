@@ -18,8 +18,8 @@ unitree-sdk2py = { path = "../../third_party/unitree_sdk2_python", editable = tr
 xspublic = { git = "https://github.com/jiminghe/xspublic", subdirectory = "bindings" }
 
 [project.scripts]
-g7-hardware = "g7_openarm_hardware.cli:main"
-g7-imu = "g7_openarm_hardware.imu_cli:main"
+g7-hardware = "g7_openarm_hardware.hardware_node:main"
+g7-imu = "g7_openarm_hardware.imu_node:main"
 
 [build-system]
 requires = ["hatchling"]

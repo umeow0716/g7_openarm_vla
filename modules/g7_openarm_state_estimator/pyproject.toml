@@ -18,7 +18,7 @@ g7-openarm-utils = { workspace = true }
 unitree-sdk2py = { path = "../../third_party/unitree_sdk2_python", editable = true }
 
 [project.scripts]
-g7-state-est = "g7_openarm_state_estimator.cli:main"
+g7-state-est = "g7_openarm_state_estimator.odom_node:main"
 
 [build-system]
 requires = ["hatchling"]

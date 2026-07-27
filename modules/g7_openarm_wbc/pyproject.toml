@@ -20,7 +20,7 @@ g7-openarm-utils = { workspace = true }
 unitree-sdk2py = { path = "../../third_party/unitree_sdk2_python", editable = true }
 
 [project.scripts]
-g7-wbc = "g7_openarm_wbc.cli:main"
+g7-wbc = "g7_openarm_wbc.wbc_node:main"
 
 [build-system]
 requires = ["hatchling"]
