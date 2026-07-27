@@ -29,6 +29,7 @@ class VRNode:
         print("waiting 5 seconds for zero state pose...")
         time.sleep(5.0)
         message = self.udp_receiver.latest() or message
+        print("Done!")
 
         with model_directory() as model_dir:
             hand_default_pose = load_hand_default_pose((model_dir / "scene.xml").as_posix())
