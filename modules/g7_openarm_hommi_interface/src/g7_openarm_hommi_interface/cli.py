@@ -30,7 +30,7 @@ class HommiInterfaceNode:
         self.odom_subscriber.Init(self.odom_handler, 0)
 
         self.eetarget: EETarget | None = None
-        self.eetarget_publisher = ChannelPublisher("rt/eetarget", Odom)
+        self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
         self.eetarget_publisher.Init()
 
         self.eetarget_thread = RecurrentThread(
