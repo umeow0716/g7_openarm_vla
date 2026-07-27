@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-mujoco = pytest.importorskip("mujoco")
-
 from g7_openarm_mujoco.resources import model_directory
 from g7_openarm_mujoco.sensors import scalar_sensor_address, sensor_slice
+
+mujoco = pytest.importorskip("mujoco")
 
 
 def test_sensor_helpers_use_sensor_addresses_not_sensor_ids() -> None:

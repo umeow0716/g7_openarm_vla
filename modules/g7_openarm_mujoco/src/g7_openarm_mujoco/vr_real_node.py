@@ -4,7 +4,6 @@ import time
 
 import mujoco
 import mujoco.viewer
-from g7_openarm_utils.idl import pose_to_array
 from unitree_sdk2py.core.channel import (
     ChannelFactoryInitialize,
     ChannelSubscriber,
@@ -13,6 +12,7 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.utils.thread import RecurrentThread
 
 from g7_openarm_idl import EETarget, Odom
+from g7_openarm_utils.idl import pose_to_array
 
 from .config import config
 from .resources import model_directory
@@ -63,9 +63,7 @@ class VRRealVisualizationNode:
         left_hand = self.data.body("L_gripper_tcp_link")
         right_hand = self.data.body("R_gripper_tcp_link")
         self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
-        self.right_target_mocap_id = self.model.body_mocapid[
-            self.model.body("right_target").id
-        ]
+        self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
         self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
         self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
         self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()

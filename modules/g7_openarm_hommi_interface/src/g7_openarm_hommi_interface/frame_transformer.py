@@ -1,19 +1,13 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import numpy as np
 import numpy.typing as npt
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 
-from g7_openarm_idl import EETarget
+from g7_openarm_idl import EETarget, Odom
 from g7_openarm_pinnzoo import PinnZooModel, kinematics
 from g7_openarm_utils.idl import array_to_pose, pose_to_array
 from g7_openarm_utils.quat import quat_mul, quat_normalize, quat_rotate
-
-if TYPE_CHECKING:
-    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
-
-    from g7_openarm_idl import Odom
 
 
 def compose_pose_wxyz(
@@ -61,8 +55,8 @@ class FrameTransformer:
     def transfer(
         self,
         hommi_frame: EETarget,
-        lowstate: "LowState_",
-        odom: "Odom",
+        lowstate: LowState_,
+        odom: Odom,
     ) -> EETarget:
         x_lib = PinnZooModel.build_x_lib(lowstate, odom)
         kin = np.asarray(

@@ -1,6 +1,8 @@
 from .base import BaseConfig
-from .dds_config import DDSConfig, config as dds_config
-from .general_config import GeneralConfig, config as general_config
+from .dds_config import DDSConfig
+from .dds_config import config as dds_config
+from .general_config import GeneralConfig
+from .general_config import config as general_config
 from .loader import (
     ConfigError,
     find_config_path,

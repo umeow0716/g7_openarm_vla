@@ -49,8 +49,7 @@ class HardwareConfig(BaseConfig):
             raise ValueError(f"hardware.base_ids must contain only integers: {self.base_ids!r}")
         if set(self.base_ids) != _EXPECTED_MOTOR_IDS:
             raise ValueError(
-                "hardware.base_ids must be a permutation of motor IDs 1..8, "
-                f"got {self.base_ids!r}"
+                f"hardware.base_ids must be a permutation of motor IDs 1..8, got {self.base_ids!r}"
             )
 
         direction_fields = (

@@ -24,7 +24,7 @@ def test_parse_bool_accepts_only_explicit_values(value: object, expected: bool) 
 
 @pytest.mark.parametrize("value", [1, 0, [], "enabled", None])
 def test_parse_bool_rejects_ambiguous_values(value: object) -> None:
-    with pytest.raises(ValueError, match="test.value"):
+    with pytest.raises(ValueError, match=r"test\.value"):
         parse_bool(value, field="test.value")
 
 

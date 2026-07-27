@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
 from g7_openarm_utils import quat_mul, quat_normalize
-
 
 # The Quest application sends Unity world coordinates:
 #   +X right, +Y up, +Z forward (left-handed).
@@ -70,9 +70,7 @@ class VRControllerPose:
             [self.qw, -self.qx, -self.qy, self.qz],
             dtype=np.float64,
         )
-        orientation = quat_normalize(
-            quat_mul(VR_RH_TO_MUJOCO_QUAT, right_handed)
-        )
+        orientation = quat_normalize(quat_mul(VR_RH_TO_MUJOCO_QUAT, right_handed))
         return np.concatenate((position, orientation), dtype=np.float64)
 
 

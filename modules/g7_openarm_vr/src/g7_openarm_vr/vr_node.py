@@ -59,7 +59,9 @@ class VRNode:
             time.sleep(1.0)
 
     @staticmethod
-    def _controller_poses(message: VRUDPResponse) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    def _controller_poses(
+        message: VRUDPResponse,
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         return (
             message.left_controller.as_mujoco_pose(),
             message.right_controller.as_mujoco_pose(),

@@ -76,7 +76,6 @@ class ControllerConfig:
 
     wheel_vel_limit_rad_s: float = 30.0
 
-
     base_idle_linear_threshold_m_s: float = 3e-2
     base_idle_angular_threshold_rad_s: float = 1e-2
 

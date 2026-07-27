@@ -2,12 +2,12 @@ import numpy as np
 import pytest
 
 from g7_openarm_utils import quat_from_yaw, quat_to_rotation_matrix, quat_yaw
+from g7_openarm_vr.pose_mapping import remap_pose_yaw_only
 from g7_openarm_vr.udp_response import (
     VR_RH_TO_MUJOCO_QUAT,
     VRControllerPose,
     VRUDPResponse,
 )
-from g7_openarm_vr.pose_mapping import remap_pose_yaw_only
 
 
 def _unity_pose(*, x: float = 0.0, y: float = 0.0, z: float = 0.0) -> VRControllerPose:

@@ -274,12 +274,7 @@ class AMREKF:
         b = np.zeros(8, dtype=np.float64)
 
         for i, ((x, y), angle, speed) in enumerate(
-            zip(
-                self.wheel_position,
-                steering,
-                wheel_speed,
-                strict=True
-            )
+            zip(self.wheel_position, steering, wheel_speed, strict=True)
         ):
             c = np.cos(angle)
             s = np.sin(angle)

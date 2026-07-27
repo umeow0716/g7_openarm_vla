@@ -70,9 +70,7 @@ class VRSimulationNode:
         left_hand = self.data.body("L_gripper_tcp_link")
         right_hand = self.data.body("R_gripper_tcp_link")
         self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
-        self.right_target_mocap_id = self.model.body_mocapid[
-            self.model.body("right_target").id
-        ]
+        self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
         self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
         self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
         self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
@@ -179,9 +177,7 @@ class VRSimulationNode:
     def write_lowstate(self) -> None:
         with self.viewer.lock():
             for index in range(len(self.motor_names)):
-                self.lowstate.motor_state[index].q = self.data.sensordata[
-                    self.pos_addresses[index]
-                ]
+                self.lowstate.motor_state[index].q = self.data.sensordata[self.pos_addresses[index]]
                 self.lowstate.motor_state[index].dq = self.data.sensordata[
                     self.vel_addresses[index]
                 ]
@@ -232,9 +228,7 @@ class VRSimulationNode:
 
                 actuator_index = index if index < 16 else index + 1
                 self.data.ctrl[actuator_index] = (
-                    q_error * motor_command.kp
-                    + dq_error * motor_command.kd
-                    + motor_command.tau
+                    q_error * motor_command.kp + dq_error * motor_command.kd + motor_command.tau
                 )
 
                 secondary_position = self.secondary_gripper_pos_addresses.get(index)
@@ -243,9 +237,7 @@ class VRSimulationNode:
                     q_error = motor_command.q - self.data.sensordata[secondary_position]
                     dq_error = motor_command.dq - self.data.sensordata[secondary_velocity]
                     self.data.ctrl[actuator_index + 1] = (
-                        q_error * motor_command.kp
-                        + dq_error * motor_command.kd
-                        + motor_command.tau
+                        q_error * motor_command.kp + dq_error * motor_command.kd + motor_command.tau
                     )
 
             mujoco.mj_step(self.model, self.data)
