@@ -26,9 +26,7 @@ class ControlMode(StrEnum):
                 pass
 
         allowed = ", ".join(mode.value for mode in cls)
-        raise ValueError(
-            f"general.control_mode must be one of [{allowed}], got {value!r}"
-        )
+        raise ValueError(f"general.control_mode must be one of [{allowed}], got {value!r}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,9 +60,7 @@ class GeneralConfig(BaseConfig):
                 section.get("debugging", False),
                 field="general.debugging",
             ),
-            control_mode=ControlMode.parse(
-                section.get("control_mode", ControlMode.WBC.value)
-            ),
+            control_mode=ControlMode.parse(section.get("control_mode", ControlMode.WBC.value)),
         )
 
 

@@ -63,7 +63,7 @@ class OdomNode:
         self.odom.angular_vdot.x = x.angular_vdot[0]
         self.odom.angular_vdot.y = x.angular_vdot[1]
         self.odom.angular_vdot.z = x.angular_vdot[2]
-        
+
         if general_config.control_mode == "arm-only":
             self.odom.position.x = 0.0
             self.odom.position.y = 0.0

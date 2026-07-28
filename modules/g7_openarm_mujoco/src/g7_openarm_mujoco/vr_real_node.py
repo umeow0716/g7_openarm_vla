@@ -115,7 +115,7 @@ class VRRealVisualizationNode:
     def update_target(self) -> None:
         if self.eetarget is None:
             return
-        
+
         left_arr = pose_to_array(self.eetarget.left_target)
         right_arr = pose_to_array(self.eetarget.right_target)
         left_arr[2] += 0.160631

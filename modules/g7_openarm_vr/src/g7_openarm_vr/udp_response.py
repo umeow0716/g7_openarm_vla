@@ -81,17 +81,41 @@ class VRUDPResponse:
     left_gripper: float
     right_gripper: float
 
+    lsx: float
+    lsy: float
+    rsx: float
+    rsy: float
+
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> VRUDPResponse:
         left = payload.get("lc")
         right = payload.get("rc")
         lt = payload.get("lt")
         rt = payload.get("rt")
-        if not isinstance(left, Mapping) or not isinstance(right, Mapping) or not isinstance(lt, (int, float)) or not isinstance(rt, (int, float)):
-            raise ValueError("VR packet must contain controller objects 'lc' and 'rc' and gripper values 'lt' and 'rt'")
+        lxs = payload.get("lsx")
+        lys = payload.get("lsy")
+        rxs = payload.get("rsx")
+        rys = payload.get("rsy")
+        if (
+            not isinstance(left, Mapping)
+            or not isinstance(right, Mapping)
+            or not isinstance(lt, (int, float))
+            or not isinstance(rt, (int, float))
+            or not isinstance(lxs, (int, float))
+            or not isinstance(lys, (int, float))
+            or not isinstance(rxs, (int, float))
+            or not isinstance(rys, (int, float))
+        ):
+            raise ValueError(
+                "VR packet must contain controller objects 'lc' and 'rc' and gripper values 'lt' and 'rt'"
+            )
         return cls(
             left_controller=VRControllerPose.from_mapping(left),
             right_controller=VRControllerPose.from_mapping(right),
             left_gripper=float(lt),
             right_gripper=float(rt),
+            lsx=float(lxs),
+            lsy=float(lys),
+            rsx=float(rxs),
+            rsy=float(rys),
         )

@@ -29,9 +29,7 @@ def test_parse_bool_rejects_ambiguous_values(value: object) -> None:
 
 
 def test_general_config_does_not_treat_false_string_as_true() -> None:
-    config = GeneralConfig.from_mapping(
-        {"general": {"debugging": "false", "control_mode": "wbc"}}
-    )
+    config = GeneralConfig.from_mapping({"general": {"debugging": "false", "control_mode": "wbc"}})
     assert config.debugging is False
 
 

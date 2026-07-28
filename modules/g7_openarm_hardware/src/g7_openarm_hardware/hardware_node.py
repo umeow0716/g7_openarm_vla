@@ -84,6 +84,7 @@ def build_bus_configs(*, base_enabled: bool) -> dict[str, BusConfig]:
 def mapping_gripper(val: float, open_val: float, close_val: float) -> float:
     return (close_val - open_val) * val / 0.45 + open_val
 
+
 class HardwareNode:
     def __init__(self) -> None:
         self.base_enabled = general_config.base_enabled
@@ -254,7 +255,7 @@ class HardwareNode:
             kd=self.lowcmd.motor_cmd[23].kd,
             tau=self.lowcmd.motor_cmd[23].tau,
         )
-        
+
         left_arm.get_arm().mit_control_all(left_cmds)
         right_arm.get_arm().mit_control_all(right_cmds)
 

@@ -97,9 +97,7 @@ class G7OpenArmIKSolver:
         base_enabled: bool | None = None,
     ) -> None:
         self.model = PinnZooModel(lib_path)
-        self.base_enabled = (
-            general_config.base_enabled if base_enabled is None else base_enabled
-        )
+        self.base_enabled = general_config.base_enabled if base_enabled is None else base_enabled
         self.nu = control_size(base_enabled=self.base_enabled)
 
         self.Q_hand_pos = 200.0

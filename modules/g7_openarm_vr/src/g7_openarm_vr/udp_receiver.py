@@ -61,6 +61,9 @@ class JsonUdpReceiver:
             if not line:
                 return None
             payload: Any = json.loads(line)
+            print(
+                f"{payload['lsx']:.2f} {payload['lsy']:.2f} {payload['rsx']:.2f} {payload['rsy']:.2f}"
+            )
             if not isinstance(payload, dict):
                 return None
             return VRUDPResponse.from_mapping(payload)

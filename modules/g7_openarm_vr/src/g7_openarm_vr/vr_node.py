@@ -22,7 +22,7 @@ class VRNode:
     def __init__(self) -> None:
         self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
         self.eetarget_publisher.Init()
-        
+
         print("waiting 5 seconds for zero state pose...")
         time.sleep(5.0)
         print("Done!")
@@ -33,7 +33,6 @@ class VRNode:
             print("waiting for first message...")
             time.sleep(1.0)
         message = self.udp_receiver.latest()
-        
 
         with model_directory() as model_dir:
             hand_default_pose = load_hand_default_pose((model_dir / "scene.xml").as_posix())
@@ -84,7 +83,12 @@ class VRNode:
         right_target = self.right_pose_mapper.map(right_pose)
 
         self.eetarget_publisher.Write(
-            EETarget(array_to_pose(left_target), array_to_pose(right_target), message.left_gripper, message.right_gripper)
+            EETarget(
+                array_to_pose(left_target),
+                array_to_pose(right_target),
+                message.left_gripper,
+                message.right_gripper,
+            )
         )
 
 

@@ -1,7 +1,6 @@
 import multiprocessing as mp
 import os
 import signal
-import subprocess
 import time
 from collections.abc import Callable
 from datetime import datetime
