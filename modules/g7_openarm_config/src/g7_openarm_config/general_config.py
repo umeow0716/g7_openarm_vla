@@ -12,6 +12,7 @@ from .parsing import parse_bool
 class ControlMode(StrEnum):
     WBC = "wbc"
     ARM_ONLY = "arm-only"
+    BASE_ONLY = "base-only"
 
     @classmethod
     def parse(cls, value: Any) -> ControlMode:
@@ -44,6 +45,16 @@ class GeneralConfig(BaseConfig):
     @property
     def base_enabled(self) -> bool:
         return self.control_mode is ControlMode.WBC
+
+    @property
+    def base_actuation_enabled(self) -> bool:
+        """Whether base CAN and low-level base motor output must be active."""
+        return self.control_mode in (ControlMode.WBC, ControlMode.ARM_ONLY, ControlMode.BASE_ONLY)
+
+    @property
+    def arm_actuation_enabled(self) -> bool:
+        """Whether arm CAN and low-level arm motor output must be active."""
+        return self.control_mode is not ControlMode.BASE_ONLY
 
     @classmethod
     def from_mapping(

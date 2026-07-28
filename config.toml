@@ -1,6 +1,6 @@
 [general]
 debugging = false
-control_mode = "arm-only" # wbc or arm-only
+control_mode = "arm-only" # wbc or arm-only or base-only
 
 [dds]
 domain_id = 0
@@ -9,13 +9,13 @@ interface = "lo"
 [hardware]
 hz = 100.0
 imu_hz = 100.0
-base_can = "can_base"
+base_can = "can2"
 left_arm_can = "can1"
 right_arm_can = "can0"
 can_fd = true
 # base ids: [FL, FLW, FR, FRW, RL, RLW, RR, RRW]
-base_ids            = [ 0x02, 0x08, 0x01, 0x07, 0x03, 0x05, 0x04, 0x06 ]
-base_direction      = [ -1.0,  1.0, -1.0, -1.0, -1.0,  1.0, -1.0,  1.0 ]
+base_ids            = [ 0x01, 0x05, 0x02, 0x06, 0x03, 0x07, 0x04, 0x08 ]
+base_direction      = [ -1.0, 1.0, -1.0, -1.0, -1.0,  1.0, -1.0, -1.0 ]
 left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0, -1.0 ]
 right_arm_direction = [  1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0 ]
 left_gripper_open   =  0.0

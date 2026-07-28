@@ -7,7 +7,7 @@ import numpy.typing as npt
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
-from g7_openarm_idl import EETarget
+from g7_openarm_idl import EETarget, VRJoy
 from g7_openarm_mujoco.resources import model_directory
 from g7_openarm_utils.idl import array_to_pose, pose_to_array
 from g7_openarm_utils.mujoco import load_hand_default_pose
@@ -22,6 +22,9 @@ class VRNode:
     def __init__(self) -> None:
         self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
         self.eetarget_publisher.Init()
+
+        self.vrjoy_publisher = ChannelPublisher("rt/vrjoy", VRJoy)
+        self.vrjoy_publisher.Init()
 
         print("waiting 5 seconds for zero state pose...")
         time.sleep(5.0)
@@ -76,8 +79,6 @@ class VRNode:
         if message is None:
             return
 
-        print(message.rsx)
-
         left_pose, right_pose = self._controller_poses(message)
         left_pose[2] -= 0.160631
         right_pose[2] -= 0.160631
@@ -90,6 +91,15 @@ class VRNode:
                 array_to_pose(right_target),
                 message.left_gripper,
                 message.right_gripper,
+            )
+        )
+
+        self.vrjoy_publisher.Write(
+            VRJoy(
+                lx=float(np.clip(message.lsx, -1.0, 1.0)),
+                ly=float(np.clip(message.lsy, -1.0, 1.0)),
+                rx=float(np.clip(message.rsx, -1.0, 1.0)),
+                ry=float(np.clip(message.rsy, -1.0, 1.0)),
             )
         )
 

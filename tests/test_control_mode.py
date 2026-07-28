@@ -21,12 +21,16 @@ def _hardware_config() -> HardwareConfig:
                 "base_direction": [1.0] * 8,
                 "left_arm_direction": [1.0] * 8,
                 "right_arm_direction": [1.0] * 8,
+                "left_gripper_open": 0.0,
+                "left_gripper_close": 1.0,
+                "right_gripper_open": 0.0,
+                "right_gripper_close": 1.0,
             },
         }
     )
 
 
-def test_arm_only_hardware_excludes_base_can() -> None:
+def test_hardware_can_exclude_base_when_actuation_is_disabled() -> None:
     config = _hardware_config()
     assert config.active_can_interfaces(base_enabled=False) == ("can_left", "can_right")
 
@@ -58,3 +62,11 @@ def test_wbc_control_vector_splits_base_and_arms() -> None:
 
     np.testing.assert_array_equal(amr_cmd, u[:3])
     np.testing.assert_array_equal(openarm_u, u[3:])
+
+
+def test_base_only_hardware_uses_only_base_can() -> None:
+    config = _hardware_config()
+    assert config.active_can_interfaces(
+        base_enabled=True,
+        arms_enabled=False,
+    ) == ("can_base",)

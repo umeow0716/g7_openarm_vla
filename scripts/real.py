@@ -7,7 +7,7 @@ from datetime import datetime
 from multiprocessing.context import SpawnProcess
 from pathlib import Path
 
-from g7_openarm_config import general_config
+from g7_openarm_config import ControlMode, general_config
 
 LOG_ROOT = Path("logs")
 
@@ -121,6 +121,12 @@ def stop_processes(
 
 
 def main() -> None:
+    if general_config.control_mode is ControlMode.BASE_ONLY:
+        raise RuntimeError(
+            "control_mode='base-only' requires a VR script; "
+            "use scripts/sim_vr.py or scripts/real_vr.py"
+        )
+
     ctx = mp.get_context("spawn")
 
     processes = [

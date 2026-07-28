@@ -18,7 +18,8 @@ from .controller import Controller
 
 class LowLevelNode:
     def __init__(self):
-        self.base_enable = general_config.base_enabled
+        self.base_enable = general_config.base_actuation_enabled
+        self.arm_enable = general_config.arm_actuation_enabled
 
         self.wbc_lowcmd = WBCLowCmd_default()
         self.wbc_lowcmd_subscriber = ChannelSubscriber("rt/wbclowcmd", WBCLowCmd)
@@ -49,12 +50,20 @@ class LowLevelNode:
         if self.lowstate is None or self.odom is None:
             return
 
-        steer_pos_des, wheel_vel_des, q_des, dq_des, Kp, Kd, tau_ff = self.controller.update(
-            lowstate=self.lowstate,
-            odom=self.odom,
-            amr_cmd=self.wbc_lowcmd.amr,
-            openarm_cmd=self.wbc_lowcmd.openarm,
-        )
+        if self.arm_enable:
+            steer_pos_des, wheel_vel_des, q_des, dq_des, Kp, Kd, tau_ff = (
+                self.controller.update(
+                    lowstate=self.lowstate,
+                    odom=self.odom,
+                    amr_cmd=self.wbc_lowcmd.amr,
+                    openarm_cmd=self.wbc_lowcmd.openarm,
+                )
+            )
+        else:
+            steer_pos_des, wheel_vel_des = self.controller.update_base(
+                self.lowstate,
+                self.wbc_lowcmd.amr,
+            )
 
         if self.base_enable:
             for i, motor in enumerate(self.lowcmd.motor_cmd[:8:2]):
@@ -70,26 +79,28 @@ class LowLevelNode:
                 motor.kd = 6.0
                 motor.tau = 0.0
 
-        for i, motor in enumerate(self.lowcmd.motor_cmd[8:24]):
-            motor.q = q_des[i]
-            motor.dq = dq_des[i]
-            motor.kp = Kp[i]
-            motor.kd = Kd[i]
-            motor.tau = tau_ff[i]
+        if self.arm_enable:
+            for i, motor in enumerate(self.lowcmd.motor_cmd[8:24]):
+                motor.q = q_des[i]
+                motor.dq = dq_des[i]
+                motor.kp = Kp[i]
+                motor.kd = Kd[i]
+                motor.tau = tau_ff[i]
+    
+            left_gripper = self.lowcmd.motor_cmd[15]
+            left_gripper.q = self.wbc_lowcmd.openarm.data[7] * 0.45
+            left_gripper.dq = 0.0
+            left_gripper.kp = 20.0
+            left_gripper.kd = 0.5
+            left_gripper.tau = 0.0
+    
+            right_gripper = self.lowcmd.motor_cmd[23]
+            right_gripper.q = self.wbc_lowcmd.openarm.data[15] * 0.45
+            right_gripper.dq = 0.0
+            right_gripper.kp = 20.0
+            right_gripper.kd = 0.5
+            right_gripper.tau = 0.0
 
-        left_gripper = self.lowcmd.motor_cmd[15]
-        left_gripper.q = self.wbc_lowcmd.openarm.data[7] * 0.45
-        left_gripper.dq = 0.0
-        left_gripper.kp = 20.0
-        left_gripper.kd = 0.5
-        left_gripper.tau = 0.0
-
-        right_gripper = self.lowcmd.motor_cmd[23]
-        right_gripper.q = self.wbc_lowcmd.openarm.data[15] * 0.45
-        right_gripper.dq = 0.0
-        right_gripper.kp = 20.0
-        right_gripper.kd = 0.5
-        right_gripper.tau = 0.0
 
         self.lowcmd_publisher.Write(self.lowcmd)
 

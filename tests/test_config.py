@@ -45,6 +45,13 @@ def test_control_mode_is_general_and_strict_but_normalized() -> None:
     assert config.control_mode is ControlMode.ARM_ONLY
     assert config.base_enabled is False
 
+    data["general"]["control_mode"] = "base-only"
+    config = GeneralConfig.from_mapping(data)
+    assert config.control_mode is ControlMode.BASE_ONLY
+    assert config.base_enabled is False
+    assert config.base_actuation_enabled is True
+    assert config.arm_actuation_enabled is False
+
     data["general"]["control_mode"] = "wbc-typo"
     with pytest.raises(ValueError, match="control_mode"):
         GeneralConfig.from_mapping(data)
@@ -82,6 +89,10 @@ def test_hardware_config_rejects_invalid_motor_mapping() -> None:
             "base_direction": [1.0] * 8,
             "left_arm_direction": [1.0] * 8,
             "right_arm_direction": [1.0] * 8,
+            "left_gripper_open": 0.0,
+            "left_gripper_close": 1.0,
+            "right_gripper_open": 0.0,
+            "right_gripper_close": 1.0,
         },
     }
 

@@ -71,11 +71,18 @@ class HardwareConfig(BaseConfig):
     def interval(self) -> float:
         return 1.0 / self.hz
 
-    def active_can_interfaces(self, *, base_enabled: bool) -> tuple[str, ...]:
-        arm_interfaces = (self.left_arm_can, self.right_arm_can)
-        if not base_enabled:
-            return arm_interfaces
-        return (self.base_can, *arm_interfaces)
+    def active_can_interfaces(
+        self,
+        *,
+        base_enabled: bool,
+        arms_enabled: bool = True,
+    ) -> tuple[str, ...]:
+        interfaces: list[str] = []
+        if base_enabled:
+            interfaces.append(self.base_can)
+        if arms_enabled:
+            interfaces.extend((self.left_arm_can, self.right_arm_can))
+        return tuple(interfaces)
 
     @classmethod
     def from_mapping(

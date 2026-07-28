@@ -224,19 +224,27 @@ class Controller:
         order."""
         return np.concatenate([v18[:8], v18[9:17]], dtype=np.float64)
 
-    def update(self, lowstate: LowState_, odom: Odom, amr_cmd: AMRCmd, openarm_cmd: OpenArmCmd):
-        x = PinnZooModel.build_x_lib(lowstate, odom)
+    def update_base(
+        self,
+        lowstate: LowState_,
+        amr_cmd: AMRCmd,
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         base_command_is_idle = self.is_base_idle(amr_cmd)
 
         if base_command_is_idle:
-            steer_pos_des = x[7 : 7 + 8 : 2].copy()
-            wheel_vel_des = np.zeros((4,), dtype=np.float64)
-            # Synchronize the remembered target to the stopped physical pose.
-            self._prev_steer_target = steer_pos_des.copy()
-        else:
-            steer_pos_des, wheel_vel_des = self.swerve_inverse_kinematics(
-                lowstate=lowstate, amr_cmd=amr_cmd
+            steer_pos_des = np.array(
+                [motor.q for motor in lowstate.motor_state[:8:2]],
+                dtype=np.float64,
             )
+            wheel_vel_des = np.zeros((4,), dtype=np.float64)
+            self._prev_steer_target = steer_pos_des.copy()
+            return steer_pos_des, wheel_vel_des
+
+        return self.swerve_inverse_kinematics(lowstate=lowstate, amr_cmd=amr_cmd)
+
+    def update(self, lowstate: LowState_, odom: Odom, amr_cmd: AMRCmd, openarm_cmd: OpenArmCmd):
+        x = PinnZooModel.build_x_lib(lowstate, odom)
+        steer_pos_des, wheel_vel_des = self.update_base(lowstate, amr_cmd)
 
         dt = config.interval
 

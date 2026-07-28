@@ -71,13 +71,14 @@ def _arm_bus_config() -> BusConfig:
     }
 
 
-def build_bus_configs(*, base_enabled: bool) -> dict[str, BusConfig]:
+def build_bus_configs(*, base_enabled: bool, arms_enabled: bool = True) -> dict[str, BusConfig]:
     bus_configs: dict[str, BusConfig] = {}
     if base_enabled:
         bus_configs[config.base_can] = _base_bus_config()
 
-    bus_configs[config.left_arm_can] = _arm_bus_config()
-    bus_configs[config.right_arm_can] = _arm_bus_config()
+    if arms_enabled:
+        bus_configs[config.left_arm_can] = _arm_bus_config()
+        bus_configs[config.right_arm_can] = _arm_bus_config()
     return bus_configs
 
 
@@ -87,8 +88,12 @@ def mapping_gripper(val: float, open_val: float, close_val: float) -> float:
 
 class HardwareNode:
     def __init__(self) -> None:
-        self.base_enabled = general_config.base_enabled
-        self.bus_configs = build_bus_configs(base_enabled=self.base_enabled)
+        self.base_enabled = general_config.base_actuation_enabled
+        self.arms_enabled = general_config.arm_actuation_enabled
+        self.bus_configs = build_bus_configs(
+            base_enabled=self.base_enabled,
+            arms_enabled=self.arms_enabled,
+        )
 
         can_interfaces = list(self.bus_configs)
         self.group = oa.OpenArmGroup(can_interfaces=can_interfaces, enable_fd=config.can_fd)
@@ -106,6 +111,11 @@ class HardwareNode:
 
         if not self.base_enabled:
             print(f"Control mode {general_config.control_mode.value}: skipping {config.base_can}")
+        if not self.arms_enabled:
+            print(
+                f"Control mode {general_config.control_mode.value}: skipping "
+                f"{config.left_arm_can} and {config.right_arm_can}"
+            )
 
         self.group.enable_all()
 
@@ -184,80 +194,85 @@ class HardwareNode:
         if self.base_enabled:
             self._read_base_state()
 
-        left_arm = self.group.get_openarm(config.left_arm_can)
-        left_arm.flush_rx()
-        for i, motor in enumerate(left_arm.get_arm().get_motors()):
-            self.lowstate.motor_state[8 + i].q = motor.get_position() * config.left_arm_direction[i]
-            self.lowstate.motor_state[8 + i].dq = (
-                motor.get_velocity() * config.left_arm_direction[i]
-            )
-            self.lowstate.motor_state[8 + i].tau_est = (
-                motor.get_torque() * config.left_arm_direction[i]
-            )
+        if self.arms_enabled:
+            left_arm = self.group.get_openarm(config.left_arm_can)
+            left_arm.flush_rx()
+            for i, motor in enumerate(left_arm.get_arm().get_motors()):
+                self.lowstate.motor_state[8 + i].q = (
+                    motor.get_position() * config.left_arm_direction[i]
+                )
+                self.lowstate.motor_state[8 + i].dq = (
+                    motor.get_velocity() * config.left_arm_direction[i]
+                )
+                self.lowstate.motor_state[8 + i].tau_est = (
+                    motor.get_torque() * config.left_arm_direction[i]
+                )
 
-        right_arm = self.group.get_openarm(config.right_arm_can)
-        right_arm.flush_rx()
-        for i, motor in enumerate(right_arm.get_arm().get_motors()):
-            self.lowstate.motor_state[16 + i].q = (
-                motor.get_position() * config.right_arm_direction[i]
-            )
-            self.lowstate.motor_state[16 + i].dq = (
-                motor.get_velocity() * config.right_arm_direction[i]
-            )
-            self.lowstate.motor_state[16 + i].tau_est = (
-                motor.get_torque() * config.right_arm_direction[i]
-            )
+            right_arm = self.group.get_openarm(config.right_arm_can)
+            right_arm.flush_rx()
+            for i, motor in enumerate(right_arm.get_arm().get_motors()):
+                self.lowstate.motor_state[16 + i].q = (
+                    motor.get_position() * config.right_arm_direction[i]
+                )
+                self.lowstate.motor_state[16 + i].dq = (
+                    motor.get_velocity() * config.right_arm_direction[i]
+                )
+                self.lowstate.motor_state[16 + i].tau_est = (
+                    motor.get_torque() * config.right_arm_direction[i]
+                )
 
         self.lowstate_publisher.Write(self.lowstate)
 
         if self.base_enabled:
             self._write_base_command()
 
-        left_cmds = [
-            oa.MITParam(
-                q=self.lowcmd.motor_cmd[8 + i].q * config.left_arm_direction[i],
-                dq=self.lowcmd.motor_cmd[8 + i].dq * config.left_arm_direction[i],
-                kp=self.lowcmd.motor_cmd[8 + i].kp,
-                kd=self.lowcmd.motor_cmd[8 + i].kd,
-                tau=self.lowcmd.motor_cmd[8 + i].tau * config.left_arm_direction[i],
+        if self.arms_enabled:
+            left_cmds = [
+                oa.MITParam(
+                    q=self.lowcmd.motor_cmd[8 + i].q * config.left_arm_direction[i],
+                    dq=self.lowcmd.motor_cmd[8 + i].dq * config.left_arm_direction[i],
+                    kp=self.lowcmd.motor_cmd[8 + i].kp,
+                    kd=self.lowcmd.motor_cmd[8 + i].kd,
+                    tau=self.lowcmd.motor_cmd[8 + i].tau * config.left_arm_direction[i],
+                )
+                for i in range(8)
+            ]
+            right_cmds = [
+                oa.MITParam(
+                    q=self.lowcmd.motor_cmd[16 + i].q * config.right_arm_direction[i],
+                    dq=self.lowcmd.motor_cmd[16 + i].dq * config.right_arm_direction[i],
+                    kp=self.lowcmd.motor_cmd[16 + i].kp,
+                    kd=self.lowcmd.motor_cmd[16 + i].kd,
+                    tau=self.lowcmd.motor_cmd[16 + i].tau * config.right_arm_direction[i],
+                )
+                for i in range(8)
+            ]
+            left_cmds[7] = oa.MITParam(
+                q=mapping_gripper(
+                    self.lowcmd.motor_cmd[15].q,
+                    config.left_gripper_open,
+                    config.left_gripper_close,
+                ),
+                dq=0.0,
+                kp=self.lowcmd.motor_cmd[15].kp,
+                kd=self.lowcmd.motor_cmd[15].kd,
+                tau=self.lowcmd.motor_cmd[15].tau,
             )
-            for i in range(8)
-        ]
-        right_cmds = [
-            oa.MITParam(
-                q=self.lowcmd.motor_cmd[16 + i].q * config.right_arm_direction[i],
-                dq=self.lowcmd.motor_cmd[16 + i].dq * config.right_arm_direction[i],
-                kp=self.lowcmd.motor_cmd[16 + i].kp,
-                kd=self.lowcmd.motor_cmd[16 + i].kd,
-                tau=self.lowcmd.motor_cmd[16 + i].tau * config.right_arm_direction[i],
+            right_cmds[7] = oa.MITParam(
+                q=mapping_gripper(
+                    self.lowcmd.motor_cmd[23].q,
+                    config.right_gripper_open,
+                    config.right_gripper_close,
+                ),
+                dq=0.0,
+                kp=self.lowcmd.motor_cmd[23].kp,
+                kd=self.lowcmd.motor_cmd[23].kd,
+                tau=self.lowcmd.motor_cmd[23].tau,
             )
-            for i in range(8)
-        ]
-        left_cmds[7] = oa.MITParam(
-            q=mapping_gripper(
-                self.lowcmd.motor_cmd[15].q,
-                config.left_gripper_open,
-                config.left_gripper_close,
-            ),
-            dq=0.0,
-            kp=self.lowcmd.motor_cmd[15].kp,
-            kd=self.lowcmd.motor_cmd[15].kd,
-            tau=self.lowcmd.motor_cmd[15].tau,
-        )
-        right_cmds[7] = oa.MITParam(
-            q=mapping_gripper(
-                self.lowcmd.motor_cmd[23].q,
-                config.right_gripper_open,
-                config.right_gripper_close,
-            ),
-            dq=0.0,
-            kp=self.lowcmd.motor_cmd[23].kp,
-            kd=self.lowcmd.motor_cmd[23].kd,
-            tau=self.lowcmd.motor_cmd[23].tau,
-        )
+    
+            left_arm.get_arm().mit_control_all(left_cmds)
+            right_arm.get_arm().mit_control_all(right_cmds)
 
-        left_arm.get_arm().mit_control_all(left_cmds)
-        right_arm.get_arm().mit_control_all(right_cmds)
 
 
 def main() -> None:
