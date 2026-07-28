@@ -1,5 +1,6 @@
 [general]
 debugging = false
+control_mode = "wbc" # wbc or arm-only
 
 [dds]
 domain_id = 0
@@ -20,7 +21,6 @@ right_arm_direction = [  1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0 ]
 
 [lowlevel]
 hz = 200.0
-control_mode = "wbc" # wbc or arm-only
 
 [state_estimator]
 hz = 200.0

@@ -4,8 +4,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import numpy.typing as npt
 
+from g7_openarm_config import general_config
 from g7_openarm_pinnzoo import PinnZooModel, kinematics, kinematics_jacobian
 
+from .control_layout import control_size
 from .utils import ori_err_quat, quat_jac_to_ori_err_jac
 
 if TYPE_CHECKING:
@@ -37,8 +39,16 @@ class TaskEvaluation:
 def task_kinematic_jacobian(
     model: PinnZooModel,
     x_lib: npt.NDArray[np.float64],
+    *,
+    base_enabled: bool,
 ) -> npt.NDArray[np.float64]:
     Jkin = kinematics_jacobian(model, x_lib)
+
+    J_left_arm = Jkin[:, 15:22]
+    J_right_arm = Jkin[:, 24:31]
+
+    if not base_enabled:
+        return np.concatenate([J_left_arm, J_right_arm], axis=1)
 
     qw, qx, qy, qz = x_lib[3:7]
 
@@ -67,9 +77,6 @@ def task_kinematic_jacobian(
 
     J_wz_body = (Jkin[:, 3:7] @ dq_dwz)[:, None]
 
-    J_left_arm = Jkin[:, 15:22]
-    J_right_arm = Jkin[:, 24:31]
-
     return np.concatenate(
         [
             J_vx_body,
@@ -86,10 +93,14 @@ class G7OpenArmIKSolver:
     def __init__(
         self,
         lib_path: str | None = None,
+        *,
+        base_enabled: bool | None = None,
     ) -> None:
         self.model = PinnZooModel(lib_path)
-
-        self.nx = 17
+        self.base_enabled = (
+            general_config.base_enabled if base_enabled is None else base_enabled
+        )
+        self.nu = control_size(base_enabled=self.base_enabled)
 
         self.Q_hand_pos = 200.0
         self.Q_hand_ori = 0.5
@@ -104,7 +115,7 @@ class G7OpenArmIKSolver:
 
         self.prev_u_base = np.zeros(3, dtype=np.float64)
 
-        self.u_max = np.array(
+        u_max_full = np.array(
             [
                 0.5,
                 0.5,
@@ -128,10 +139,11 @@ class G7OpenArmIKSolver:
             ],
             dtype=np.float64,
         )
+        self.u_max = u_max_full if self.base_enabled else u_max_full[3:]
 
         self.damping = 1e-4
 
-        self.R_u = np.diag(
+        R_u_full = np.diag(
             [
                 2.5,
                 2.5,
@@ -152,6 +164,7 @@ class G7OpenArmIKSolver:
                 0.03,  # right J5, J6, J7
             ]
         ).astype(np.float64)
+        self.R_u = R_u_full if self.base_enabled else R_u_full[3:, 3:]
 
     def task_evaluate(
         self,
@@ -220,8 +233,8 @@ class G7OpenArmIKSolver:
 
         l = self.state_cost(task_evaluation)
 
-        lx = np.zeros(self.nx, dtype=np.float64)
-        lxx = np.zeros((self.nx, self.nx), dtype=np.float64)
+        lx = np.zeros(self.nu, dtype=np.float64)
+        lxx = np.zeros((self.nu, self.nu), dtype=np.float64)
 
         lx += self.Q_hand_pos * (Je_left_pos.T @ task_evaluation.left_pos_err)
         lxx += self.Q_hand_pos * (Je_left_pos.T @ Je_left_pos)
@@ -277,7 +290,11 @@ class G7OpenArmIKSolver:
 
         task_eval = self.task_evaluate(state, task_target)
 
-        Jkin = task_kinematic_jacobian(self.model, x_lib)
+        Jkin = task_kinematic_jacobian(
+            self.model,
+            x_lib,
+            base_enabled=self.base_enabled,
+        )
 
         _, lx, lxx = self.state_cost_deriv(
             state=state,
@@ -289,15 +306,17 @@ class G7OpenArmIKSolver:
         H = 0.01 * lxx + self.R_u
         g = 0.1 * lx
 
-        H[:3, :3] += self.R_du_base
-        g[:3] -= self.R_du_base @ self.prev_u_base
+        if self.base_enabled:
+            H[:3, :3] += self.R_du_base
+            g[:3] -= self.R_du_base @ self.prev_u_base
 
-        H = H + self.damping * np.eye(self.nx)
+        H = H + self.damping * np.eye(self.nu)
 
         u = -np.linalg.solve(H, g)
 
         u = np.clip(u, -self.u_max, self.u_max)
 
-        self.prev_u_base = u[:3].copy()
+        if self.base_enabled:
+            self.prev_u_base = u[:3].copy()
 
         return u

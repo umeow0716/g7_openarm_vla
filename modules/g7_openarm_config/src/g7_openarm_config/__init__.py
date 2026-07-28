@@ -1,7 +1,7 @@
 from .base import BaseConfig
 from .dds_config import DDSConfig
 from .dds_config import config as dds_config
-from .general_config import GeneralConfig
+from .general_config import ControlMode, GeneralConfig
 from .general_config import config as general_config
 from .loader import (
     ConfigError,
@@ -14,6 +14,7 @@ from .parsing import parse_bool
 __all__ = [
     "BaseConfig",
     "ConfigError",
+    "ControlMode",
     "DDSConfig",
     "GeneralConfig",
     "dds_config",

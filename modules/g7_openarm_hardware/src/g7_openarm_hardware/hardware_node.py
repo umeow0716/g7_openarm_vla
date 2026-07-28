@@ -1,6 +1,7 @@
 import atexit
 import signal
 import time
+from typing import Any, TypedDict
 
 import openarm_can as oa
 from unitree_sdk2py.core.channel import (
@@ -16,10 +17,26 @@ from unitree_sdk2py.idl.default import (
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_, LowCmd_, LowState_
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
+from g7_openarm_config import general_config
+
 from .config import config
 
-BUS_CONFIGS = {
-    config.base_can: {
+
+class BusConfig(TypedDict):
+    motor_types: list[Any]
+    send_ids: list[int]
+    recv_ids: list[int]
+    control_modes: list[Any]
+
+
+def _base_bus_config() -> BusConfig:
+    control_modes: list[Any] = [oa.ControlMode.POS_VEL] * 8
+    for logical_index, motor_id in enumerate(config.base_ids):
+        control_modes[motor_id - 1] = (
+            oa.ControlMode.VEL if logical_index % 2 else oa.ControlMode.POS_VEL
+        )
+
+    return {
         "motor_types": [
             oa.MotorType.DM8009,
             oa.MotorType.DM8009,
@@ -32,33 +49,12 @@ BUS_CONFIGS = {
         ],
         "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
         "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18],
-        "control_modes": [
-            oa.ControlMode.POS_VEL,
-            oa.ControlMode.POS_VEL,
-            oa.ControlMode.POS_VEL,
-            oa.ControlMode.POS_VEL,
-            oa.ControlMode.VEL,
-            oa.ControlMode.VEL,
-            oa.ControlMode.VEL,
-            oa.ControlMode.VEL,
-        ],
-    },
-    config.left_arm_can: {
-        "motor_types": [
-            oa.MotorType.DM8009,
-            oa.MotorType.DM8009,
-            oa.MotorType.DM4340,
-            oa.MotorType.DM4340,
-            oa.MotorType.DM4310,
-            oa.MotorType.DM4310,
-            oa.MotorType.DM4310,
-            oa.MotorType.DM4310,
-        ],
-        "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
-        "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18],
-        "control_modes": [oa.ControlMode.MIT] * 8,
-    },
-    config.right_arm_can: {
+        "control_modes": control_modes,
+    }
+
+
+def _arm_bus_config() -> BusConfig:
+    return {
         "motor_types": [
             oa.MotorType.DM8009,
             oa.MotorType.DM8009,
@@ -72,24 +68,28 @@ BUS_CONFIGS = {
         "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
         "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18],
         "control_modes": [oa.ControlMode.MIT] * 8,
-    },
-}
+    }
+
+
+def build_bus_configs(*, base_enabled: bool) -> dict[str, BusConfig]:
+    bus_configs: dict[str, BusConfig] = {}
+    if base_enabled:
+        bus_configs[config.base_can] = _base_bus_config()
+
+    bus_configs[config.left_arm_can] = _arm_bus_config()
+    bus_configs[config.right_arm_can] = _arm_bus_config()
+    return bus_configs
 
 
 class HardwareNode:
     def __init__(self) -> None:
-        can_interfaces = list(BUS_CONFIGS)
+        self.base_enabled = general_config.base_enabled
+        self.bus_configs = build_bus_configs(base_enabled=self.base_enabled)
+
+        can_interfaces = list(self.bus_configs)
         self.group = oa.OpenArmGroup(can_interfaces=can_interfaces, enable_fd=config.can_fd)
-        for can_interface, can_config in BUS_CONFIGS.items():
+        for can_interface, can_config in self.bus_configs.items():
             arm = self.group.get_openarm(can_interface)
-
-            if can_interface == config.base_can:
-                for i in range(8):
-                    motor_id = config.base_ids[i]
-                    can_config["control_modes"][motor_id - 1] = (
-                        oa.ControlMode.VEL if i % 2 else oa.ControlMode.POS_VEL
-                    )
-
             arm.init_arm_motors(
                 can_config["motor_types"],
                 can_config["send_ids"],
@@ -99,6 +99,9 @@ class HardwareNode:
             arm.set_callback_mode_all(oa.CallbackMode.STATE)
 
             print(f"{can_interface}: expected responses = {arm.expected_response_count()}")
+
+        if not self.base_enabled:
+            print(f"Control mode {general_config.control_mode.value}: skipping {config.base_can}")
 
         self.group.enable_all()
 
@@ -145,24 +148,37 @@ class HardwareNode:
         self.imustate = msg
         self.lowstate.imu_state = self.imustate
 
+    def _read_base_state(self) -> None:
+        base = self.group.get_openarm(config.base_can)
+        base_motors = base.get_arm().get_motors()
+        base.flush_rx()
+
+        for i in range(8):
+            motor = base_motors[config.base_ids[i] - 1]
+            direction = config.base_direction[i]
+            self.lowstate.motor_state[i].q = motor.get_position() * direction
+            self.lowstate.motor_state[i].dq = motor.get_velocity() * direction
+            self.lowstate.motor_state[i].tau_est = motor.get_torque() * direction
+
+    def _write_base_command(self) -> None:
+        base = self.group.get_openarm(config.base_can)
+        for i in range(0, 8, 2):
+            cmd = oa.PosVelParam(
+                q=self.lowcmd.motor_cmd[i].q * config.base_direction[i],
+                dq=20.0,
+            )
+            base.get_arm().posvel_control_one(config.base_ids[i] - 1, cmd)
+
+        for i in range(1, 8, 2):
+            cmd = oa.VelParam(dq=self.lowcmd.motor_cmd[i].dq * config.base_direction[i])
+            base.get_arm().vel_control_one(config.base_ids[i] - 1, cmd)
+
     def control_loop(self) -> None:
         for _ in self.group.recv_wait_all(5000):
             pass
 
-        base = self.group.get_openarm(config.base_can)
-
-        base_motors = base.get_arm().get_motors()
-        base.flush_rx()
-        for i in range(8):
-            self.lowstate.motor_state[i].q = (
-                base_motors[config.base_ids[i] - 1].get_position() * config.base_direction[i]
-            )
-            self.lowstate.motor_state[i].dq = (
-                base_motors[config.base_ids[i] - 1].get_velocity() * config.base_direction[i]
-            )
-            self.lowstate.motor_state[i].tau_est = (
-                base_motors[config.base_ids[i] - 1].get_torque() * config.base_direction[i]
-            )
+        if self.base_enabled:
+            self._read_base_state()
 
         left_arm = self.group.get_openarm(config.left_arm_can)
         left_arm.flush_rx()
@@ -190,12 +206,8 @@ class HardwareNode:
 
         self.lowstate_publisher.Write(self.lowstate)
 
-        for i in range(0, 8, 2):
-            cmd = oa.PosVelParam(q=self.lowcmd.motor_cmd[i].q * config.base_direction[i], dq=20.0)
-            base.get_arm().posvel_control_one(config.base_ids[i] - 1, cmd)
-        for i in range(1, 8, 2):
-            cmd = oa.VelParam(dq=self.lowcmd.motor_cmd[i].dq * config.base_direction[i])
-            base.get_arm().vel_control_one(config.base_ids[i] - 1, cmd)
+        if self.base_enabled:
+            self._write_base_command()
 
         left_cmds = [
             oa.MITParam(

@@ -12,6 +12,7 @@ from unitree_sdk2py.utils.hz_sample import RecurrentThread
 from g7_openarm_idl import EETarget, Odom, WBCLowCmd, WBCLowCmd_default
 
 from .config import config
+from .control_layout import split_control_vector
 from .ik_solver import G7OpenArmIKSolver
 
 
@@ -55,17 +56,22 @@ class Node:
             return
 
         u = self.ik_solver.solve_once(self.lowstate, self.odom, self.ee_target)
+        amr_cmd, arm_cmd = split_control_vector(
+            u,
+            base_enabled=self.ik_solver.base_enabled,
+        )
+
         openarm_cmd = np.concatenate(
             [
-                u[3:10],
+                arm_cmd[:7],
                 [0.0],
-                u[10:17],
+                arm_cmd[7:14],
                 [0.0],
             ],
             dtype=np.float64,
         )
 
-        self.wbc_lowcmd.amr.data = u[:3].tolist()
+        self.wbc_lowcmd.amr.data = amr_cmd.tolist()
         self.wbc_lowcmd.openarm.data = openarm_cmd.tolist()
 
         self.wbc_lowcmd_publisher.Write(self.wbc_lowcmd)

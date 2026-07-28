@@ -9,6 +9,7 @@ from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
+from g7_openarm_config import general_config
 from g7_openarm_idl import Odom, WBCLowCmd, WBCLowCmd_default
 
 from .config import config
@@ -17,7 +18,7 @@ from .controller import Controller
 
 class LowLevelNode:
     def __init__(self):
-        self.base_enable = config.base_enabled
+        self.base_enable = general_config.base_enabled
 
         self.wbc_lowcmd = WBCLowCmd_default()
         self.wbc_lowcmd_subscriber = ChannelSubscriber("rt/wbclowcmd", WBCLowCmd)
