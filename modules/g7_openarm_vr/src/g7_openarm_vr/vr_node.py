@@ -76,6 +76,8 @@ class VRNode:
         if message is None:
             return
 
+        print(message.rsx)
+
         left_pose, right_pose = self._controller_poses(message)
         left_pose[2] -= 0.160631
         right_pose[2] -= 0.160631
