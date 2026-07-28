@@ -78,17 +78,17 @@ class LowLevelNode:
             motor.tau = tau_ff[i]
 
         left_gripper = self.lowcmd.motor_cmd[15]
-        left_gripper.q = self.wbc_lowcmd.openarm.data[7]
+        left_gripper.q = self.wbc_lowcmd.openarm.data[7] * 0.45
         left_gripper.dq = 0.0
-        left_gripper.kp = 0.0
-        left_gripper.kd = 0.0
+        left_gripper.kp = 40.0
+        left_gripper.kd = 0.5
         left_gripper.tau = 0.0
 
         right_gripper = self.lowcmd.motor_cmd[23]
-        right_gripper.q = self.wbc_lowcmd.openarm.data[15]
+        right_gripper.q = self.wbc_lowcmd.openarm.data[15] * 0.45
         right_gripper.dq = 0.0
-        right_gripper.kp = 0.0
-        right_gripper.kd = 0.0
+        right_gripper.kp = 40.0
+        right_gripper.kd = 0.5
         right_gripper.tau = 0.0
 
         self.lowcmd_publisher.Write(self.lowcmd)

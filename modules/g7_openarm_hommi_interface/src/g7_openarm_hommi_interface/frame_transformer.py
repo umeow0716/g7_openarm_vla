@@ -89,6 +89,8 @@ class FrameTransformer:
         world_pose_target = EETarget(
             array_to_pose(left_world_pose),
             array_to_pose(right_world_pose),
+            0.0,
+            0.0,
         )
 
         return world_pose_target

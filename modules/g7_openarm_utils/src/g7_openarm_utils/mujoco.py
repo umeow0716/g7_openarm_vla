@@ -19,4 +19,4 @@ def load_hand_default_pose(model_path: str) -> EETarget:
 
     left_pose = np.concatenate((left_hand.xpos, left_hand.xquat), dtype=np.float64)
     right_pose = np.concatenate((right_hand.xpos, right_hand.xquat), dtype=np.float64)
-    return EETarget(array_to_pose(left_pose), array_to_pose(right_pose))
+    return EETarget(array_to_pose(left_pose), array_to_pose(right_pose), 0.0, 0.0)

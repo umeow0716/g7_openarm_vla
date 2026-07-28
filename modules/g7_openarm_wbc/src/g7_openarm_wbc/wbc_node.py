@@ -64,9 +64,9 @@ class Node:
         openarm_cmd = np.concatenate(
             [
                 arm_cmd[:7],
-                [0.0],
+                [self.ee_target.left_gripper],
                 arm_cmd[7:14],
-                [0.0],
+                [self.ee_target.right_gripper],
             ],
             dtype=np.float64,
         )

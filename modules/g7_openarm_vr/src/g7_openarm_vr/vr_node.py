@@ -80,7 +80,7 @@ class VRNode:
         right_target = self.right_pose_mapper.map(right_pose)
 
         self.eetarget_publisher.Write(
-            EETarget(array_to_pose(left_target), array_to_pose(right_target))
+            EETarget(array_to_pose(left_target), array_to_pose(right_target), message.left_gripper, message.right_gripper)
         )
 
 

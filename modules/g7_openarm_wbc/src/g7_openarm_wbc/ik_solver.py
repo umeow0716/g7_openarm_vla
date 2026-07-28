@@ -148,20 +148,20 @@ class G7OpenArmIKSolver:
                 2.5,
                 2.5,
                 0.1,  # base vx, vy, omega
-                0.05,
-                0.05,  # left J1, J2: shoulder, 8009
-                0.08,
-                0.08,  # left J3, J4: 4340
-                0.03,
-                0.03,
-                0.03,  # left J5, J6, J7: wrist, 4310
-                0.05,
-                0.05,  # right J1, J2
-                0.08,
-                0.08,  # right J3, J4
-                0.03,
-                0.03,
-                0.03,  # right J5, J6, J7
+                0.005,
+                0.005,  # left J1, J2: shoulder, 8009
+                0.008,
+                0.008,  # left J3, J4: 4340
+                0.003,
+                0.003,
+                0.003,  # left J5, J6, J7: wrist, 4310
+                0.005,
+                0.005,  # right J1, J2
+                0.008,
+                0.008,  # right J3, J4
+                0.003,
+                0.003,
+                0.003,  # right J5, J6, J7
             ]
         ).astype(np.float64)
         self.R_u = R_u_full if self.base_enabled else R_u_full[3:, 3:]
