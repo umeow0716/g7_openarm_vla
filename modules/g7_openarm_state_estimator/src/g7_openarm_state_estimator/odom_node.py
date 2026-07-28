@@ -8,6 +8,7 @@ from unitree_sdk2py.core.channel import (
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
+from g7_openarm_config import general_config
 from g7_openarm_idl.odom import Odom, Odom_default
 
 from .amr_ekf import AMREKF
@@ -62,6 +63,27 @@ class OdomNode:
         self.odom.angular_vdot.x = x.angular_vdot[0]
         self.odom.angular_vdot.y = x.angular_vdot[1]
         self.odom.angular_vdot.z = x.angular_vdot[2]
+        
+        if general_config.control_mode == "arm-only":
+            self.odom.position.x = 0.0
+            self.odom.position.y = 0.0
+            self.odom.position.z = 0.0
+            self.odom.quaternion.w = 1.0
+            self.odom.quaternion.x = 0.0
+            self.odom.quaternion.y = 0.0
+            self.odom.quaternion.z = 0.0
+            self.odom.velocity.x = 0.0
+            self.odom.velocity.y = 0.0
+            self.odom.velocity.z = 0.0
+            self.odom.angular_velocity.x = 0.0
+            self.odom.angular_velocity.y = 0.0
+            self.odom.angular_velocity.z = 0.0
+            self.odom.vdot.x = 0.0
+            self.odom.vdot.y = 0.0
+            self.odom.vdot.z = 0.0
+            self.odom.angular_vdot.x = 0.0
+            self.odom.angular_vdot.y = 0.0
+            self.odom.angular_vdot.z = 0.0
 
         self.odom_publisher.Write(self.odom)
 

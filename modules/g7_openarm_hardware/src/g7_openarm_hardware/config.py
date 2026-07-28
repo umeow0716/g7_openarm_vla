@@ -27,6 +27,10 @@ class HardwareConfig(BaseConfig):
     base_direction: list[float]
     left_arm_direction: list[float]
     right_arm_direction: list[float]
+    left_gripper_open: float
+    left_gripper_close: float
+    right_gripper_open: float
+    right_gripper_close: float
     dds: DDSConfig
 
     def __post_init__(self) -> None:
@@ -94,6 +98,10 @@ class HardwareConfig(BaseConfig):
             base_direction=[float(value) for value in section["base_direction"]],
             left_arm_direction=[float(value) for value in section["left_arm_direction"]],
             right_arm_direction=[float(value) for value in section["right_arm_direction"]],
+            left_gripper_open=float(section["left_gripper_open"]),
+            left_gripper_close=float(section["left_gripper_close"]),
+            right_gripper_open=float(section["right_gripper_open"]),
+            right_gripper_close=float(section["right_gripper_close"]),
             dds=DDSConfig.from_mapping(data),
         )
 

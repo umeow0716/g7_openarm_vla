@@ -13,17 +13,6 @@ from g7_openarm_config import general_config
 LOG_ROOT = Path("logs")
 
 
-def enable_can_fd() -> None:
-    try:
-        subprocess.run(
-            ["/usr/local/bin/can-fd-up"],
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        print(f"Enable CAN-FD Failed, Exit Code: {exc.returncode}")
-        raise
-
-
 def build_log_path(folder_name: str) -> Path:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return LOG_ROOT / folder_name / f"{timestamp}.log"
@@ -141,7 +130,6 @@ def stop_processes(
 
 
 def main() -> None:
-    enable_can_fd()
     ctx = mp.get_context("spawn")
 
     processes = [

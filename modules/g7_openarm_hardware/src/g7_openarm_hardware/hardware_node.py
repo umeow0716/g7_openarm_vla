@@ -81,6 +81,9 @@ def build_bus_configs(*, base_enabled: bool) -> dict[str, BusConfig]:
     return bus_configs
 
 
+def mapping_gripper(val: float, open_val: float, close_val: float) -> float:
+    return (close_val - open_val) * val / 0.45 + open_val
+
 class HardwareNode:
     def __init__(self) -> None:
         self.base_enabled = general_config.base_enabled
@@ -229,6 +232,29 @@ class HardwareNode:
             )
             for i in range(8)
         ]
+        left_cmds[7] = oa.MITParam(
+            q=mapping_gripper(
+                self.lowcmd.motor_cmd[15].q,
+                config.left_gripper_open,
+                config.left_gripper_close,
+            ),
+            dq=0.0,
+            kp=self.lowcmd.motor_cmd[15].kp,
+            kd=self.lowcmd.motor_cmd[15].kd,
+            tau=self.lowcmd.motor_cmd[15].tau,
+        )
+        right_cmds[7] = oa.MITParam(
+            q=mapping_gripper(
+                self.lowcmd.motor_cmd[23].q,
+                config.right_gripper_open,
+                config.right_gripper_close,
+            ),
+            dq=0.0,
+            kp=self.lowcmd.motor_cmd[23].kp,
+            kd=self.lowcmd.motor_cmd[23].kd,
+            tau=self.lowcmd.motor_cmd[23].tau,
+        )
+        
         left_arm.get_arm().mit_control_all(left_cmds)
         right_arm.get_arm().mit_control_all(right_cmds)
 
