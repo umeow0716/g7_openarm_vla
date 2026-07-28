@@ -209,6 +209,8 @@ class VRSimulationNode:
     def update_target(self) -> None:
         left_pose = pose_to_array(self.eetarget.left_target)
         right_pose = pose_to_array(self.eetarget.right_target)
+        left_pose[2] += 0.160631
+        right_pose[2] += 0.160631
 
         with self.viewer.lock():
             self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]

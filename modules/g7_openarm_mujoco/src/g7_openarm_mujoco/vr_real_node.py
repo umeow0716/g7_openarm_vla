@@ -115,10 +115,12 @@ class VRRealVisualizationNode:
     def update_target(self) -> None:
         if self.eetarget is None:
             return
+        
+        left_arr = pose_to_array(self.eetarget.left_target)
+        right_arr = pose_to_array(self.eetarget.right_target)
+        left_arr[2] += 0.160631
+        right_arr[2] += 0.160631
         with self.viewer.lock():
-            left_arr = pose_to_array(self.eetarget.left_target)
-            right_arr = pose_to_array(self.eetarget.right_target)
-
             self.data.mocap_pos[self.left_target_mocap_id] = left_arr[:3]
             self.data.mocap_quat[self.left_target_mocap_id] = left_arr[3:]
             self.data.mocap_pos[self.right_target_mocap_id] = right_arr[:3]

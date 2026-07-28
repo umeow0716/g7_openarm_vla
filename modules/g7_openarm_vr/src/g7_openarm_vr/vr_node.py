@@ -74,6 +74,8 @@ class VRNode:
             return
 
         left_pose, right_pose = self._controller_poses(message)
+        left_pose[2] -= 0.160631
+        right_pose[2] -= 0.160631
         left_target = self.left_pose_mapper.map(left_pose)
         right_target = self.right_pose_mapper.map(right_pose)
 
