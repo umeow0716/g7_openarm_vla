@@ -121,21 +121,21 @@ class G7OpenArmIKSolver:
                 0.5,
                 0.5,  # base vx, vy, omega
                 # left arm: J1~J7
-                2.0,
-                2.0,  # J1, J2: DM-J8009P
-                1.5,
-                1.5,  # J3, J4: DM-J4340P / DM-J4340
-                3.0,
-                3.0,
-                3.0,  # J5, J6, J7: DM-J4310
+                1.57,
+                1.57,  # J1, J2: DM-J8009P
+                3.14,
+                3.14,  # J3, J4: DM-J4340P / DM-J4340
+                12.6,
+                12.6,
+                12.6,  # J5, J6, J7: DM-J4310
                 # right arm: J1~J7
-                2.0,
-                2.0,  # J1, J2: DM-J8009P
-                1.5,
-                1.5,  # J3, J4: DM-J4340P / DM-J4340
-                3.0,
-                3.0,
-                3.0,  # J5, J6, J7: DM-J4310
+                1.57,
+                1.57,  # J1, J2: DM-J8009P
+                3.14,
+                3.14,  # J3, J4: DM-J4340P / DM-J4340
+                12.6,
+                12.6,
+                12.6,  # J5, J6, J7: DM-J4310
             ],
             dtype=np.float64,
         )
@@ -148,20 +148,20 @@ class G7OpenArmIKSolver:
                 2.5,
                 2.5,
                 0.1,  # base vx, vy, omega
-                0.005,
-                0.005,  # left J1, J2: shoulder, 8009
-                0.008,
-                0.008,  # left J3, J4: 4340
-                0.003,
-                0.003,
-                0.003,  # left J5, J6, J7: wrist, 4310
-                0.005,
-                0.005,  # right J1, J2
-                0.008,
-                0.008,  # right J3, J4
-                0.003,
-                0.003,
-                0.003,  # right J5, J6, J7
+                0.05,
+                0.05,  # left J1, J2: shoulder, 8009
+                0.08,
+                0.08,  # left J3, J4: 4340
+                0.03,
+                0.03,
+                0.03,  # left J5, J6, J7: wrist, 4310
+                0.05,
+                0.05,  # right J1, J2
+                0.08,
+                0.08,  # right J3, J4
+                0.03,
+                0.03,
+                0.03,  # right J5, J6, J7
             ]
         ).astype(np.float64)
         self.R_u = R_u_full if self.base_enabled else R_u_full[3:, 3:]
