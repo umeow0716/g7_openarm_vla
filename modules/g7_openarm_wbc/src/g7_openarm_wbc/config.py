@@ -19,8 +19,7 @@ class WBCConfig(BaseConfig):
             raise ValueError(f"wbc.hz must be positive, got {self.hz}")
         if self.arm_swivel_weight < 0.0:
             raise ValueError(
-                "wbc.arm_swivel_weight must be non-negative, "
-                f"got {self.arm_swivel_weight}"
+                f"wbc.arm_swivel_weight must be non-negative, got {self.arm_swivel_weight}"
             )
         if not 0.0 <= self.arm_swivel_max_step_deg <= 180.0:
             raise ValueError(

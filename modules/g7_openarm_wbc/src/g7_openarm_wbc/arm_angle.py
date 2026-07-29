@@ -9,7 +9,6 @@ import numpy.typing as npt
 from g7_openarm_utils import quat_to_rotation_matrix
 
 ArmSide = Literal["left", "right"]
-FloatArray = npt.NDArray[np.float64]
 
 _JOINT_AXES = (
     np.array([0.0, -1.0, 0.0], dtype=np.float64),
@@ -25,12 +24,12 @@ _JOINT_5_OFFSET = np.array([0.0, 0.0, -0.0955], dtype=np.float64)
 
 @dataclass(frozen=True, slots=True)
 class ArmSwivelKinematics:
-    shoulder_position: FloatArray
-    swivel_point_position: FloatArray
-    jacobian: FloatArray
+    shoulder_position: npt.NDArray[np.float64]
+    swivel_point_position: npt.NDArray[np.float64]
+    jacobian: npt.NDArray[np.float64]
 
 
-def _rotation_about_axis(axis: FloatArray, angle: float) -> FloatArray:
+def _rotation_about_axis(axis: npt.NDArray[np.float64], angle: float) -> npt.NDArray[np.float64]:
     x, y, z = axis
     skew = np.array(
         [
@@ -40,12 +39,19 @@ def _rotation_about_axis(axis: FloatArray, angle: float) -> FloatArray:
         ],
         dtype=np.float64,
     )
-    return np.eye(3, dtype=np.float64) + np.sin(angle) * skew + (1.0 - np.cos(angle)) * (
-        skew @ skew
+    return (
+        np.eye(3, dtype=np.float64) + np.sin(angle) * skew + (1.0 - np.cos(angle)) * (skew @ skew)
     )
 
 
-def _arm_geometry(side: ArmSide) -> tuple[FloatArray, FloatArray, FloatArray, FloatArray]:
+def _arm_geometry(
+    side: ArmSide,
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+]:
     if side == "left":
         side_sign = 1.0
         joint_4_y = -5.0e-5
@@ -89,8 +95,8 @@ def arm_swivel_kinematics(
     position = base_pos + rotation @ shoulder_offset
     shoulder_position = position.copy()
 
-    joint_origins: list[FloatArray] = []
-    joint_axes_world: list[FloatArray] = []
+    joint_origins: list[npt.NDArray[np.float64]] = []
+    joint_axes_world: list[npt.NDArray[np.float64]] = []
     child_offsets = (
         joint_2_offset,
         _JOINT_3_OFFSET,
@@ -123,7 +129,7 @@ def arm_swivel_direction_body(
     arm: ArmSwivelKinematics,
     tcp_position: npt.ArrayLike,
     base_quaternion: npt.ArrayLike,
-) -> FloatArray | None:
+) -> npt.NDArray[np.float64] | None:
     """Return the current arm-angle direction expressed in the base frame."""
     tcp = np.asarray(tcp_position, dtype=np.float64)
     if tcp.shape != (3,):
@@ -153,7 +159,7 @@ def preferred_swivel_point_position(
     side: ArmSide,
     max_swivel_step: float,
     preferred_direction_body: npt.ArrayLike | None = None,
-) -> FloatArray:
+) -> npt.NDArray[np.float64]:
     """Rotate the forearm toward a preferred body-frame arm-angle direction.
 
     The axial and radial distances around the shoulder-to-target line are preserved.
@@ -187,8 +193,7 @@ def preferred_swivel_point_position(
         preferred_body = np.asarray(preferred_direction_body, dtype=np.float64)
         if preferred_body.shape != (3,):
             raise ValueError(
-                "preferred_direction_body must have shape (3,), "
-                f"got {preferred_body.shape}"
+                f"preferred_direction_body must have shape (3,), got {preferred_body.shape}"
             )
         preferred_body_norm = float(np.linalg.norm(preferred_body))
         if preferred_body_norm < 1.0e-9:

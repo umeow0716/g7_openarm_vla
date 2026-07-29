@@ -13,7 +13,7 @@ def vr_joy_to_body_command(joy: VRJoy) -> npt.NDArray[np.float64]:
     The VR stick axes are +x right and +y up, therefore:
       ly -> +vx, lx -> -vy, rx -> -wz.
     """
-    
+
     axes = np.clip(
         np.array([joy.ly * 0.5, -joy.lx * 0.5, -joy.rx * 0.5], dtype=np.float64),
         -0.3,

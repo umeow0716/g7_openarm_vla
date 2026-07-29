@@ -269,10 +269,9 @@ class HardwareNode:
                 kd=self.lowcmd.motor_cmd[23].kd,
                 tau=self.lowcmd.motor_cmd[23].tau,
             )
-    
+
             left_arm.get_arm().mit_control_all(left_cmds)
             right_arm.get_arm().mit_control_all(right_cmds)
-
 
 
 def main() -> None:

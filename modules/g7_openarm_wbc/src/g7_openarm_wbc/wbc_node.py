@@ -71,8 +71,7 @@ class Node:
 
     def write_wbc_lowcmd(self):
         joy_is_fresh = (
-            self.vr_joy is not None
-            and time.monotonic() - self.vr_joy_received_at <= 0.25
+            self.vr_joy is not None and time.monotonic() - self.vr_joy_received_at <= 0.25
         )
 
         if general_config.control_mode is ControlMode.BASE_ONLY:

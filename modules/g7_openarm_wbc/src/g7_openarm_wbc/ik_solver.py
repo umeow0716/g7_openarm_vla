@@ -112,8 +112,7 @@ class G7OpenArmIKSolver:
             raise ValueError(f"arm_swivel_weight must be non-negative, got {arm_swivel_weight}")
         if not 0.0 <= arm_swivel_max_step_deg <= 180.0:
             raise ValueError(
-                "arm_swivel_max_step_deg must be within [0, 180], "
-                f"got {arm_swivel_max_step_deg}"
+                f"arm_swivel_max_step_deg must be within [0, 180], got {arm_swivel_max_step_deg}"
             )
 
         self.Q_hand_pos = 200.0
@@ -326,9 +325,7 @@ class G7OpenArmIKSolver:
         control_slice = slice(control_offset, control_offset + 4)
 
         lx[control_slice] += self.Q_arm_swivel * (error_jacobian.T @ swivel_error)
-        lxx[control_slice, control_slice] += self.Q_arm_swivel * (
-            error_jacobian.T @ error_jacobian
-        )
+        lxx[control_slice, control_slice] += self.Q_arm_swivel * (error_jacobian.T @ error_jacobian)
 
     def add_arm_swivel_cost(
         self,

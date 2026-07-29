@@ -51,13 +51,11 @@ class LowLevelNode:
             return
 
         if self.arm_enable:
-            steer_pos_des, wheel_vel_des, q_des, dq_des, Kp, Kd, tau_ff = (
-                self.controller.update(
-                    lowstate=self.lowstate,
-                    odom=self.odom,
-                    amr_cmd=self.wbc_lowcmd.amr,
-                    openarm_cmd=self.wbc_lowcmd.openarm,
-                )
+            steer_pos_des, wheel_vel_des, q_des, dq_des, Kp, Kd, tau_ff = self.controller.update(
+                lowstate=self.lowstate,
+                odom=self.odom,
+                amr_cmd=self.wbc_lowcmd.amr,
+                openarm_cmd=self.wbc_lowcmd.openarm,
             )
         else:
             steer_pos_des, wheel_vel_des = self.controller.update_base(
@@ -86,21 +84,20 @@ class LowLevelNode:
                 motor.kp = Kp[i]
                 motor.kd = Kd[i]
                 motor.tau = tau_ff[i]
-    
+
             left_gripper = self.lowcmd.motor_cmd[15]
             left_gripper.q = self.wbc_lowcmd.openarm.data[7] * 0.45
             left_gripper.dq = 0.0
             left_gripper.kp = 20.0
             left_gripper.kd = 0.5
             left_gripper.tau = 0.0
-    
+
             right_gripper = self.lowcmd.motor_cmd[23]
             right_gripper.q = self.wbc_lowcmd.openarm.data[15] * 0.45
             right_gripper.dq = 0.0
             right_gripper.kp = 20.0
             right_gripper.kd = 0.5
             right_gripper.tau = 0.0
-
 
         self.lowcmd_publisher.Write(self.lowcmd)
 
