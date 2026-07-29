@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from math import isfinite, radians
 from typing import Any
 
 from g7_openarm_config import BaseConfig, DDSConfig
@@ -10,26 +11,35 @@ from g7_openarm_config import BaseConfig, DDSConfig
 @dataclass(frozen=True, slots=True)
 class WBCConfig(BaseConfig):
     hz: float
+    left_sew_target_deg: float
+    right_sew_target_deg: float
     dds: DDSConfig
-    arm_swivel_weight: float
-    arm_swivel_max_step_deg: float
 
     def __post_init__(self) -> None:
         if self.hz <= 0.0:
             raise ValueError(f"wbc.hz must be positive, got {self.hz}")
-        if self.arm_swivel_weight < 0.0:
+        if not isfinite(self.left_sew_target_deg):
             raise ValueError(
-                f"wbc.arm_swivel_weight must be non-negative, got {self.arm_swivel_weight}"
+                "wbc.left_sew_target_deg must be finite, "
+                f"got {self.left_sew_target_deg}"
             )
-        if not 0.0 <= self.arm_swivel_max_step_deg <= 180.0:
+        if not isfinite(self.right_sew_target_deg):
             raise ValueError(
-                "wbc.arm_swivel_max_step_deg must be within [0, 180], "
-                f"got {self.arm_swivel_max_step_deg}"
+                "wbc.right_sew_target_deg must be finite, "
+                f"got {self.right_sew_target_deg}"
             )
 
     @property
     def interval(self) -> float:
         return 1.0 / self.hz
+
+    @property
+    def left_sew_target_rad(self) -> float:
+        return radians(self.left_sew_target_deg)
+
+    @property
+    def right_sew_target_rad(self) -> float:
+        return radians(self.right_sew_target_deg)
 
     @classmethod
     def from_mapping(
@@ -43,9 +53,9 @@ class WBCConfig(BaseConfig):
 
         return cls(
             hz=float(section["hz"]),
+            left_sew_target_deg=float(section["left_sew_target_deg"]),
+            right_sew_target_deg=float(section["right_sew_target_deg"]),
             dds=DDSConfig.from_mapping(data),
-            arm_swivel_weight=float(section.get("arm_swivel_weight", 4.0)),
-            arm_swivel_max_step_deg=float(section.get("arm_swivel_max_step_deg", 15.0)),
         )
 
 

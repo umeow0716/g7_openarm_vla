@@ -23,10 +23,7 @@ class Node:
         self.ik_solver = (
             None
             if general_config.control_mode is ControlMode.BASE_ONLY
-            else G7OpenArmIKSolver(
-                arm_swivel_weight=config.arm_swivel_weight,
-                arm_swivel_max_step_deg=config.arm_swivel_max_step_deg,
-            )
+            else G7OpenArmIKSolver()
         )
 
         self.lowstate: LowState_ | None = None

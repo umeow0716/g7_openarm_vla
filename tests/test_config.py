@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from g7_openarm_config import ControlMode, DDSConfig, GeneralConfig, parse_bool
@@ -100,17 +101,24 @@ def test_hardware_config_rejects_invalid_motor_mapping() -> None:
         HardwareConfig.from_mapping(data)
 
 
-def test_wbc_config_arm_swivel_defaults_and_validation() -> None:
+def test_wbc_config_only_contains_wbc_settings() -> None:
     from g7_openarm_wbc.config import WBCConfig
 
     data = {
         "dds": {"domain_id": 0, "interface": "lo"},
-        "wbc": {"hz": 200.0},
+        "wbc": {
+            "hz": 200.0,
+            "left_sew_target_deg": 30.0,
+            "right_sew_target_deg": -30.0,
+        },
     }
     config = WBCConfig.from_mapping(data)
-    assert config.arm_swivel_weight == 4.0
-    assert config.arm_swivel_max_step_deg == 15.0
+    assert config.hz == 200.0
+    assert config.left_sew_target_deg == 30.0
+    assert config.right_sew_target_deg == -30.0
+    assert config.left_sew_target_rad == pytest.approx(np.pi / 6.0)
+    assert config.right_sew_target_rad == pytest.approx(-np.pi / 6.0)
 
-    data["wbc"]["arm_swivel_weight"] = -1.0
-    with pytest.raises(ValueError, match="arm_swivel_weight"):
+    data["wbc"]["hz"] = 0.0
+    with pytest.raises(ValueError, match=r"wbc\.hz"):
         WBCConfig.from_mapping(data)
