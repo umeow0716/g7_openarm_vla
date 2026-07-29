@@ -7,6 +7,12 @@ import numpy.typing as npt
 from g7_openarm_config import general_config
 from g7_openarm_pinnzoo import PinnZooModel, kinematics, kinematics_jacobian
 
+from .arm_angle import (
+    ArmSide,
+    arm_swivel_direction_body,
+    arm_swivel_kinematics,
+    preferred_swivel_point_position,
+)
 from .control_layout import control_size
 from .utils import ori_err_quat, quat_jac_to_ori_err_jac
 
@@ -95,13 +101,31 @@ class G7OpenArmIKSolver:
         lib_path: str | None = None,
         *,
         base_enabled: bool | None = None,
+        arm_swivel_weight: float = 4.0,
+        arm_swivel_max_step_deg: float = 15.0,
     ) -> None:
         self.model = PinnZooModel(lib_path)
         self.base_enabled = general_config.base_enabled if base_enabled is None else base_enabled
         self.nu = control_size(base_enabled=self.base_enabled)
 
+        if arm_swivel_weight < 0.0:
+            raise ValueError(f"arm_swivel_weight must be non-negative, got {arm_swivel_weight}")
+        if not 0.0 <= arm_swivel_max_step_deg <= 180.0:
+            raise ValueError(
+                "arm_swivel_max_step_deg must be within [0, 180], "
+                f"got {arm_swivel_max_step_deg}"
+            )
+
         self.Q_hand_pos = 200.0
         self.Q_hand_ori = 0.5
+        self.Q_arm_swivel = arm_swivel_weight
+        self.max_arm_swivel_step = np.deg2rad(arm_swivel_max_step_deg)
+        self.arm_swivel_reference_update_rate = 0.05
+        self.arm_swivel_reference_update_position_error = 0.02
+        self.arm_swivel_reference_body: dict[ArmSide, npt.NDArray[np.float64] | None] = {
+            "left": None,
+            "right": None,
+        }
 
         self.R_du_base = np.diag(
             [
@@ -248,6 +272,97 @@ class G7OpenArmIKSolver:
 
         return l, lx, lxx
 
+    def _add_arm_swivel_cost_for_side(
+        self,
+        lx: npt.NDArray[np.float64],
+        lxx: npt.NDArray[np.float64],
+        x_lib: npt.NDArray[np.float64],
+        state_position: npt.NDArray[np.float64],
+        target_position: npt.NDArray[np.float64],
+        *,
+        side: ArmSide,
+        q_slice: slice,
+        control_offset: int,
+    ) -> None:
+        arm = arm_swivel_kinematics(
+            x_lib[:3],
+            x_lib[3:7],
+            x_lib[q_slice],
+            side=side,
+        )
+        current_direction_body = arm_swivel_direction_body(
+            arm,
+            state_position,
+            x_lib[3:7],
+        )
+        reference_body = self.arm_swivel_reference_body[side]
+        if reference_body is None and current_direction_body is not None:
+            reference_body = current_direction_body.copy()
+
+        position_error = float(np.linalg.norm(target_position - state_position))
+        if (
+            reference_body is not None
+            and current_direction_body is not None
+            and position_error <= self.arm_swivel_reference_update_position_error
+        ):
+            update_rate = self.arm_swivel_reference_update_rate
+            blended = (1.0 - update_rate) * reference_body + update_rate * current_direction_body
+            blended_norm = float(np.linalg.norm(blended))
+            if blended_norm >= 1.0e-9:
+                reference_body = blended / blended_norm
+
+        self.arm_swivel_reference_body[side] = reference_body
+        swivel_target = preferred_swivel_point_position(
+            arm,
+            target_position,
+            x_lib[3:7],
+            side=side,
+            max_swivel_step=self.max_arm_swivel_step,
+            preferred_direction_body=reference_body,
+        )
+
+        swivel_error = swivel_target - arm.swivel_point_position
+        error_jacobian = -arm.jacobian
+        control_slice = slice(control_offset, control_offset + 4)
+
+        lx[control_slice] += self.Q_arm_swivel * (error_jacobian.T @ swivel_error)
+        lxx[control_slice, control_slice] += self.Q_arm_swivel * (
+            error_jacobian.T @ error_jacobian
+        )
+
+    def add_arm_swivel_cost(
+        self,
+        lx: npt.NDArray[np.float64],
+        lxx: npt.NDArray[np.float64],
+        x_lib: npt.NDArray[np.float64],
+        state: TaskState,
+        target: TaskState,
+    ) -> None:
+        if self.Q_arm_swivel == 0.0 or self.max_arm_swivel_step == 0.0:
+            return
+
+        arm_control_offset = 3 if self.base_enabled else 0
+        self._add_arm_swivel_cost_for_side(
+            lx,
+            lxx,
+            x_lib,
+            state.left_pose.pos,
+            target.left_pose.pos,
+            side="left",
+            q_slice=slice(15, 19),
+            control_offset=arm_control_offset,
+        )
+        self._add_arm_swivel_cost_for_side(
+            lx,
+            lxx,
+            x_lib,
+            state.right_pose.pos,
+            target.right_pose.pos,
+            side="right",
+            q_slice=slice(24, 28),
+            control_offset=arm_control_offset + 7,
+        )
+
     def task_state_from_x_lib(self, x_lib: npt.NDArray[np.float64]):
         kin = kinematics(self.model, x_lib)
         return TaskState(
@@ -299,6 +414,13 @@ class G7OpenArmIKSolver:
             target=task_target,
             task_evaluation=task_eval,
             Jkin=Jkin,
+        )
+        self.add_arm_swivel_cost(
+            lx=lx,
+            lxx=lxx,
+            x_lib=x_lib,
+            state=state,
+            target=task_target,
         )
 
         H = 0.01 * lxx + self.R_u

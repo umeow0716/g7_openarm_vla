@@ -31,6 +31,8 @@ hz = 200.0
 
 [wbc]
 hz = 200.0
+arm_swivel_weight = 4.0
+arm_swivel_max_step_deg = 15.0
 
 [mujoco]
 hz = 500.0

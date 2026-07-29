@@ -11,10 +11,22 @@ from g7_openarm_config import BaseConfig, DDSConfig
 class WBCConfig(BaseConfig):
     hz: float
     dds: DDSConfig
+    arm_swivel_weight: float
+    arm_swivel_max_step_deg: float
 
     def __post_init__(self) -> None:
         if self.hz <= 0.0:
             raise ValueError(f"wbc.hz must be positive, got {self.hz}")
+        if self.arm_swivel_weight < 0.0:
+            raise ValueError(
+                "wbc.arm_swivel_weight must be non-negative, "
+                f"got {self.arm_swivel_weight}"
+            )
+        if not 0.0 <= self.arm_swivel_max_step_deg <= 180.0:
+            raise ValueError(
+                "wbc.arm_swivel_max_step_deg must be within [0, 180], "
+                f"got {self.arm_swivel_max_step_deg}"
+            )
 
     @property
     def interval(self) -> float:
@@ -33,6 +45,8 @@ class WBCConfig(BaseConfig):
         return cls(
             hz=float(section["hz"]),
             dds=DDSConfig.from_mapping(data),
+            arm_swivel_weight=float(section.get("arm_swivel_weight", 4.0)),
+            arm_swivel_max_step_deg=float(section.get("arm_swivel_max_step_deg", 15.0)),
         )
 
 

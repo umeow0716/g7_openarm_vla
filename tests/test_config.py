@@ -98,3 +98,19 @@ def test_hardware_config_rejects_invalid_motor_mapping() -> None:
 
     with pytest.raises(ValueError, match="permutation"):
         HardwareConfig.from_mapping(data)
+
+
+def test_wbc_config_arm_swivel_defaults_and_validation() -> None:
+    from g7_openarm_wbc.config import WBCConfig
+
+    data = {
+        "dds": {"domain_id": 0, "interface": "lo"},
+        "wbc": {"hz": 200.0},
+    }
+    config = WBCConfig.from_mapping(data)
+    assert config.arm_swivel_weight == 4.0
+    assert config.arm_swivel_max_step_deg == 15.0
+
+    data["wbc"]["arm_swivel_weight"] = -1.0
+    with pytest.raises(ValueError, match="arm_swivel_weight"):
+        WBCConfig.from_mapping(data)
