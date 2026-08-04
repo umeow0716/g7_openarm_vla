@@ -7,7 +7,14 @@ import numpy as np
 import numpy.typing as npt
 
 from g7_openarm_pinnzoo import PinnZooModel, inverse_dynamics, mass_matrix
-from g7_openarm_utils import quat_to_rotation_matrix
+from g7_openarm_utils import (
+    ARM_MOTOR16_INDICES,
+    ARM_POSITION_LOWER_RAD,
+    ARM_POSITION_UPPER_RAD,
+    ARM_VELOCITY_LIMIT_RAD_S,
+    position_limited_velocity_bounds,
+    quat_to_rotation_matrix,
+)
 
 from .config import config
 
@@ -257,7 +264,7 @@ class Controller:
         tau_ff = self.compute_gravity_friction_ff(
             x=x,
             odom=odom,
-            openarm_cmd=openarm_cmd,
+            dq_des=dq_des,
         )
 
         return steer_pos_des, wheel_vel_des, q_des, dq_des, Kp, Kd, tau_ff
@@ -398,6 +405,18 @@ class Controller:
             self._q_des_16 = q_meas.copy()
             self._q_des_need_init = False
 
+        arm_q_meas = q_meas[ARM_MOTOR16_INDICES]
+        arm_dq_lower, arm_dq_upper = position_limited_velocity_bounds(
+            arm_q_meas,
+            ARM_VELOCITY_LIMIT_RAD_S,
+            dt,
+        )
+        dq_des[ARM_MOTOR16_INDICES] = np.clip(
+            dq_des[ARM_MOTOR16_INDICES],
+            arm_dq_lower,
+            arm_dq_upper,
+        )
+
         M = mass_matrix(self.model, x)
         M_diag = np.diag(M)
         Kp = self._to_motor16(self.compute_arm_kp(M_diag, omega=self.config.arm_pd_omega))
@@ -432,6 +451,17 @@ class Controller:
             )
 
         q_des_raw = self._q_des_16 + dq_des * dt
+        q_des_raw[ARM_MOTOR16_INDICES] = np.clip(
+            q_des_raw[ARM_MOTOR16_INDICES],
+            ARM_POSITION_LOWER_RAD,
+            ARM_POSITION_UPPER_RAD,
+        )
+
+        # Apply the anti-divergence lead bound after clipping the integrated
+        # target. For a joint measured inside its valid range, this guarantees
+        # q_des also remains inside the range. If feedback is already outside
+        # the range, q_des moves inward gradually instead of causing a large
+        # one-tick position error and P-torque spike.
         q_des = q_meas + np.clip(q_des_raw - q_meas, -max_lead, max_lead)
 
         for idx in self._gripper_idx_16:
@@ -448,7 +478,7 @@ class Controller:
         self,
         x: npt.NDArray[np.float64],
         odom: Odom,
-        openarm_cmd: OpenArmCmd,
+        dq_des: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
         vdot = np.concatenate(
             [
@@ -468,8 +498,8 @@ class Controller:
 
         tau_ff_16 = self._to_motor16(tau_ff)
 
-        want_move = np.abs(openarm_cmd.data) > 4e-2
-        tau_ff_16 = tau_ff_16 + self.config.tau_static * want_move * np.sign(openarm_cmd.data)
+        want_move = np.abs(dq_des) > 4e-2
+        tau_ff_16 = tau_ff_16 + self.config.tau_static * want_move * np.sign(dq_des)
 
         tau_ff_16 = np.clip(
             tau_ff_16,

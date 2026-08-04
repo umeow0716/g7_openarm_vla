@@ -6,6 +6,11 @@ import numpy.typing as npt
 
 from g7_openarm_config import general_config
 from g7_openarm_pinnzoo import PinnZooModel, kinematics, kinematics_jacobian
+from g7_openarm_utils import (
+    ARM_LOWSTATE_MOTOR_INDICES,
+    ARM_VELOCITY_LIMIT_RAD_S,
+    position_limited_velocity_bounds,
+)
 
 from .config import config
 from .control_layout import control_size
@@ -101,7 +106,6 @@ class G7OpenArmIKSolver:
         self.base_enabled = general_config.base_enabled if base_enabled is None else base_enabled
         self.nu = control_size(base_enabled=self.base_enabled)
 
-
         self.Q_hand_pos = 200.0
         self.Q_hand_ori = 0.5
         self.R_du_base = np.diag(
@@ -138,6 +142,7 @@ class G7OpenArmIKSolver:
             ],
             dtype=np.float64,
         )
+        u_max_full[3:] = np.minimum(u_max_full[3:], ARM_VELOCITY_LIMIT_RAD_S)
         self.u_max = u_max_full if self.base_enabled else u_max_full[3:]
 
         self.damping = 1e-4
@@ -314,6 +319,22 @@ class G7OpenArmIKSolver:
         u = -np.linalg.solve(H, g)
 
         u = np.clip(u, -self.u_max, self.u_max)
+
+        arm_slice = slice(3, None) if self.base_enabled else slice(None)
+        arm_position = np.array(
+            [lowstate.motor_state[i].q for i in ARM_LOWSTATE_MOTOR_INDICES],
+            dtype=np.float64,
+        )
+        arm_velocity_lower, arm_velocity_upper = position_limited_velocity_bounds(
+            arm_position,
+            self.u_max[arm_slice],
+            config.interval,
+        )
+        u[arm_slice] = np.clip(
+            u[arm_slice],
+            arm_velocity_lower,
+            arm_velocity_upper,
+        )
 
         if self.base_enabled:
             self.prev_u_base = u[:3].copy()
