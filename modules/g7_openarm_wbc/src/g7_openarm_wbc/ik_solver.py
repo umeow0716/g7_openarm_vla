@@ -9,7 +9,6 @@ from g7_openarm_pinnzoo import PinnZooModel, kinematics, kinematics_jacobian
 
 from .config import config
 from .control_layout import control_size
-from .stereographic_sew import openarm_sew_cost_derivatives
 from .utils import ori_err_quat, quat_jac_to_ori_err_jac
 
 if TYPE_CHECKING:
@@ -105,9 +104,6 @@ class G7OpenArmIKSolver:
 
         self.Q_hand_pos = 200.0
         self.Q_hand_ori = 0.5
-        self.Q_sew = 4.0
-        self.left_sew_target = config.left_sew_target_rad
-        self.right_sew_target = config.right_sew_target_rad
         self.R_du_base = np.diag(
             [
                 8.0,
@@ -209,7 +205,7 @@ class G7OpenArmIKSolver:
         task_evaluation: TaskEvaluation,
         Jkin: npt.NDArray[np.float64],
     ) -> tuple[
-        npt.NDArray[np.float64],
+        float,
         npt.NDArray[np.float64],
         npt.NDArray[np.float64],
     ]:
@@ -252,24 +248,6 @@ class G7OpenArmIKSolver:
         lxx += self.Q_hand_ori * (Je_right_ori.T @ Je_right_ori)
 
         return l, lx, lxx
-
-    def sew_cost_deriv(
-        self,
-        x_lib: npt.NDArray[np.float64],
-    ) -> tuple[
-        float,
-        npt.NDArray[np.float64],
-        npt.NDArray[np.float64],
-    ]:
-        """Return stereographic SEW cost and its Gauss-Newton derivatives."""
-        return openarm_sew_cost_derivatives(
-            x_lib[15:22],
-            x_lib[24:31],
-            left_target=self.left_sew_target,
-            right_target=self.right_sew_target,
-            weight=self.Q_sew,
-            base_enabled=self.base_enabled,
-        )
 
     def task_state_from_x_lib(self, x_lib: npt.NDArray[np.float64]):
         kin = kinematics(self.model, x_lib)
@@ -323,9 +301,6 @@ class G7OpenArmIKSolver:
             task_evaluation=task_eval,
             Jkin=Jkin,
         )
-        _, sew_lx, sew_lxx = self.sew_cost_deriv(x_lib)
-        lx += sew_lx
-        lxx += sew_lxx
 
         H = 0.01 * lxx + self.R_u
         g = 0.1 * lx

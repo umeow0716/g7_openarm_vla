@@ -108,16 +108,10 @@ def test_wbc_config_only_contains_wbc_settings() -> None:
         "dds": {"domain_id": 0, "interface": "lo"},
         "wbc": {
             "hz": 200.0,
-            "left_sew_target_deg": 30.0,
-            "right_sew_target_deg": -30.0,
         },
     }
     config = WBCConfig.from_mapping(data)
     assert config.hz == 200.0
-    assert config.left_sew_target_deg == 30.0
-    assert config.right_sew_target_deg == -30.0
-    assert config.left_sew_target_rad == pytest.approx(np.pi / 6.0)
-    assert config.right_sew_target_rad == pytest.approx(-np.pi / 6.0)
 
     data["wbc"]["hz"] = 0.0
     with pytest.raises(ValueError, match=r"wbc\.hz"):

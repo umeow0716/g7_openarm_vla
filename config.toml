@@ -31,8 +31,6 @@ hz = 200.0
 
 [wbc]
 hz = 200.0
-left_sew_target_deg = 0.0
-right_sew_target_deg = 0.0
 
 [mujoco]
 hz = 500.0
