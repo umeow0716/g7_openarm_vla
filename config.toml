@@ -1,6 +1,6 @@
 [general]
 debugging = false
-control_mode = "arm-only" # wbc or arm-only or base-only
+control_mode = "wbc" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
 
 [dds]
 domain_id = 0

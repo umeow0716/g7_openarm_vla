@@ -58,6 +58,32 @@ def test_control_mode_is_general_and_strict_but_normalized() -> None:
         GeneralConfig.from_mapping(data)
 
 
+@pytest.mark.parametrize(
+    ("mode", "base_enabled", "base_actuation_enabled"),
+    [
+        ("wbc", True, True),
+        ("arm-only", False, True),
+        ("base-only", False, True),
+        ("left-arm", True, True),
+        ("right-arm", True, True),
+        ("left-arm-only", False, False),
+        ("right-arm-only", False, False),
+    ],
+)
+def test_control_mode_base_semantics(
+    mode: str,
+    base_enabled: bool,
+    base_actuation_enabled: bool,
+) -> None:
+    config = GeneralConfig.from_mapping(
+        {"general": {"debugging": False, "control_mode": mode}}
+    )
+
+    assert config.base_enabled is base_enabled
+    assert config.base_actuation_enabled is base_actuation_enabled
+    assert config.arm_actuation_enabled is (mode != "base-only")
+
+
 def test_lowlevel_config_only_contains_lowlevel_settings() -> None:
     data = {
         "dds": {"domain_id": 0, "interface": "lo"},

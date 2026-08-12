@@ -13,6 +13,10 @@ class ControlMode(StrEnum):
     WBC = "wbc"
     ARM_ONLY = "arm-only"
     BASE_ONLY = "base-only"
+    LEFT_ARM = "left-arm"
+    RIGHT_ARM = "right-arm"
+    LEFT_ARM_ONLY = "left-arm-only"
+    RIGHT_ARM_ONLY = "right-arm-only"
 
     @classmethod
     def parse(cls, value: Any) -> ControlMode:
@@ -44,12 +48,20 @@ class GeneralConfig(BaseConfig):
 
     @property
     def base_enabled(self) -> bool:
-        return self.control_mode is ControlMode.WBC
+        """Whether the WBC optimization may use base velocity DOFs."""
+        return self.control_mode in (
+            ControlMode.WBC,
+            ControlMode.LEFT_ARM,
+            ControlMode.RIGHT_ARM,
+        )
 
     @property
     def base_actuation_enabled(self) -> bool:
         """Whether base CAN and low-level base motor output must be active."""
-        return self.control_mode in (ControlMode.WBC, ControlMode.ARM_ONLY, ControlMode.BASE_ONLY)
+        return self.control_mode not in (
+            ControlMode.LEFT_ARM_ONLY,
+            ControlMode.RIGHT_ARM_ONLY,
+        )
 
     @property
     def arm_actuation_enabled(self) -> bool:

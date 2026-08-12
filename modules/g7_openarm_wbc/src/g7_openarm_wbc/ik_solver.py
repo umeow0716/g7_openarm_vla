@@ -13,7 +13,7 @@ from g7_openarm_utils import (
 )
 
 from .config import config
-from .control_layout import control_size
+from .control_layout import control_size, tracked_arms, zero_inactive_arm_controls
 from .utils import ori_err_quat, quat_jac_to_ori_err_jac
 
 if TYPE_CHECKING:
@@ -103,7 +103,9 @@ class G7OpenArmIKSolver:
         base_enabled: bool | None = None,
     ) -> None:
         self.model = PinnZooModel(lib_path)
+        self.control_mode = general_config.control_mode
         self.base_enabled = general_config.base_enabled if base_enabled is None else base_enabled
+        self.track_left, self.track_right = tracked_arms(self.control_mode)
         self.nu = control_size(base_enabled=self.base_enabled)
 
         self.Q_hand_pos = 200.0
@@ -175,11 +177,26 @@ class G7OpenArmIKSolver:
         state: TaskState,
         target: TaskState,
     ) -> TaskEvaluation:
-        left_pos_err = target.left_pose.pos - state.left_pose.pos
-        right_pos_err = target.right_pose.pos - state.right_pose.pos
-
-        left_ori_err = ori_err_quat(state.left_pose.quat, target.left_pose.quat)
-        right_ori_err = ori_err_quat(state.right_pose.quat, target.right_pose.quat)
+        left_pos_err = (
+            target.left_pose.pos - state.left_pose.pos
+            if self.track_left
+            else np.zeros(3, dtype=np.float64)
+        )
+        left_ori_err = (
+            ori_err_quat(state.left_pose.quat, target.left_pose.quat)
+            if self.track_left
+            else np.zeros(3, dtype=np.float64)
+        )
+        right_pos_err = (
+            target.right_pose.pos - state.right_pose.pos
+            if self.track_right
+            else np.zeros(3, dtype=np.float64)
+        )
+        right_ori_err = (
+            ori_err_quat(state.right_pose.quat, target.right_pose.quat)
+            if self.track_right
+            else np.zeros(3, dtype=np.float64)
+        )
 
         return TaskEvaluation(
             left_pos_err=left_pos_err,
@@ -192,16 +209,24 @@ class G7OpenArmIKSolver:
         self,
         task_evaluation: TaskEvaluation,
     ) -> float:
-        return float(
-            0.5 * self.Q_hand_pos * (task_evaluation.left_pos_err @ task_evaluation.left_pos_err)
-            + 0.5 * self.Q_hand_ori * (task_evaluation.left_ori_err @ task_evaluation.left_ori_err)
-            + 0.5
-            * self.Q_hand_pos
-            * (task_evaluation.right_pos_err @ task_evaluation.right_pos_err)
-            + 0.5
-            * self.Q_hand_ori
-            * (task_evaluation.right_ori_err @ task_evaluation.right_ori_err)
-        )
+        cost = 0.0
+        if self.track_left:
+            cost += 0.5 * self.Q_hand_pos * (
+                task_evaluation.left_pos_err @ task_evaluation.left_pos_err
+            )
+            cost += 0.5 * self.Q_hand_ori * (
+                task_evaluation.left_ori_err @ task_evaluation.left_ori_err
+            )
+
+        if self.track_right:
+            cost += 0.5 * self.Q_hand_pos * (
+                task_evaluation.right_pos_err @ task_evaluation.right_pos_err
+            )
+            cost += 0.5 * self.Q_hand_ori * (
+                task_evaluation.right_ori_err @ task_evaluation.right_ori_err
+            )
+
+        return float(cost)
 
     def state_cost_deriv(
         self,
@@ -214,43 +239,42 @@ class G7OpenArmIKSolver:
         npt.NDArray[np.float64],
         npt.NDArray[np.float64],
     ]:
-        Jp_left = Jkin[0:3, :]
-        Jq_left = Jkin[3:7, :]
-        Jp_right = Jkin[7:10, :]
-        Jq_right = Jkin[10:14, :]
-
-        _, Jr_left = quat_jac_to_ori_err_jac(
-            Jq=Jq_left,
-            state_quat=state.left_pose.quat,
-            target_quat=target.left_pose.quat,
-        )
-        _, Jr_right = quat_jac_to_ori_err_jac(
-            Jq=Jq_right,
-            state_quat=state.right_pose.quat,
-            target_quat=target.right_pose.quat,
-        )
-
-        Je_left_pos = -Jp_left
-        Je_right_pos = -Jp_right
-        Je_left_ori = Jr_left
-        Je_right_ori = Jr_right
-
         l = self.state_cost(task_evaluation)
 
         lx = np.zeros(self.nu, dtype=np.float64)
         lxx = np.zeros((self.nu, self.nu), dtype=np.float64)
 
-        lx += self.Q_hand_pos * (Je_left_pos.T @ task_evaluation.left_pos_err)
-        lxx += self.Q_hand_pos * (Je_left_pos.T @ Je_left_pos)
+        if self.track_left:
+            Jp_left = Jkin[0:3, :]
+            Jq_left = Jkin[3:7, :]
+            _, Jr_left = quat_jac_to_ori_err_jac(
+                Jq=Jq_left,
+                state_quat=state.left_pose.quat,
+                target_quat=target.left_pose.quat,
+            )
+            Je_left_pos = -Jp_left
 
-        lx += self.Q_hand_ori * (Je_left_ori.T @ task_evaluation.left_ori_err)
-        lxx += self.Q_hand_ori * (Je_left_ori.T @ Je_left_ori)
+            lx += self.Q_hand_pos * (Je_left_pos.T @ task_evaluation.left_pos_err)
+            lxx += self.Q_hand_pos * (Je_left_pos.T @ Je_left_pos)
 
-        lx += self.Q_hand_pos * (Je_right_pos.T @ task_evaluation.right_pos_err)
-        lxx += self.Q_hand_pos * (Je_right_pos.T @ Je_right_pos)
+            lx += self.Q_hand_ori * (Jr_left.T @ task_evaluation.left_ori_err)
+            lxx += self.Q_hand_ori * (Jr_left.T @ Jr_left)
 
-        lx += self.Q_hand_ori * (Je_right_ori.T @ task_evaluation.right_ori_err)
-        lxx += self.Q_hand_ori * (Je_right_ori.T @ Je_right_ori)
+        if self.track_right:
+            Jp_right = Jkin[7:10, :]
+            Jq_right = Jkin[10:14, :]
+            _, Jr_right = quat_jac_to_ori_err_jac(
+                Jq=Jq_right,
+                state_quat=state.right_pose.quat,
+                target_quat=target.right_pose.quat,
+            )
+            Je_right_pos = -Jp_right
+
+            lx += self.Q_hand_pos * (Je_right_pos.T @ task_evaluation.right_pos_err)
+            lxx += self.Q_hand_pos * (Je_right_pos.T @ Je_right_pos)
+
+            lx += self.Q_hand_ori * (Jr_right.T @ task_evaluation.right_ori_err)
+            lxx += self.Q_hand_ori * (Jr_right.T @ Jr_right)
 
         return l, lx, lxx
 
@@ -319,6 +343,12 @@ class G7OpenArmIKSolver:
         u = -np.linalg.solve(H, g)
 
         u = np.clip(u, -self.u_max, self.u_max)
+        zero_inactive_arm_controls(
+            u,
+            base_enabled=self.base_enabled,
+            track_left=self.track_left,
+            track_right=self.track_right,
+        )
 
         arm_slice = slice(3, None) if self.base_enabled else slice(None)
         arm_position = np.array(
