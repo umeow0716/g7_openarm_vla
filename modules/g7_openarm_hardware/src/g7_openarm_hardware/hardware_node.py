@@ -18,6 +18,12 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_, LowCmd_, LowState_
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
 from g7_openarm_config import general_config
+from g7_openarm_utils import (
+    gripper_command_to_motor_position,
+    gripper_command_velocity_to_motor_velocity,
+    gripper_motor_position_to_command,
+    gripper_motor_velocity_to_command_velocity,
+)
 
 from .config import config
 
@@ -83,12 +89,18 @@ def build_bus_configs(*, base_enabled: bool, arms_enabled: bool = True) -> dict[
 
 
 def mapping_gripper(val: float, open_val: float, close_val: float) -> float:
-    return (close_val - open_val) * val / 0.45 + open_val
+    return gripper_command_to_motor_position(
+        val,
+        open_position=open_val,
+        close_position=close_val,
+    )
 
 
 class HardwareNode:
     def __init__(self) -> None:
         self.base_enabled = general_config.base_actuation_enabled
+        self.left_arm_command_enabled = general_config.left_arm_actuation_enabled
+        self.right_arm_command_enabled = general_config.right_arm_actuation_enabled
         self.arms_enabled = general_config.arm_actuation_enabled
         self.bus_configs = build_bus_configs(
             base_enabled=self.base_enabled,
@@ -116,6 +128,17 @@ class HardwareNode:
                 f"Control mode {general_config.control_mode.value}: skipping "
                 f"{config.left_arm_can} and {config.right_arm_can}"
             )
+        else:
+            if not self.left_arm_command_enabled:
+                print(
+                    f"Control mode {general_config.control_mode.value}: "
+                    f"{config.left_arm_can} is state-only (no MIT commands)"
+                )
+            if not self.right_arm_command_enabled:
+                print(
+                    f"Control mode {general_config.control_mode.value}: "
+                    f"{config.right_arm_can} is state-only (no MIT commands)"
+                )
 
         self.group.enable_all()
 
@@ -198,6 +221,22 @@ class HardwareNode:
             left_arm = self.group.get_openarm(config.left_arm_can)
             left_arm.flush_rx()
             for i, motor in enumerate(left_arm.get_arm().get_motors()):
+                if i == 7:
+                    self.lowstate.motor_state[15].q = gripper_motor_position_to_command(
+                        motor.get_position(),
+                        open_position=config.left_gripper_open,
+                        close_position=config.left_gripper_close,
+                    )
+                    self.lowstate.motor_state[15].dq = (
+                        gripper_motor_velocity_to_command_velocity(
+                            motor.get_velocity(),
+                            open_position=config.left_gripper_open,
+                            close_position=config.left_gripper_close,
+                        )
+                    )
+                    self.lowstate.motor_state[15].tau_est = motor.get_torque()
+                    continue
+
                 self.lowstate.motor_state[8 + i].q = (
                     motor.get_position() * config.left_arm_direction[i]
                 )
@@ -211,6 +250,22 @@ class HardwareNode:
             right_arm = self.group.get_openarm(config.right_arm_can)
             right_arm.flush_rx()
             for i, motor in enumerate(right_arm.get_arm().get_motors()):
+                if i == 7:
+                    self.lowstate.motor_state[23].q = gripper_motor_position_to_command(
+                        motor.get_position(),
+                        open_position=config.right_gripper_open,
+                        close_position=config.right_gripper_close,
+                    )
+                    self.lowstate.motor_state[23].dq = (
+                        gripper_motor_velocity_to_command_velocity(
+                            motor.get_velocity(),
+                            open_position=config.right_gripper_open,
+                            close_position=config.right_gripper_close,
+                        )
+                    )
+                    self.lowstate.motor_state[23].tau_est = motor.get_torque()
+                    continue
+
                 self.lowstate.motor_state[16 + i].q = (
                     motor.get_position() * config.right_arm_direction[i]
                 )
@@ -226,7 +281,7 @@ class HardwareNode:
         if self.base_enabled:
             self._write_base_command()
 
-        if self.arms_enabled:
+        if self.left_arm_command_enabled:
             left_cmds = [
                 oa.MITParam(
                     q=self.lowcmd.motor_cmd[8 + i].q * config.left_arm_direction[i],
@@ -237,6 +292,24 @@ class HardwareNode:
                 )
                 for i in range(8)
             ]
+            left_cmds[7] = oa.MITParam(
+                q=mapping_gripper(
+                    self.lowcmd.motor_cmd[15].q,
+                    config.left_gripper_open,
+                    config.left_gripper_close,
+                ),
+                dq=gripper_command_velocity_to_motor_velocity(
+                    self.lowcmd.motor_cmd[15].dq,
+                    open_position=config.left_gripper_open,
+                    close_position=config.left_gripper_close,
+                ),
+                kp=self.lowcmd.motor_cmd[15].kp,
+                kd=self.lowcmd.motor_cmd[15].kd,
+                tau=self.lowcmd.motor_cmd[15].tau,
+            )
+            left_arm.get_arm().mit_control_all(left_cmds)
+
+        if self.right_arm_command_enabled:
             right_cmds = [
                 oa.MITParam(
                     q=self.lowcmd.motor_cmd[16 + i].q * config.right_arm_direction[i],
@@ -247,30 +320,21 @@ class HardwareNode:
                 )
                 for i in range(8)
             ]
-            left_cmds[7] = oa.MITParam(
-                q=mapping_gripper(
-                    self.lowcmd.motor_cmd[15].q,
-                    config.left_gripper_open,
-                    config.left_gripper_close,
-                ),
-                dq=0.0,
-                kp=self.lowcmd.motor_cmd[15].kp,
-                kd=self.lowcmd.motor_cmd[15].kd,
-                tau=self.lowcmd.motor_cmd[15].tau,
-            )
             right_cmds[7] = oa.MITParam(
                 q=mapping_gripper(
                     self.lowcmd.motor_cmd[23].q,
                     config.right_gripper_open,
                     config.right_gripper_close,
                 ),
-                dq=0.0,
+                dq=gripper_command_velocity_to_motor_velocity(
+                    self.lowcmd.motor_cmd[23].dq,
+                    open_position=config.right_gripper_open,
+                    close_position=config.right_gripper_close,
+                ),
                 kp=self.lowcmd.motor_cmd[23].kp,
                 kd=self.lowcmd.motor_cmd[23].kd,
                 tau=self.lowcmd.motor_cmd[23].tau,
             )
-
-            left_arm.get_arm().mit_control_all(left_cmds)
             right_arm.get_arm().mit_control_all(right_cmds)
 
 

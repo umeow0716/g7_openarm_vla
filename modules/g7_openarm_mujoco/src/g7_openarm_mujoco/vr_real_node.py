@@ -14,6 +14,7 @@ from unitree_sdk2py.utils.thread import RecurrentThread
 from g7_openarm_idl import EETarget, Odom
 from g7_openarm_utils.idl import pose_to_array
 
+from .actuation import gripper_command_to_mujoco_position
 from .config import config
 from .resources import model_directory
 
@@ -148,8 +149,14 @@ class VRRealVisualizationNode:
             for index in range(7):
                 self.data.qpos[24 + index] = lowstate.motor_state[16 + index].q
 
-            self.data.qpos[22:24] = 0.0
-            self.data.qpos[31:33] = 0.0
+            left_gripper = gripper_command_to_mujoco_position(
+                lowstate.motor_state[15].q
+            )
+            right_gripper = gripper_command_to_mujoco_position(
+                lowstate.motor_state[23].q
+            )
+            self.data.qpos[22:24] = left_gripper
+            self.data.qpos[31:33] = right_gripper
             self.data.qvel[:] = 0.0
             self.data.qacc[:] = 0.0
             mujoco.mj_forward(self.model, self.data)

@@ -12,9 +12,12 @@ from unitree_sdk2py.core.channel import (
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 from unitree_sdk2py.utils.thread import RecurrentThread
 
+from g7_openarm_config import general_config
 from g7_openarm_idl import EETarget, EETarget_default, Odom
 
+from .actuation import gripper_command_to_mujoco_position
 from .config import config
+from .initial_pose import hand_poses_for_arm_position
 from .resources import model_directory
 
 
@@ -60,14 +63,24 @@ class RealVisualizationNode:
         self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
 
-        left_hand = self.data.body("L_gripper_tcp_link")
-        right_hand = self.data.body("R_gripper_tcp_link")
         self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
         self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
-        self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
-        self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
-        self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
-        self.data.mocap_quat[self.right_target_mocap_id] = right_hand.xquat.copy()
+        if general_config.lowlevel_initial_allowed:
+            left_pose, right_pose = hand_poses_for_arm_position(
+                self.model,
+                general_config.initial_pos,
+            )
+            self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]
+            self.data.mocap_quat[self.left_target_mocap_id] = left_pose[3:]
+            self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]
+            self.data.mocap_quat[self.right_target_mocap_id] = right_pose[3:]
+        else:
+            left_hand = self.data.body("L_gripper_tcp_link")
+            right_hand = self.data.body("R_gripper_tcp_link")
+            self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
+            self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
+            self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
+            self.data.mocap_quat[self.right_target_mocap_id] = right_hand.xquat.copy()
 
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
@@ -76,6 +89,9 @@ class RealVisualizationNode:
         self.lowstate: LowState_ | None = None
         self.odom: Odom | None = None
         self.eetarget = EETarget_default()
+        self.target_ready = (
+            general_config.lowlevel_initial_allowed or not general_config.arm_actuation_enabled
+        )
 
         self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
         self.eetarget_publisher.Init()
@@ -113,6 +129,9 @@ class RealVisualizationNode:
 
     def write_eetarget(self) -> None:
         with self.viewer.lock():
+            if not self.target_ready:
+                return
+
             left_position = self.data.mocap_pos[self.left_target_mocap_id]
             left_quaternion = self.data.mocap_quat[self.left_target_mocap_id]
             right_position = self.data.mocap_pos[self.right_target_mocap_id]
@@ -158,12 +177,26 @@ class RealVisualizationNode:
             for index in range(7):
                 self.data.qpos[24 + index] = lowstate.motor_state[16 + index].q
 
-            # Gripper visualization remains intentionally unchanged for now.
-            self.data.qpos[22:24] = 0.0
-            self.data.qpos[31:33] = 0.0
+            left_gripper = gripper_command_to_mujoco_position(
+                lowstate.motor_state[15].q
+            )
+            right_gripper = gripper_command_to_mujoco_position(
+                lowstate.motor_state[23].q
+            )
+            self.data.qpos[22:24] = left_gripper
+            self.data.qpos[31:33] = right_gripper
             self.data.qvel[:] = 0.0
             self.data.qacc[:] = 0.0
             mujoco.mj_forward(self.model, self.data)
+
+            if not self.target_ready:
+                left_hand = self.data.body("L_gripper_tcp_link")
+                right_hand = self.data.body("R_gripper_tcp_link")
+                self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
+                self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
+                self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
+                self.data.mocap_quat[self.right_target_mocap_id] = right_hand.xquat.copy()
+                self.target_ready = True
 
     def viewer_loop(self) -> None:
         with self.viewer.lock():

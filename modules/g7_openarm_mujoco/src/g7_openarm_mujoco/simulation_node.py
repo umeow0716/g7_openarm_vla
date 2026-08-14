@@ -17,9 +17,18 @@ from unitree_sdk2py.idl.default import (
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_, LowCmd_, LowState_
 from unitree_sdk2py.utils.thread import RecurrentThread
 
+from g7_openarm_config import general_config
 from g7_openarm_idl import EETarget, EETarget_default
 
+from .actuation import (
+    gripper_command_to_mujoco_position,
+    gripper_command_velocity_to_mujoco_velocity,
+    motor_actuation_enabled,
+    mujoco_gripper_position_to_command,
+    mujoco_gripper_velocity_to_command_velocity,
+)
 from .config import config
+from .initial_pose import hand_poses_for_arm_position
 from .resources import model_directory
 from .sensors import scalar_sensor_address, sensor_slice
 
@@ -66,14 +75,24 @@ class SimulationNode:
         self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
 
-        left_hand = self.data.body("L_gripper_tcp_link")
-        right_hand = self.data.body("R_gripper_tcp_link")
         self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
         self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
-        self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
-        self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
-        self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
-        self.data.mocap_quat[self.right_target_mocap_id] = right_hand.xquat.copy()
+        if general_config.lowlevel_initial_allowed:
+            left_pose, right_pose = hand_poses_for_arm_position(
+                self.model,
+                general_config.initial_pos,
+            )
+            self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]
+            self.data.mocap_quat[self.left_target_mocap_id] = left_pose[3:]
+            self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]
+            self.data.mocap_quat[self.right_target_mocap_id] = right_pose[3:]
+        else:
+            left_hand = self.data.body("L_gripper_tcp_link")
+            right_hand = self.data.body("R_gripper_tcp_link")
+            self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
+            self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
+            self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
+            self.data.mocap_quat[self.right_target_mocap_id] = right_hand.xquat.copy()
 
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
@@ -180,10 +199,20 @@ class SimulationNode:
     def write_lowstate(self) -> None:
         with self.viewer.lock():
             for index in range(len(self.motor_names)):
-                self.lowstate.motor_state[index].q = self.data.sensordata[self.pos_addresses[index]]
-                self.lowstate.motor_state[index].dq = self.data.sensordata[
-                    self.vel_addresses[index]
-                ]
+                position = self.data.sensordata[self.pos_addresses[index]]
+                velocity = self.data.sensordata[self.vel_addresses[index]]
+
+                if index in self.secondary_gripper_pos_addresses:
+                    self.lowstate.motor_state[index].q = mujoco_gripper_position_to_command(
+                        position
+                    )
+                    self.lowstate.motor_state[index].dq = (
+                        mujoco_gripper_velocity_to_command_velocity(velocity)
+                    )
+                else:
+                    self.lowstate.motor_state[index].q = position
+                    self.lowstate.motor_state[index].dq = velocity
+
                 self.lowstate.motor_state[index].tau_est = self.data.sensordata[
                     self.torque_addresses[index]
                 ]
@@ -234,12 +263,21 @@ class SimulationNode:
     def simulation_loop(self) -> None:
         with self.viewer.lock():
             for index in range(len(self.motor_names)):
+                if not motor_actuation_enabled(index, general_config):
+                    continue
+
                 position_address = self.pos_addresses[index]
                 velocity_address = self.vel_addresses[index]
                 motor_command = self.lowcmd.motor_cmd[index]
 
-                q_error = motor_command.q - self.data.sensordata[position_address]
-                dq_error = motor_command.dq - self.data.sensordata[velocity_address]
+                q_target = motor_command.q
+                dq_target = motor_command.dq
+                if index in self.secondary_gripper_pos_addresses:
+                    q_target = gripper_command_to_mujoco_position(q_target)
+                    dq_target = gripper_command_velocity_to_mujoco_velocity(dq_target)
+
+                q_error = q_target - self.data.sensordata[position_address]
+                dq_error = dq_target - self.data.sensordata[velocity_address]
 
                 actuator_index = index if index < 16 else index + 1
                 self.data.ctrl[actuator_index] = (
@@ -249,8 +287,8 @@ class SimulationNode:
                 secondary_position = self.secondary_gripper_pos_addresses.get(index)
                 if secondary_position is not None:
                     secondary_velocity = self.secondary_gripper_vel_addresses[index]
-                    q_error = motor_command.q - self.data.sensordata[secondary_position]
-                    dq_error = motor_command.dq - self.data.sensordata[secondary_velocity]
+                    q_error = q_target - self.data.sensordata[secondary_position]
+                    dq_error = dq_target - self.data.sensordata[secondary_velocity]
                     self.data.ctrl[actuator_index + 1] = (
                         q_error * motor_command.kp + dq_error * motor_command.kd + motor_command.tau
                     )

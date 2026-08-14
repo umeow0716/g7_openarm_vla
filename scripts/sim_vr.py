@@ -57,7 +57,7 @@ def run_mujoco() -> None:
 def run_lowlevel() -> None:
     from g7_openarm_lowlevel.lowlevel_node import main
 
-    run_silently(main, "lowlevel")
+    run_silently(lambda: main(initial=False), "lowlevel")
 
 
 def run_state_estimator() -> None:
