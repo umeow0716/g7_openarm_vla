@@ -1,6 +1,6 @@
 [general]
 debugging = false
-control_mode = "wbc" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
+control_mode = "left-arm" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
 initial_pos = [0.435, 0.0, 0.0, -0.525, 0.0, 0.0, 0.613]
 initial_gripper = 1.0 # normalized openness: 0.0=closed, 1.0=open
 
@@ -43,8 +43,13 @@ fps = 60.0
 [monitor]
 hz = 1.0
 
-[hommi_interface]
-hz = 50.0 # EEtarget
+[hommi]
+hz = 20.0 # HoMMI dataset/control frequency
+arm = "left" # training dataset arm_order; current model is single-arm
+device = "cuda:0"
+camera_fps = 30
+camera_timeout_ms = 1000
+latency_compensation = true
 
 [vr]
 hz = 50.0 # EETarget

@@ -10,7 +10,7 @@ dependencies = []
 members = [
     "modules/g7_openarm_config",
     "modules/g7_openarm_hardware",
-    "modules/g7_openarm_hommi_interface",
+    "modules/g7_openarm_hommi",
     "modules/g7_openarm_idl",
     "modules/g7_openarm_lowlevel",
     "modules/g7_openarm_monitor",
@@ -21,6 +21,11 @@ members = [
     "modules/g7_openarm_vr",
     "modules/g7_openarm_wbc",
 ]
+
+[tool.uv.sources]
+hommi-train = { git = "https://github.com/umeow0716/hommi_train.git" }
+hommi-dataset = { git = "https://github.com/umeow0716/hommi_dataset.git" }
+hommi-diffusion-policy = { git = "https://github.com/umeow0716/hommi_diffusion_policy.git" }
 
 [dependency-groups]
 dev = [
@@ -47,7 +52,7 @@ fixable = ["ALL"]
 known-first-party = [
     "g7_openarm_config",
     "g7_openarm_hardware",
-    "g7_openarm_hommi_interface",
+    "g7_openarm_hommi",
     "g7_openarm_idl",
     "g7_openarm_lowlevel",
     "g7_openarm_monitor",
