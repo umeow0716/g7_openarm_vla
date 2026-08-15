@@ -222,3 +222,7 @@ __marimo__/
 typings/
 MUJOCO_LOG.TXT
 .python-version
+
+modules/g7_openarm_hommi/model/model.pt
+modules/g7_openarm_hommi/model/model.trt.ep
+modules/g7_openarm_hommi/model/model.trt.ep.json
