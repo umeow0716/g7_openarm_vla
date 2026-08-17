@@ -6,6 +6,8 @@ import pytest
 from g7_openarm_config import GeneralConfig
 from g7_openarm_lowlevel.initialization import (
     INITIAL_DURATION_S,
+    INITIAL_KD,
+    INITIAL_KP,
     ArmInitializer,
 )
 from g7_openarm_mujoco.actuation import (
@@ -59,7 +61,7 @@ def test_single_arm_initializer_only_moves_enabled_side(
         left_enabled=left_enabled,
         right_enabled=right_enabled,
     )
-    initializer.start(start, now=1.0)
+    initializer.plan_from_state(start, now=1.0)
 
     q_end, dq_end, done = initializer.sample(now=1.0 + INITIAL_DURATION_S)
 
@@ -70,6 +72,43 @@ def test_single_arm_initializer_only_moves_enabled_side(
     np.testing.assert_allclose(q_end[inactive_slice], start[inactive_slice])
     np.testing.assert_array_equal(dq_end, np.zeros(16))
     assert done is True
+
+
+def test_initializer_plan_starts_at_first_measured_state() -> None:
+    target = (0.435, 0.0, 0.0, -0.525, 0.0, 0.0, 0.613)
+    measured = np.array(
+        [0.7, -0.4, 0.2, 0.9, -0.3, 0.6, -0.8, 0.5] * 2,
+        dtype=np.float64,
+    )
+    initializer = ArmInitializer(target, target_gripper=1.0)
+    initializer.plan_from_state(measured, now=10.0)
+
+    q_start, _, done_start = initializer.sample(now=10.0)
+    q_mid, _, done_mid = initializer.sample(now=10.0 + INITIAL_DURATION_S / 2.0)
+    q_end, _, done_end = initializer.sample(now=10.0 + INITIAL_DURATION_S)
+
+    expected_target_8 = np.concatenate(
+        [np.asarray(target), [gripper_openness_to_command(1.0)]]
+    )
+    expected_target_16 = np.concatenate([expected_target_8, expected_target_8])
+
+    np.testing.assert_allclose(q_start, measured)
+    np.testing.assert_allclose(q_mid, (measured + expected_target_16) / 2.0)
+    np.testing.assert_allclose(q_end, expected_target_16)
+    assert done_start is False
+    assert done_mid is False
+    assert done_end is True
+
+
+def test_initial_gains_match_openarm_teleop_follower() -> None:
+    np.testing.assert_array_equal(
+        INITIAL_KP,
+        np.array([240.0, 240.0, 240.0, 240.0, 24.0, 31.0, 25.0, 16.0]),
+    )
+    np.testing.assert_array_equal(
+        INITIAL_KD,
+        np.array([3.0, 3.0, 3.0, 3.0, 0.2, 0.2, 0.2, 0.2]),
+    )
 
 
 @pytest.mark.parametrize(

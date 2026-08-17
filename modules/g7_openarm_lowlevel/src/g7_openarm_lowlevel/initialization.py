@@ -6,8 +6,14 @@ import numpy.typing as npt
 from g7_openarm_utils import gripper_openness_to_command
 
 INITIAL_DURATION_S = 5.0
-INITIAL_KP = np.array([200.0, 200.0, 100.0, 100.0, 50.0, 50.0, 20.0, 20.0], dtype=np.float64)
-INITIAL_KD = np.array([2.0, 2.0, 1.5, 1.5, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
+INITIAL_KP = np.array(
+    [240.0, 240.0, 240.0, 240.0, 30.0, 30.0, 30.0, 30.0],
+    dtype=np.float64,
+)
+INITIAL_KD = np.array(
+    [3.0, 3.0, 3.0, 3.0, 0.2, 0.2, 0.2, 0.2],
+    dtype=np.float64,
+)
 
 
 class ArmInitializer:
@@ -57,7 +63,7 @@ class ArmInitializer:
     def started(self) -> bool:
         return self.start_time is not None
 
-    def start(self, q_16: npt.ArrayLike, *, now: float) -> None:
+    def plan_from_state(self, q_16: npt.ArrayLike, *, now: float) -> None:
         q = np.asarray(q_16, dtype=np.float64)
         if q.shape != (16,):
             raise ValueError(f"q_16 must have shape (16,), got {q.shape}")
@@ -80,7 +86,7 @@ class ArmInitializer:
             or self.start_16 is None
             or self.effective_target_16 is None
         ):
-            raise RuntimeError("ArmInitializer.start() must be called before sample()")
+            raise RuntimeError("ArmInitializer.plan_from_state() must be called before sample()")
 
         elapsed = max(0.0, float(now) - self.start_time)
         alpha = min(elapsed / self.duration_s, 1.0)

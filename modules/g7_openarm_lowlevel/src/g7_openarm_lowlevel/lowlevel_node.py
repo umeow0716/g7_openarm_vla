@@ -1,3 +1,4 @@
+import threading
 import time
 
 import numpy as np
@@ -37,6 +38,7 @@ class LowLevelNode:
             if self.initial_enable
             else None
         )
+        self.initial_plan_lock = threading.Lock()
 
         self.wbc_lowcmd = WBCLowCmd_default()
         self.wbc_lowcmd_subscriber = ChannelSubscriber("rt/wbclowcmd", WBCLowCmd)
@@ -116,15 +118,12 @@ class LowLevelNode:
         if self.lowstate is None:
             return True
 
-        now = time.monotonic()
+        # The 5 s plan is created by lowstate_handler() from the first received
+        # motor state. Until that happens, keep normal control gated.
         if not self.initializer.started:
-            q_start = np.array(
-                [self.lowstate.motor_state[i].q for i in range(8, 24)],
-                dtype=np.float64,
-            )
-            self.initializer.start(q_start, now=now)
+            return True
 
-        q_des, dq_des, done = self.initializer.sample(now=now)
+        q_des, dq_des, done = self.initializer.sample(now=time.monotonic())
 
         self._write_base_hold()
         if self.left_arm_enable:
@@ -246,6 +245,19 @@ class LowLevelNode:
 
     def lowstate_handler(self, msg: LowState_) -> None:
         self.lowstate = msg
+
+        # Initialization is planned exactly once, from the first lowstate that
+        # reaches this node. This makes the measured robot pose the trajectory
+        # start instead of assuming any fixed joint-zero pose.
+        if self.initial_enable and self.initializer is not None:
+            with self.initial_plan_lock:
+                if not self.initializer.started:
+                    q_start = np.array(
+                        [msg.motor_state[i].q for i in range(8, 24)],
+                        dtype=np.float64,
+                    )
+                    self.initializer.plan_from_state(q_start, now=time.monotonic())
+                    print("Low-level arm initialization planned from first lowstate")
 
     def odom_handler(self, msg: Odom) -> None:
         self.odom = msg
