@@ -157,6 +157,9 @@ class HardwareNode:
         self.lowcmd_subscriber.Init(self.lowcmd_handler, 0)
 
         self.imustate = unitree_hg_msg_dds__IMUState_()
+        self.imustate.quaternion[0] = 1.0
+        self.lowstate.imu_state = self.imustate
+
         self.imustate_subscriber = ChannelSubscriber("rt/imustate", IMUState_)
         self.imustate_subscriber.Init(self.imustate_handler, 0)
 

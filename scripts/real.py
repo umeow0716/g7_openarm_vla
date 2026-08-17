@@ -61,7 +61,10 @@ def run_hardware() -> None:
 
 
 def run_imu() -> None:
-    from g7_openarm_hardware.imu_node import main
+    if general_config.base_actuation_enabled:
+        from g7_openarm_hardware.imu_node import main
+    else:
+        from g7_openarm_hardware.virtual_imu_node import main
 
     run_silently(main, "imu")
 
