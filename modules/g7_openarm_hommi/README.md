@@ -35,8 +35,9 @@ uses the manifest embedded in the bundle itself.
 the same camera interface and returns an immutable 1920x1080 RGB black frame for
 simulation.
 
-`pyrealsense2` is imported only when `RealSenseCamera` is constructed, so the
-simulation path does not require librealsense Python bindings.
+`pyrealsense2` is a required dependency of `g7-openarm-hommi` and is imported at
+module load time. The simulation path still uses `BlackCamera` and never opens a
+RealSense device, but the Python binding must be installed with the HoMMI package.
 
 ## Control semantics
 

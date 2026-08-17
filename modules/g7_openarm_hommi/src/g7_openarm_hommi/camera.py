@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import pyrealsense2 as rs
 
 RGBFrame = npt.NDArray[np.uint8]
 
@@ -57,15 +57,6 @@ class RealSenseCamera(CameraInput):
         if warmup_frames < 0:
             raise ValueError(f"warmup_frames must be >= 0, got {warmup_frames}")
 
-        try:
-            import pyrealsense2 as rs
-        except ImportError as exc:
-            raise RuntimeError(
-                "RealSenseCamera requires the librealsense Python binding "
-                "`pyrealsense2` to be installed on the deployment machine."
-            ) from exc
-
-        self._rs: Any = rs
         self._timeout_ms = int(timeout_ms)
         self._pipeline = rs.pipeline()
         stream_config = rs.config()

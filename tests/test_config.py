@@ -6,6 +6,7 @@ import pytest
 from g7_openarm_config import ControlMode, DDSConfig, GeneralConfig, parse_bool
 from g7_openarm_hardware.config import HardwareConfig
 from g7_openarm_lowlevel.config import LowLevelConfig
+from g7_openarm_wbc.config import WBCConfig
 
 
 @pytest.mark.parametrize(
@@ -128,8 +129,6 @@ def test_hardware_config_rejects_invalid_motor_mapping() -> None:
 
 
 def test_wbc_config_only_contains_wbc_settings() -> None:
-    from g7_openarm_wbc.config import WBCConfig
-
     data = {
         "dds": {"domain_id": 0, "interface": "lo"},
         "wbc": {

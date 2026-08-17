@@ -10,6 +10,7 @@ dependencies = [
     "g7-openarm-pinnzoo",
     "g7-openarm-utils",
     "hommi-train",
+    "pyrealsense2",
     "unitree-sdk2py",
 ]
 

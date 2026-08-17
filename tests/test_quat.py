@@ -3,7 +3,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from g7_openarm_utils import quat_mul, quat_normalize, quat_rotate, quat_to_rotation_matrix
+from g7_openarm_utils import (
+    quat_from_yaw,
+    quat_mul,
+    quat_normalize,
+    quat_rotate,
+    quat_to_rotation_matrix,
+    quat_yaw,
+)
 
 
 def test_quaternion_rotation_uses_wxyz_convention() -> None:
@@ -30,7 +37,5 @@ def test_quat_normalize_rejects_zero_quaternion() -> None:
 
 
 def test_quat_yaw_round_trip() -> None:
-    from g7_openarm_utils import quat_from_yaw, quat_yaw
-
     yaw = 0.73
     assert quat_yaw(quat_from_yaw(yaw)) == pytest.approx(yaw)
