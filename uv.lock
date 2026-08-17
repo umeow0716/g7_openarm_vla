@@ -354,6 +354,7 @@ dependencies = [
     { name = "g7-openarm-pinnzoo" },
     { name = "g7-openarm-utils" },
     { name = "hommi-train" },
+    { name = "pyrealsense2" },
     { name = "unitree-sdk2py" },
 ]
 
@@ -364,6 +365,7 @@ requires-dist = [
     { name = "g7-openarm-pinnzoo", editable = "modules/g7_openarm_pinnzoo" },
     { name = "g7-openarm-utils", editable = "modules/g7_openarm_utils" },
     { name = "hommi-train", git = "https://github.com/umeow0716/hommi_train.git" },
+    { name = "pyrealsense2" },
     { name = "unitree-sdk2py", editable = "third_party/unitree_sdk2_python" },
 ]
 
@@ -1178,6 +1180,16 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6f/16/912b7225d56284859cd9a672827f18be43f8012f8b7b932bc4bd959a298e/pyopengl-3.1.10.tar.gz", hash = "sha256:c4a02d6866b54eb119c8e9b3fb04fa835a95ab802dd96607ab4cdb0012df8335", size = 1915580, upload-time = "2025-08-18T02:33:01.76Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/e4/1ba6f44e491c4eece978685230dde56b14d51a0365bc1b774ddaa94d14cd/pyopengl-3.1.10-py3-none-any.whl", hash = "sha256:794a943daced39300879e4e47bd94525280685f42dbb5a998d336cfff151d74f", size = 3194996, upload-time = "2025-08-18T02:32:59.902Z" },
+]
+
+[[package]]
+name = "pyrealsense2"
+version = "2.58.3.10794"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b6/1e/e6e1a87775d20ced66674ecd5f1ac80425e38911c94780bf6dc6704b7b56/pyrealsense2-2.58.3.10794-cp312-cp312-manylinux1_x86_64.whl", hash = "sha256:39b5b733b310affefe1c09bab067e7d01f72f7ca7aa2cbe66ce09eeee4899ca6", size = 12964952, upload-time = "2026-07-19T15:54:58.876Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/f6/2a82258bf7d398473bc1a2fc53f28788e4c65a929b51c44a07abee7421ad/pyrealsense2-2.58.3.10794-cp312-cp312-manylinux2014_aarch64.whl", hash = "sha256:c9d6979157e1cc566cbabb93be5b1ae75a78b3b8c40d37262031182527e4f9a0", size = 6484257, upload-time = "2026-07-19T15:55:02.246Z" },
+    { url = "https://files.pythonhosted.org/packages/59/39/44caee19f02e5c52f110299653e06ab5dc3573489b6991b9a74d5c680f97/pyrealsense2-2.58.3.10794-cp312-cp312-win_amd64.whl", hash = "sha256:c51f6ee6527c1d6f1e0bbee8c1e45b05431ac1b5340d78fb6d3157d541a555e7", size = 9055011, upload-time = "2026-07-19T15:55:06.242Z" },
 ]
 
 [[package]]
