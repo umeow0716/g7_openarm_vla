@@ -225,6 +225,7 @@ class HardwareNode:
             left_arm.flush_rx()
             for i, motor in enumerate(left_arm.get_arm().get_motors()):
                 if i == 7:
+                    print(f"left_gripper: {motor.get_position():.3f}")
                     self.lowstate.motor_state[15].q = gripper_motor_position_to_command(
                         motor.get_position(),
                         open_position=config.left_gripper_open,
@@ -254,6 +255,7 @@ class HardwareNode:
             right_arm.flush_rx()
             for i, motor in enumerate(right_arm.get_arm().get_motors()):
                 if i == 7:
+                    print(f"right_gripper: {motor.get_position():.3f}")
                     self.lowstate.motor_state[23].q = gripper_motor_position_to_command(
                         motor.get_position(),
                         open_position=config.right_gripper_open,
