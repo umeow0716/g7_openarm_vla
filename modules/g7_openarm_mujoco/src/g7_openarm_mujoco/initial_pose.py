@@ -22,8 +22,8 @@ def hand_poses_for_arm_position(
 
     mujoco.mj_forward(model, data)
 
-    left_hand = data.body("L_gripper_tcp_link")
-    right_hand = data.body("R_gripper_tcp_link")
+    left_hand = data.body("L_tcp")
+    right_hand = data.body("R_tcp")
     left_pose = np.concatenate([left_hand.xpos.copy(), left_hand.xquat.copy()])
     right_pose = np.concatenate([right_hand.xpos.copy(), right_hand.xquat.copy()])
     return left_pose, right_pose

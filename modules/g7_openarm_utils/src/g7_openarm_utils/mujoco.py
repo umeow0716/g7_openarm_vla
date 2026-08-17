@@ -14,8 +14,8 @@ def load_hand_default_pose(model_path: str) -> EETarget:
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
 
-    left_hand = data.body("L_gripper_tcp_link")
-    right_hand = data.body("R_gripper_tcp_link")
+    left_hand = data.body("L_tcp")
+    right_hand = data.body("R_tcp")
 
     left_pose = np.concatenate((left_hand.xpos, left_hand.xquat), dtype=np.float64)
     right_pose = np.concatenate((right_hand.xpos, right_hand.xquat), dtype=np.float64)

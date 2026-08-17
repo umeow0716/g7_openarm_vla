@@ -75,8 +75,8 @@ class VRSimulationNode:
         self.data = mujoco.MjData(self.model)
         mujoco.mj_forward(self.model, self.data)
 
-        left_hand = self.data.body("L_gripper_tcp_link")
-        right_hand = self.data.body("R_gripper_tcp_link")
+        left_hand = self.data.body("L_tcp")
+        right_hand = self.data.body("R_tcp")
         self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
         self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
         self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()

@@ -75,8 +75,8 @@ class RealVisualizationNode:
             self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]
             self.data.mocap_quat[self.right_target_mocap_id] = right_pose[3:]
         else:
-            left_hand = self.data.body("L_gripper_tcp_link")
-            right_hand = self.data.body("R_gripper_tcp_link")
+            left_hand = self.data.body("L_tcp")
+            right_hand = self.data.body("R_tcp")
             self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
             self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
             self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
@@ -190,8 +190,8 @@ class RealVisualizationNode:
             mujoco.mj_forward(self.model, self.data)
 
             if not self.target_ready:
-                left_hand = self.data.body("L_gripper_tcp_link")
-                right_hand = self.data.body("R_gripper_tcp_link")
+                left_hand = self.data.body("L_tcp")
+                right_hand = self.data.body("R_tcp")
                 self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
                 self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
                 self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
