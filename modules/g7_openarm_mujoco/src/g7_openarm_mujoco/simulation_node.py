@@ -104,6 +104,8 @@ class SimulationNode:
         self.lowstate = unitree_hg_msg_dds__LowState_()
         self.imustate = unitree_hg_msg_dds__IMUState_()
         self.eetarget = EETarget_default()
+        self.eetarget.left_gripper = general_config.initial_gripper
+        self.eetarget.right_gripper = general_config.initial_gripper
         self.lowcmd = unitree_hg_msg_dds__LowCmd_()
 
         self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
