@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import cyclonedds.idl.annotations as annotate
 import cyclonedds.idl.types as types
 from cyclonedds.idl import IdlStruct
+from g7_openarm_config import general_config
 from unitree_sdk2py.idl.default import geometry_msgs_msg_dds__Pose_
 from unitree_sdk2py.idl.geometry_msgs.msg.dds_ import Pose_
 
@@ -19,4 +20,4 @@ class EETarget(IdlStruct, typename="EETarget"):
 
 
 def EETarget_default():
-    return EETarget(geometry_msgs_msg_dds__Pose_(), geometry_msgs_msg_dds__Pose_(), 0.0, 0.0)  # type: ignore
+    return EETarget(geometry_msgs_msg_dds__Pose_(), geometry_msgs_msg_dds__Pose_(), general_config.initial_gripper, general_config.initial_gripper)  # type: ignore

@@ -91,8 +91,6 @@ class RealVisualizationNode:
         self.lowstate: LowState_ | None = None
         self.odom: Odom | None = None
         self.eetarget = EETarget_default()
-        self.eetarget.left_gripper = general_config.initial_gripper
-        self.eetarget.right_gripper = general_config.initial_gripper
         self.target_ready = (
             general_config.lowlevel_initial_allowed or not general_config.arm_actuation_enabled
         )
