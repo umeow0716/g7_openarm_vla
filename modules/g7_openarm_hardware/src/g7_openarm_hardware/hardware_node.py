@@ -81,12 +81,12 @@ def _base_bus_config() -> BusConfig:
     return {
         "motor_types": [
             dc.MotorType.DM8009,
-            dc.MotorType.DM8009,
-            dc.MotorType.DM8009,
+            dc.MotorType.DM6006,
             dc.MotorType.DM8009,
             dc.MotorType.DM6006,
+            dc.MotorType.DM8009,
             dc.MotorType.DM6006,
-            dc.MotorType.DM6006,
+            dc.MotorType.DM8009,
             dc.MotorType.DM6006,
         ],
         "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
