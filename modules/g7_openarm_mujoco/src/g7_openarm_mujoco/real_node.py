@@ -15,10 +15,11 @@ from unitree_sdk2py.utils.thread import RecurrentThread
 from g7_openarm_config import general_config
 from g7_openarm_idl import EETarget, EETarget_default, Odom
 
-from .actuation import gripper_command_to_mujoco_position
 from .config import config
 from .initial_pose import hand_poses_for_arm_position
+from .model_layout import MuJoCoModelLayout
 from .resources import model_directory
+from .state_mapping import write_floating_base_qpos, write_lowstate_qpos
 
 
 def _build_model() -> mujoco.MjModel:
@@ -61,6 +62,7 @@ class RealVisualizationNode:
     def __init__(self) -> None:
         self.model = _build_model()
         self.data = mujoco.MjData(self.model)
+        self.layout = MuJoCoModelLayout(self.model)
         mujoco.mj_forward(self.model, self.data)
 
         self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
@@ -139,7 +141,9 @@ class RealVisualizationNode:
 
             self.eetarget.left_target.position.x = left_position[0]
             self.eetarget.left_target.position.y = left_position[1]
-            self.eetarget.left_target.position.z = left_position[2] - self.data.qpos[2]
+            self.eetarget.left_target.position.z = (
+                left_position[2] - self.data.qpos[self.layout.qpos_index("z")]
+            )
             self.eetarget.left_target.orientation.w = left_quaternion[0]
             self.eetarget.left_target.orientation.x = left_quaternion[1]
             self.eetarget.left_target.orientation.y = left_quaternion[2]
@@ -147,7 +151,9 @@ class RealVisualizationNode:
 
             self.eetarget.right_target.position.x = right_position[0]
             self.eetarget.right_target.position.y = right_position[1]
-            self.eetarget.right_target.position.z = right_position[2] - self.data.qpos[2]
+            self.eetarget.right_target.position.z = (
+                right_position[2] - self.data.qpos[self.layout.qpos_index("z")]
+            )
             self.eetarget.right_target.orientation.w = right_quaternion[0]
             self.eetarget.right_target.orientation.x = right_quaternion[1]
             self.eetarget.right_target.orientation.y = right_quaternion[2]
@@ -162,29 +168,8 @@ class RealVisualizationNode:
             return
 
         with self.viewer.lock():
-            self.data.qpos[0] = odom.position.x
-            self.data.qpos[1] = odom.position.y
-            self.data.qpos[2] = 0.160631
-            self.data.qpos[3] = odom.quaternion.w
-            self.data.qpos[4] = odom.quaternion.x
-            self.data.qpos[5] = odom.quaternion.y
-            self.data.qpos[6] = odom.quaternion.z
-
-            for index in range(8):
-                self.data.qpos[7 + index] = lowstate.motor_state[index].q
-            for index in range(7):
-                self.data.qpos[15 + index] = lowstate.motor_state[8 + index].q
-            for index in range(7):
-                self.data.qpos[24 + index] = lowstate.motor_state[16 + index].q
-
-            left_gripper = gripper_command_to_mujoco_position(
-                lowstate.motor_state[15].q
-            )
-            right_gripper = gripper_command_to_mujoco_position(
-                lowstate.motor_state[23].q
-            )
-            self.data.qpos[22:24] = left_gripper
-            self.data.qpos[31:33] = right_gripper
+            write_floating_base_qpos(self.layout, self.data, odom)
+            write_lowstate_qpos(self.layout, self.data, lowstate)
             self.data.qvel[:] = 0.0
             self.data.qacc[:] = 0.0
             mujoco.mj_forward(self.model, self.data)

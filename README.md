@@ -1,5 +1,8 @@
 # g7_openarm_vla
 
+Joint/motor ordering contract: see [`JOINT_LAYOUT.md`](JOINT_LAYOUT.md).
+Pre-deployment checks: see [`DEPLOYMENT_VALIDATION.md`](DEPLOYMENT_VALIDATION.md).
+
 ```bash
 git clone --recurse-submodules https://github.com/umeow0716/g7_openarm_vla.git
 cd g7_openarm_vla

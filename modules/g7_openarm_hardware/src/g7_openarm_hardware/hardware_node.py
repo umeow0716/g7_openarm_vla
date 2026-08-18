@@ -19,13 +19,48 @@ from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
 from g7_openarm_config import general_config
 from g7_openarm_utils import (
+    BASE_MOTOR_NAMES,
+    BASE_WHEEL_MOTOR_NAMES,
+    LEFT_GRIPPER_MOTOR_NAME,
+    LEFT_HARDWARE_MOTOR_NAMES,
+    RIGHT_GRIPPER_MOTOR_NAME,
+    RIGHT_HARDWARE_MOTOR_NAMES,
     gripper_command_to_motor_position,
     gripper_command_velocity_to_motor_velocity,
     gripper_motor_position_to_command,
     gripper_motor_velocity_to_command_velocity,
+    motor_command,
+    motor_index,
 )
 
 from .config import config
+
+
+BASE_CONFIG_INDEX_BY_NAME = {name: index for index, name in enumerate(BASE_MOTOR_NAMES)}
+LEFT_HARDWARE_INDEX_BY_NAME = {
+    name: index for index, name in enumerate(LEFT_HARDWARE_MOTOR_NAMES)
+}
+RIGHT_HARDWARE_INDEX_BY_NAME = {
+    name: index for index, name in enumerate(RIGHT_HARDWARE_MOTOR_NAMES)
+}
+
+
+def _base_config_index(name: str) -> int:
+    return BASE_CONFIG_INDEX_BY_NAME[name]
+
+
+def _base_motor_id(name: str) -> int:
+    return config.base_ids[_base_config_index(name)]
+
+
+def _base_direction(name: str) -> float:
+    return config.base_direction[_base_config_index(name)]
+
+
+def _arm_direction(name: str, *, left: bool) -> float:
+    index_by_name = LEFT_HARDWARE_INDEX_BY_NAME if left else RIGHT_HARDWARE_INDEX_BY_NAME
+    directions = config.left_arm_direction if left else config.right_arm_direction
+    return directions[index_by_name[name]]
 
 
 class BusConfig(TypedDict):
@@ -36,10 +71,11 @@ class BusConfig(TypedDict):
 
 
 def _base_bus_config() -> BusConfig:
-    control_modes: list[Any] = [dc.ControlMode.POS_VEL] * 8
-    for logical_index, motor_id in enumerate(config.base_ids):
+    control_modes: list[Any] = [dc.ControlMode.POS_VEL] * len(BASE_MOTOR_NAMES)
+    for name in BASE_MOTOR_NAMES:
+        motor_id = _base_motor_id(name)
         control_modes[motor_id - 1] = (
-            dc.ControlMode.VEL if logical_index % 2 else dc.ControlMode.POS_VEL
+            dc.ControlMode.VEL if name in BASE_WHEEL_MOTOR_NAMES else dc.ControlMode.POS_VEL
         )
 
     return {
@@ -192,25 +228,25 @@ class HardwareNode:
         base = self.group.get_device(config.base_can)
         base_motors = base.get_motors()
 
-        for i in range(8):
-            motor = base_motors[config.base_ids[i] - 1]
-            direction = config.base_direction[i]
-            self.lowstate.motor_state[i].q = motor.get_position() * direction
-            self.lowstate.motor_state[i].dq = motor.get_velocity() * direction
-            self.lowstate.motor_state[i].tau_est = motor.get_torque() * direction
+        for name in BASE_MOTOR_NAMES:
+            motor = base_motors[_base_motor_id(name) - 1]
+            direction = _base_direction(name)
+            state = self.lowstate.motor_state[motor_index(name)]
+            state.q = motor.get_position() * direction
+            state.dq = motor.get_velocity() * direction
+            state.tau_est = motor.get_torque() * direction
 
     def _write_base_command(self) -> None:
         base = self.group.get_device(config.base_can)
-        for i in range(0, 8, 2):
-            cmd = dc.PosVelParam(
-                q=self.lowcmd.motor_cmd[i].q * config.base_direction[i],
-                dq=20.0,
-            )
-            base.posvel_control_one(config.base_ids[i] - 1, cmd)
-
-        for i in range(1, 8, 2):
-            cmd = dc.VelParam(dq=self.lowcmd.motor_cmd[i].dq * config.base_direction[i])
-            base.vel_control_one(config.base_ids[i] - 1, cmd)
+        for name in BASE_MOTOR_NAMES:
+            command = motor_command(self.lowcmd, name)
+            direction = _base_direction(name)
+            if name in BASE_WHEEL_MOTOR_NAMES:
+                cmd = dc.VelParam(dq=command.dq * direction)
+                base.vel_control_one(_base_motor_id(name) - 1, cmd)
+            else:
+                cmd = dc.PosVelParam(q=command.q * direction, dq=20.0)
+                base.posvel_control_one(_base_motor_id(name) - 1, cmd)
 
     def control_loop(self) -> None:
         self.group.recv_all(10_000)
@@ -220,62 +256,46 @@ class HardwareNode:
 
         if self.arms_enabled:
             left_arm = self.group.get_device(config.left_arm_can)
-            for i, motor in enumerate(left_arm.get_motors()):
-                if i == 7:
-                    print(f"left_gripper: {motor.get_position():.3f}")
-                    self.lowstate.motor_state[15].q = gripper_motor_position_to_command(
+            for name, motor in zip(LEFT_HARDWARE_MOTOR_NAMES, left_arm.get_motors(), strict=True):
+                state = self.lowstate.motor_state[motor_index(name)]
+                if name == LEFT_GRIPPER_MOTOR_NAME:
+                    state.q = gripper_motor_position_to_command(
                         motor.get_position(),
                         open_position=config.left_gripper_open,
                         close_position=config.left_gripper_close,
                     )
-                    self.lowstate.motor_state[15].dq = (
-                        gripper_motor_velocity_to_command_velocity(
-                            motor.get_velocity(),
-                            open_position=config.left_gripper_open,
-                            close_position=config.left_gripper_close,
-                        )
+                    state.dq = gripper_motor_velocity_to_command_velocity(
+                        motor.get_velocity(),
+                        open_position=config.left_gripper_open,
+                        close_position=config.left_gripper_close,
                     )
-                    self.lowstate.motor_state[15].tau_est = motor.get_torque()
-                    continue
-
-                self.lowstate.motor_state[8 + i].q = (
-                    motor.get_position() * config.left_arm_direction[i]
-                )
-                self.lowstate.motor_state[8 + i].dq = (
-                    motor.get_velocity() * config.left_arm_direction[i]
-                )
-                self.lowstate.motor_state[8 + i].tau_est = (
-                    motor.get_torque() * config.left_arm_direction[i]
-                )
+                    state.tau_est = motor.get_torque()
+                else:
+                    direction = _arm_direction(name, left=True)
+                    state.q = motor.get_position() * direction
+                    state.dq = motor.get_velocity() * direction
+                    state.tau_est = motor.get_torque() * direction
 
             right_arm = self.group.get_device(config.right_arm_can)
-            for i, motor in enumerate(right_arm.get_motors()):
-                if i == 7:
-                    print(f"right_gripper: {motor.get_position():.3f}")
-                    self.lowstate.motor_state[23].q = gripper_motor_position_to_command(
+            for name, motor in zip(RIGHT_HARDWARE_MOTOR_NAMES, right_arm.get_motors(), strict=True):
+                state = self.lowstate.motor_state[motor_index(name)]
+                if name == RIGHT_GRIPPER_MOTOR_NAME:
+                    state.q = gripper_motor_position_to_command(
                         motor.get_position(),
                         open_position=config.right_gripper_open,
                         close_position=config.right_gripper_close,
                     )
-                    self.lowstate.motor_state[23].dq = (
-                        gripper_motor_velocity_to_command_velocity(
-                            motor.get_velocity(),
-                            open_position=config.right_gripper_open,
-                            close_position=config.right_gripper_close,
-                        )
+                    state.dq = gripper_motor_velocity_to_command_velocity(
+                        motor.get_velocity(),
+                        open_position=config.right_gripper_open,
+                        close_position=config.right_gripper_close,
                     )
-                    self.lowstate.motor_state[23].tau_est = motor.get_torque()
-                    continue
-
-                self.lowstate.motor_state[16 + i].q = (
-                    motor.get_position() * config.right_arm_direction[i]
-                )
-                self.lowstate.motor_state[16 + i].dq = (
-                    motor.get_velocity() * config.right_arm_direction[i]
-                )
-                self.lowstate.motor_state[16 + i].tau_est = (
-                    motor.get_torque() * config.right_arm_direction[i]
-                )
+                    state.tau_est = motor.get_torque()
+                else:
+                    direction = _arm_direction(name, left=False)
+                    state.q = motor.get_position() * direction
+                    state.dq = motor.get_velocity() * direction
+                    state.tau_est = motor.get_torque() * direction
 
         self.lowstate_publisher.Write(self.lowstate)
 
@@ -284,60 +304,74 @@ class HardwareNode:
 
         if self.left_arm_command_enabled:
             left_arm = self.group.get_device(config.left_arm_can)
-            left_cmds = [
-                dc.MITParam(
-                    q=self.lowcmd.motor_cmd[8 + i].q * config.left_arm_direction[i],
-                    dq=self.lowcmd.motor_cmd[8 + i].dq * config.left_arm_direction[i],
-                    kp=self.lowcmd.motor_cmd[8 + i].kp,
-                    kd=self.lowcmd.motor_cmd[8 + i].kd,
-                    tau=self.lowcmd.motor_cmd[8 + i].tau * config.left_arm_direction[i],
-                )
-                for i in range(8)
-            ]
-            left_cmds[7] = dc.MITParam(
-                q=mapping_gripper(
-                    self.lowcmd.motor_cmd[15].q,
-                    config.left_gripper_open,
-                    config.left_gripper_close,
-                ),
-                dq=gripper_command_velocity_to_motor_velocity(
-                    self.lowcmd.motor_cmd[15].dq,
-                    open_position=config.left_gripper_open,
-                    close_position=config.left_gripper_close,
-                ),
-                kp=self.lowcmd.motor_cmd[15].kp,
-                kd=self.lowcmd.motor_cmd[15].kd,
-                tau=self.lowcmd.motor_cmd[15].tau,
-            )
+            left_cmds = []
+            for name in LEFT_HARDWARE_MOTOR_NAMES:
+                command = motor_command(self.lowcmd, name)
+                if name == LEFT_GRIPPER_MOTOR_NAME:
+                    left_cmds.append(
+                        dc.MITParam(
+                            q=mapping_gripper(
+                                command.q,
+                                config.left_gripper_open,
+                                config.left_gripper_close,
+                            ),
+                            dq=gripper_command_velocity_to_motor_velocity(
+                                command.dq,
+                                open_position=config.left_gripper_open,
+                                close_position=config.left_gripper_close,
+                            ),
+                            kp=command.kp,
+                            kd=command.kd,
+                            tau=command.tau,
+                        )
+                    )
+                else:
+                    direction = _arm_direction(name, left=True)
+                    left_cmds.append(
+                        dc.MITParam(
+                            q=command.q * direction,
+                            dq=command.dq * direction,
+                            kp=command.kp,
+                            kd=command.kd,
+                            tau=command.tau * direction,
+                        )
+                    )
             left_arm.mit_control_all(left_cmds)
 
         if self.right_arm_command_enabled:
             right_arm = self.group.get_device(config.right_arm_can)
-            right_cmds = [
-                dc.MITParam(
-                    q=self.lowcmd.motor_cmd[16 + i].q * config.right_arm_direction[i],
-                    dq=self.lowcmd.motor_cmd[16 + i].dq * config.right_arm_direction[i],
-                    kp=self.lowcmd.motor_cmd[16 + i].kp,
-                    kd=self.lowcmd.motor_cmd[16 + i].kd,
-                    tau=self.lowcmd.motor_cmd[16 + i].tau * config.right_arm_direction[i],
-                )
-                for i in range(8)
-            ]
-            right_cmds[7] = dc.MITParam(
-                q=mapping_gripper(
-                    self.lowcmd.motor_cmd[23].q,
-                    config.right_gripper_open,
-                    config.right_gripper_close,
-                ),
-                dq=gripper_command_velocity_to_motor_velocity(
-                    self.lowcmd.motor_cmd[23].dq,
-                    open_position=config.right_gripper_open,
-                    close_position=config.right_gripper_close,
-                ),
-                kp=self.lowcmd.motor_cmd[23].kp,
-                kd=self.lowcmd.motor_cmd[23].kd,
-                tau=self.lowcmd.motor_cmd[23].tau,
-            )
+            right_cmds = []
+            for name in RIGHT_HARDWARE_MOTOR_NAMES:
+                command = motor_command(self.lowcmd, name)
+                if name == RIGHT_GRIPPER_MOTOR_NAME:
+                    right_cmds.append(
+                        dc.MITParam(
+                            q=mapping_gripper(
+                                command.q,
+                                config.right_gripper_open,
+                                config.right_gripper_close,
+                            ),
+                            dq=gripper_command_velocity_to_motor_velocity(
+                                command.dq,
+                                open_position=config.right_gripper_open,
+                                close_position=config.right_gripper_close,
+                            ),
+                            kp=command.kp,
+                            kd=command.kd,
+                            tau=command.tau,
+                        )
+                    )
+                else:
+                    direction = _arm_direction(name, left=False)
+                    right_cmds.append(
+                        dc.MITParam(
+                            q=command.q * direction,
+                            dq=command.dq * direction,
+                            kp=command.kp,
+                            kd=command.kd,
+                            tau=command.tau * direction,
+                        )
+                    )
             right_arm.mit_control_all(right_cmds)
 
 

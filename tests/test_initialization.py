@@ -18,7 +18,10 @@ from g7_openarm_mujoco.actuation import (
     mujoco_gripper_velocity_to_command_velocity,
 )
 from g7_openarm_utils import (
+    BASE_MOTOR_NAMES,
     GRIPPER_COMMAND_RANGE,
+    LEFT_ARM_MOTOR_NAMES,
+    RIGHT_ARM_MOTOR_NAMES,
     gripper_command_to_motor_position,
     gripper_command_velocity_to_motor_velocity,
     gripper_motor_position_to_command,
@@ -103,7 +106,7 @@ def test_initializer_plan_starts_at_first_measured_state() -> None:
 def test_initial_gains_match_openarm_teleop_follower() -> None:
     np.testing.assert_array_equal(
         INITIAL_KP,
-        np.array([240.0, 240.0, 240.0, 240.0, 24.0, 31.0, 25.0, 16.0]),
+        np.array([240.0, 240.0, 240.0, 240.0, 30.0, 30.0, 30.0, 30.0]),
     )
     np.testing.assert_array_equal(
         INITIAL_KD,
@@ -223,6 +226,6 @@ def test_mujoco_motor_actuation_matches_control_mode(
     right: bool,
 ) -> None:
     general = _general(mode)
-    assert motor_actuation_enabled(0, general) is base
-    assert motor_actuation_enabled(8, general) is left
-    assert motor_actuation_enabled(16, general) is right
+    assert motor_actuation_enabled(BASE_MOTOR_NAMES[0], general) is base
+    assert motor_actuation_enabled(LEFT_ARM_MOTOR_NAMES[0], general) is left
+    assert motor_actuation_enabled(RIGHT_ARM_MOTOR_NAMES[0], general) is right

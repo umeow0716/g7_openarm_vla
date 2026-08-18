@@ -1,27 +1,71 @@
 from __future__ import annotations
 
+from types import MappingProxyType
+from typing import Iterable
+
 import numpy as np
 import numpy.typing as npt
 
-from g7_openarm_utils import gripper_openness_to_command
+from g7_openarm_utils import (
+    ARM_COMMAND_MOTOR_NAMES,
+    LEFT_ARM_MOTOR_NAMES,
+    LEFT_GRIPPER_MOTOR_NAME,
+    LEFT_HARDWARE_MOTOR_NAMES,
+    RIGHT_ARM_MOTOR_NAMES,
+    RIGHT_GRIPPER_MOTOR_NAME,
+    RIGHT_HARDWARE_MOTOR_NAMES,
+    gripper_openness_to_command,
+)
 
 INITIAL_DURATION_S = 5.0
-INITIAL_KP = np.array(
-    [240.0, 240.0, 240.0, 240.0, 30.0, 30.0, 30.0, 30.0],
-    dtype=np.float64,
+
+_INITIAL_KP_BY_MOTOR_NAME = MappingProxyType(
+    {
+        **{
+            name: (240.0 if int(name.split("_")[1]) <= 4 else 30.0)
+            for name in LEFT_ARM_MOTOR_NAMES
+        },
+        LEFT_GRIPPER_MOTOR_NAME: 30.0,
+        **{
+            name: (240.0 if int(name.split("_")[1]) <= 4 else 30.0)
+            for name in RIGHT_ARM_MOTOR_NAMES
+        },
+        RIGHT_GRIPPER_MOTOR_NAME: 30.0,
+    }
 )
-INITIAL_KD = np.array(
-    [3.0, 3.0, 3.0, 3.0, 0.2, 0.2, 0.2, 0.2],
-    dtype=np.float64,
+_INITIAL_KD_BY_MOTOR_NAME = MappingProxyType(
+    {
+        **{
+            name: (3.0 if int(name.split("_")[1]) <= 4 else 0.2)
+            for name in LEFT_ARM_MOTOR_NAMES
+        },
+        LEFT_GRIPPER_MOTOR_NAME: 0.2,
+        **{
+            name: (3.0 if int(name.split("_")[1]) <= 4 else 0.2)
+            for name in RIGHT_ARM_MOTOR_NAMES
+        },
+        RIGHT_GRIPPER_MOTOR_NAME: 0.2,
+    }
 )
+
+
+def initial_kp(motor_names: Iterable[str]) -> npt.NDArray[np.float64]:
+    return np.asarray([_INITIAL_KP_BY_MOTOR_NAME[name] for name in motor_names], dtype=np.float64)
+
+
+def initial_kd(motor_names: Iterable[str]) -> npt.NDArray[np.float64]:
+    return np.asarray([_INITIAL_KD_BY_MOTOR_NAME[name] for name in motor_names], dtype=np.float64)
+
+
+# Compatibility views for callers/tests that still need one-side arrays.
+INITIAL_KP = initial_kp(LEFT_HARDWARE_MOTOR_NAMES)
+INITIAL_KD = initial_kd(LEFT_HARDWARE_MOTOR_NAMES)
+INITIAL_KP.setflags(write=False)
+INITIAL_KD.setflags(write=False)
 
 
 class ArmInitializer:
-    """Generate a time-based linear trajectory for enabled arms and grippers.
-
-    Motor-vector order is [L1..L7, L_gripper, R1..R7, R_gripper].
-    ``target_gripper`` uses normalized openness: 0.0=closed, 1.0=open.
-    """
+    """Generate a time-based linear trajectory in the named arm-command layout."""
 
     def __init__(
         self,
@@ -32,8 +76,10 @@ class ArmInitializer:
         right_enabled: bool = True,
         duration_s: float = INITIAL_DURATION_S,
     ) -> None:
-        if len(target_7) != 7:
-            raise ValueError(f"target_7 must contain 7 values, got {len(target_7)}")
+        if len(target_7) != len(LEFT_ARM_MOTOR_NAMES):
+            raise ValueError(
+                f"target_7 must contain {len(LEFT_ARM_MOTOR_NAMES)} values, got {len(target_7)}"
+            )
         if type(left_enabled) is not bool or type(right_enabled) is not bool:
             raise ValueError("left_enabled and right_enabled must be bool")
         if not left_enabled and not right_enabled:
@@ -46,12 +92,23 @@ class ArmInitializer:
             raise ValueError("target_7 contains non-finite values")
 
         gripper_command = gripper_openness_to_command(target_gripper)
-        self.target_16 = np.concatenate(
-            [target, [gripper_command], target, [gripper_command]],
+        target_by_name = {
+            **dict(zip(LEFT_ARM_MOTOR_NAMES, target, strict=True)),
+            LEFT_GRIPPER_MOTOR_NAME: gripper_command,
+            **dict(zip(RIGHT_ARM_MOTOR_NAMES, target, strict=True)),
+            RIGHT_GRIPPER_MOTOR_NAME: gripper_command,
+        }
+        self.target_16 = np.asarray(
+            [target_by_name[name] for name in ARM_COMMAND_MOTOR_NAMES],
             dtype=np.float64,
         )
-        self.active_16 = np.array(
-            [left_enabled] * 8 + [right_enabled] * 8,
+
+        active_by_name = {
+            **{name: left_enabled for name in LEFT_HARDWARE_MOTOR_NAMES},
+            **{name: right_enabled for name in RIGHT_HARDWARE_MOTOR_NAMES},
+        }
+        self.active_16 = np.asarray(
+            [active_by_name[name] for name in ARM_COMMAND_MOTOR_NAMES],
             dtype=np.bool_,
         )
         self.duration_s = float(duration_s)
@@ -65,8 +122,9 @@ class ArmInitializer:
 
     def plan_from_state(self, q_16: npt.ArrayLike, *, now: float) -> None:
         q = np.asarray(q_16, dtype=np.float64)
-        if q.shape != (16,):
-            raise ValueError(f"q_16 must have shape (16,), got {q.shape}")
+        expected_shape = (len(ARM_COMMAND_MOTOR_NAMES),)
+        if q.shape != expected_shape:
+            raise ValueError(f"q_16 must have shape {expected_shape}, got {q.shape}")
         if not np.all(np.isfinite(q)):
             raise ValueError("q_16 contains non-finite values")
         if not np.isfinite(now):
@@ -96,6 +154,6 @@ class ArmInitializer:
         if alpha < 1.0:
             dq_des = delta / self.duration_s
         else:
-            dq_des = np.zeros((16,), dtype=np.float64)
+            dq_des = np.zeros((len(ARM_COMMAND_MOTOR_NAMES),), dtype=np.float64)
 
         return q_des, dq_des, alpha >= 1.0

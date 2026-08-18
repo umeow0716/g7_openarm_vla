@@ -62,7 +62,7 @@
   <worldbody>
     <body name="AMR_base_link" pos="0 0 0.160631" childclass="g7_openarm">
       <inertial pos="-0.00420581 -9.293e-05 0.03202295" quat="0.999390647031 0.000123351456197 -0.00456394459922 0.0346047658846" mass="40" diaginertia="1.01741666473 1.66186157123 2.23857534404" />
-      <freejoint />
+      <freejoint name="floating_base_joint" />
       <site name="imu" pos="0 0 0" />
       <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="AMR_base_link" />
       <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="AMR_base_link_collision" class="collision" />

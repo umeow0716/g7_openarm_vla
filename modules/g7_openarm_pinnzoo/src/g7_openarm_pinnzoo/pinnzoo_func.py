@@ -7,7 +7,24 @@ if typing.TYPE_CHECKING:
     from .pinnzoo_binding import PinnZooModel
 
 
+def _vector_input(
+    name: str,
+    value: npt.ArrayLike,
+    expected_size: int,
+) -> npt.NDArray[np.float64]:
+    """Validate a vector before exposing its raw pointer to generated C code."""
+    array = np.asarray(value, dtype=np.float64)
+    if array.shape != (expected_size,):
+        raise ValueError(
+            f"Expected {name} shape ({expected_size},), got {array.shape}"
+        )
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} contains non-finite values")
+    return np.ascontiguousarray(array)
+
+
 def kinematics(model: "PinnZooModel", x: npt.NDArray[np.float64]):
+    x = _vector_input("x", x, model.nx)
     locs = np.empty(model.kinematics_size, dtype=np.float64)
 
     p_x = model.ffi.cast("double*", x.ctypes.data)
@@ -19,6 +36,7 @@ def kinematics(model: "PinnZooModel", x: npt.NDArray[np.float64]):
 
 
 def kinematics_jacobian(model: "PinnZooModel", x: npt.NDArray[np.float64]):
+    x = _vector_input("x", x, model.nx)
     buf = np.zeros(model.kinematics_size * model.nx, dtype=np.float64)
 
     p_x = model.ffi.cast("double*", x.ctypes.data)
@@ -33,6 +51,8 @@ def kinematics_jacobian(model: "PinnZooModel", x: npt.NDArray[np.float64]):
 def forward_dynamics(
     model: "PinnZooModel", x: npt.NDArray[np.float64], tau: npt.NDArray[np.float64]
 ):
+    x = _vector_input("x", x, model.nx)
+    tau = _vector_input("tau", tau, model.nv)
     vdot = np.empty(model.nv, dtype=np.float64)
 
     p_x = model.ffi.cast("double*", x.ctypes.data)
@@ -49,6 +69,8 @@ def forward_dynamics_deriv(
     x: npt.NDArray[np.float64],
     tau: npt.NDArray[np.float64],
 ):
+    x = _vector_input("x", x, model.nx)
+    tau = _vector_input("tau", tau, model.nv)
     dx_buffer = np.empty(model.nv * model.nx, dtype=np.float64)
     dtau_buffer = np.empty(model.nv * model.nv, dtype=np.float64)
     dvdot_dx = dx_buffer.reshape((model.nv, model.nx), order="F")
@@ -74,6 +96,8 @@ def inverse_dynamics(
     x: npt.NDArray[np.float64],
     vdot: npt.NDArray[np.float64],
 ):
+    x = _vector_input("x", x, model.nx)
+    vdot = _vector_input("vdot", vdot, model.nv)
     tau = np.empty(model.nv, dtype=np.float64)
 
     p_x = model.ffi.cast("double*", x.ctypes.data)
@@ -94,6 +118,8 @@ def dynamics_deriv(
     x: npt.NDArray[np.float64],
     tau: npt.NDArray[np.float64],
 ):
+    x = _vector_input("x", x, model.nx)
+    tau = _vector_input("tau", tau, model.nv)
     rows = model.nv * 2
 
     dx_buffer = np.empty(rows * model.nx, dtype=np.float64)
@@ -121,6 +147,7 @@ def mass_matrix(
     model: "PinnZooModel",
     x_in: npt.NDArray[np.float64],
 ):
+    x_in = _vector_input("x", x_in, model.nx)
     buffer = np.empty(model.nv * model.nv, dtype=np.float64)
     M_out = buffer.reshape((model.nv, model.nv), order="F")
 

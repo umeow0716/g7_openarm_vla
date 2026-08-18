@@ -7,13 +7,25 @@ import numpy.typing as npt
 from g7_openarm_config import general_config
 from g7_openarm_pinnzoo import PinnZooModel, kinematics, kinematics_jacobian
 from g7_openarm_utils import (
-    ARM_LOWSTATE_MOTOR_INDICES,
+    ARM_MOTOR_NAMES,
     ARM_VELOCITY_LIMIT_RAD_S,
+    FLOATING_BASE_CONFIG_NAMES,
+    LEFT_ARM_JOINT_NAMES,
+    RIGHT_ARM_JOINT_NAMES,
+    motor_state_values,
     position_limited_velocity_bounds,
 )
 
 from .config import config
-from .control_layout import control_size, tracked_arms, zero_inactive_arm_controls
+from .control_layout import (
+    ARM_CONTROL_NAMES,
+    BASE_CONTROL_NAMES,
+    control_indices,
+    control_names,
+    control_size,
+    tracked_arms,
+    zero_inactive_arm_controls,
+)
 from .utils import ori_err_quat, quat_jac_to_ori_err_jac
 
 if TYPE_CHECKING:
@@ -42,6 +54,21 @@ class TaskEvaluation:
     right_ori_err: npt.NDArray[np.float64]
 
 
+LEFT_EE_BODY_NAME = "L_tcp"
+RIGHT_EE_BODY_NAME = "R_tcp"
+
+
+def _pose_component_slices(pose_slice: slice) -> tuple[slice, slice]:
+    if (
+        pose_slice.start is None
+        or pose_slice.stop is None
+        or pose_slice.stop - pose_slice.start != 7
+    ):
+        raise ValueError(f"Expected 7-element pose slice, got {pose_slice}")
+    start = pose_slice.start
+    return slice(start, start + 3), slice(start + 3, start + 7)
+
+
 def task_kinematic_jacobian(
     model: PinnZooModel,
     x_lib: npt.NDArray[np.float64],
@@ -50,13 +77,14 @@ def task_kinematic_jacobian(
 ) -> npt.NDArray[np.float64]:
     Jkin = kinematics_jacobian(model, x_lib)
 
-    J_left_arm = Jkin[:, 15:22]
-    J_right_arm = Jkin[:, 24:31]
+    J_left_arm = Jkin[:, model.q_indices(LEFT_ARM_JOINT_NAMES)]
+    J_right_arm = Jkin[:, model.q_indices(RIGHT_ARM_JOINT_NAMES)]
 
     if not base_enabled:
         return np.concatenate([J_left_arm, J_right_arm], axis=1)
 
-    qw, qx, qy, qz = x_lib[3:7]
+    quaternion_names = FLOATING_BASE_CONFIG_NAMES[3:]
+    qw, qx, qy, qz = x_lib[model.q_indices(quaternion_names)]
 
     yaw = float(
         np.arctan2(
@@ -68,8 +96,10 @@ def task_kinematic_jacobian(
     c = float(np.cos(yaw))
     s = float(np.sin(yaw))
 
-    J_vx_body = c * Jkin[:, 0:1] + s * Jkin[:, 1:2]
-    J_vy_body = -s * Jkin[:, 0:1] + c * Jkin[:, 1:2]
+    x_column = Jkin[:, model.q_indices(("x",))]
+    y_column = Jkin[:, model.q_indices(("y",))]
+    J_vx_body = c * x_column + s * y_column
+    J_vy_body = -s * x_column + c * y_column
 
     dq_dwz = 0.5 * np.array(
         [
@@ -81,7 +111,7 @@ def task_kinematic_jacobian(
         dtype=np.float64,
     )
 
-    J_wz_body = (Jkin[:, 3:7] @ dq_dwz)[:, None]
+    J_wz_body = (Jkin[:, model.q_indices(quaternion_names)] @ dq_dwz)[:, None]
 
     return np.concatenate(
         [
@@ -110,67 +140,73 @@ class G7OpenArmIKSolver:
 
         self.Q_hand_pos = 200.0
         self.Q_hand_ori = 0.5
-        self.R_du_base = np.diag(
-            [
-                8.0,
-                8.0,
-                1.0,
-            ]
-        ).astype(np.float64)
+        self._left_pose_slice = self.model.kinematics_pose_slice(LEFT_EE_BODY_NAME)
+        self._right_pose_slice = self.model.kinematics_pose_slice(RIGHT_EE_BODY_NAME)
+        self._left_pos_slice, self._left_quat_slice = _pose_component_slices(
+            self._left_pose_slice
+        )
+        self._right_pos_slice, self._right_quat_slice = _pose_component_slices(
+            self._right_pose_slice
+        )
 
-        self.prev_u_base = np.zeros(3, dtype=np.float64)
+        self._base_control_idx = control_indices(
+            BASE_CONTROL_NAMES, base_enabled=self.base_enabled
+        ) if self.base_enabled else np.empty(0, dtype=np.intp)
+        self._arm_control_idx = control_indices(
+            ARM_CONTROL_NAMES, base_enabled=self.base_enabled
+        )
 
-        u_max_full = np.array(
-            [
-                0.5,
-                0.5,
-                0.5,  # base vx, vy, omega
-                # left arm: J1~J7
-                1.57,
-                1.57,  # J1, J2: DM-J8009P
-                3.14,
-                3.14,  # J3, J4: DM-J4340P / DM-J4340
-                12.6,
-                12.6,
-                12.6,  # J5, J6, J7: DM-J4310
-                # right arm: J1~J7
-                1.57,
-                1.57,  # J1, J2: DM-J8009P
-                3.14,
-                3.14,  # J3, J4: DM-J4340P / DM-J4340
-                12.6,
-                12.6,
-                12.6,  # J5, J6, J7: DM-J4310
-            ],
+        self.R_du_base = np.diag([8.0, 8.0, 1.0]).astype(np.float64)
+        self.prev_u_base = np.zeros(len(BASE_CONTROL_NAMES), dtype=np.float64)
+
+        def arm_velocity_cap(name: str) -> float:
+            joint_number = int(name.split("_")[1])
+            if joint_number <= 2:
+                return 1.57
+            if joint_number <= 4:
+                return 3.14
+            return 12.6
+
+        arm_velocity_cap_by_name = {
+            name: arm_velocity_cap(name) for name in ARM_MOTOR_NAMES
+        }
+        control_velocity_cap_by_name = {
+            "base_vx": 0.5,
+            "base_vy": 0.5,
+            "base_wz": 0.5,
+            **arm_velocity_cap_by_name,
+        }
+        active_control_names = control_names(base_enabled=self.base_enabled)
+        self.u_max = np.asarray(
+            [control_velocity_cap_by_name[name] for name in active_control_names],
             dtype=np.float64,
         )
-        u_max_full[3:] = np.minimum(u_max_full[3:], ARM_VELOCITY_LIMIT_RAD_S)
-        self.u_max = u_max_full if self.base_enabled else u_max_full[3:]
+        self.u_max[self._arm_control_idx] = np.minimum(
+            self.u_max[self._arm_control_idx], ARM_VELOCITY_LIMIT_RAD_S
+        )
 
         self.damping = 1e-4
 
-        R_u_full = np.diag(
-            [
-                2.5,
-                2.5,
-                0.1,  # base vx, vy, omega
-                0.05,
-                0.05,  # left J1, J2: shoulder, 8009
-                0.08,
-                0.08,  # left J3, J4: 4340
-                0.03,
-                0.03,
-                0.03,  # left J5, J6, J7: wrist, 4310
-                0.05,
-                0.05,  # right J1, J2
-                0.08,
-                0.08,  # right J3, J4
-                0.03,
-                0.03,
-                0.03,  # right J5, J6, J7
-            ]
+        def arm_regularization_weight(name: str) -> float:
+            joint_number = int(name.split("_")[1])
+            if joint_number <= 2:
+                return 0.05
+            if joint_number <= 4:
+                return 0.08
+            return 0.03
+
+        arm_weight_by_name = {
+            name: arm_regularization_weight(name) for name in ARM_MOTOR_NAMES
+        }
+        control_weight_by_name = {
+            "base_vx": 2.5,
+            "base_vy": 2.5,
+            "base_wz": 0.1,
+            **arm_weight_by_name,
+        }
+        self.R_u = np.diag(
+            [control_weight_by_name[name] for name in active_control_names]
         ).astype(np.float64)
-        self.R_u = R_u_full if self.base_enabled else R_u_full[3:, 3:]
 
     def task_evaluate(
         self,
@@ -245,8 +281,8 @@ class G7OpenArmIKSolver:
         lxx = np.zeros((self.nu, self.nu), dtype=np.float64)
 
         if self.track_left:
-            Jp_left = Jkin[0:3, :]
-            Jq_left = Jkin[3:7, :]
+            Jp_left = Jkin[self._left_pos_slice, :]
+            Jq_left = Jkin[self._left_quat_slice, :]
             _, Jr_left = quat_jac_to_ori_err_jac(
                 Jq=Jq_left,
                 state_quat=state.left_pose.quat,
@@ -261,8 +297,8 @@ class G7OpenArmIKSolver:
             lxx += self.Q_hand_ori * (Jr_left.T @ Jr_left)
 
         if self.track_right:
-            Jp_right = Jkin[7:10, :]
-            Jq_right = Jkin[10:14, :]
+            Jp_right = Jkin[self._right_pos_slice, :]
+            Jq_right = Jkin[self._right_quat_slice, :]
             _, Jr_right = quat_jac_to_ori_err_jac(
                 Jq=Jq_right,
                 state_quat=state.right_pose.quat,
@@ -281,8 +317,14 @@ class G7OpenArmIKSolver:
     def task_state_from_x_lib(self, x_lib: npt.NDArray[np.float64]):
         kin = kinematics(self.model, x_lib)
         return TaskState(
-            left_pose=PoseState(pos=kin[:3], quat=kin[3:7]),
-            right_pose=PoseState(pos=kin[7:10], quat=kin[10:14]),
+            left_pose=PoseState(
+                pos=kin[self._left_pos_slice],
+                quat=kin[self._left_quat_slice],
+            ),
+            right_pose=PoseState(
+                pos=kin[self._right_pos_slice],
+                quat=kin[self._right_quat_slice],
+            ),
         )
 
     def task_state_from_target(self, ee_target: "EETarget"):
@@ -311,7 +353,7 @@ class G7OpenArmIKSolver:
         odom: "Odom",
         ee_target: "EETarget",
     ) -> npt.NDArray[np.float64]:
-        x_lib = PinnZooModel.build_x_lib(lowstate, odom)
+        x_lib = self.model.build_x_lib(lowstate, odom)
 
         state = self.task_state_from_x_lib(x_lib)
         task_target = self.task_state_from_target(ee_target)
@@ -335,8 +377,8 @@ class G7OpenArmIKSolver:
         g = 0.1 * lx
 
         if self.base_enabled:
-            H[:3, :3] += self.R_du_base
-            g[:3] -= self.R_du_base @ self.prev_u_base
+            H[np.ix_(self._base_control_idx, self._base_control_idx)] += self.R_du_base
+            g[self._base_control_idx] -= self.R_du_base @ self.prev_u_base
 
         H = H + self.damping * np.eye(self.nu)
 
@@ -350,23 +392,19 @@ class G7OpenArmIKSolver:
             track_right=self.track_right,
         )
 
-        arm_slice = slice(3, None) if self.base_enabled else slice(None)
-        arm_position = np.array(
-            [lowstate.motor_state[i].q for i in ARM_LOWSTATE_MOTOR_INDICES],
-            dtype=np.float64,
-        )
+        arm_position = motor_state_values(lowstate, ARM_MOTOR_NAMES, "q")
         arm_velocity_lower, arm_velocity_upper = position_limited_velocity_bounds(
             arm_position,
-            self.u_max[arm_slice],
+            self.u_max[self._arm_control_idx],
             config.interval,
         )
-        u[arm_slice] = np.clip(
-            u[arm_slice],
+        u[self._arm_control_idx] = np.clip(
+            u[self._arm_control_idx],
             arm_velocity_lower,
             arm_velocity_upper,
         )
 
         if self.base_enabled:
-            self.prev_u_base = u[:3].copy()
+            self.prev_u_base = u[self._base_control_idx].copy()
 
         return u

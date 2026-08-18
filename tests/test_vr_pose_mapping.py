@@ -21,6 +21,12 @@ def test_udp_response_parses_controller_objects() -> None:
     packet = {
         "lc": {"x": 1, "y": 2, "z": 3, "qw": 1, "qx": 0, "qy": 0, "qz": 0},
         "rc": {"x": 4, "y": 5, "z": 6, "qw": 1, "qx": 0, "qy": 0, "qz": 0},
+        "lt": 0.0,
+        "rt": 0.0,
+        "lsx": 0.0,
+        "lsy": 0.0,
+        "rsx": 0.0,
+        "rsy": 0.0,
     }
 
     response = VRUDPResponse.from_mapping(packet)

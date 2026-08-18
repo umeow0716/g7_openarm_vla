@@ -4,6 +4,7 @@ import time
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
 
 from g7_openarm_idl import WBCLowCmd
+from g7_openarm_utils import amr_command_values
 
 
 class SimpleMonitor:
@@ -14,7 +15,8 @@ class SimpleMonitor:
         self._sub.Init(self.callback, 10)
 
     def callback(self, msg: WBCLowCmd) -> None:
-        print(f"{msg.amr.data[0]:.3f} {msg.amr.data[1]:.3f} {msg.amr.data[2]:.3f}")
+        vx, vy, wz = amr_command_values(msg.amr)
+        print(f"{vx:.3f} {vy:.3f} {wz:.3f}")
 
 
 def main() -> None:

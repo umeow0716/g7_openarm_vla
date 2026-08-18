@@ -263,11 +263,9 @@ class AMREKF:
         )
 
     def _swerve_velocity(self, lowstate: LowState_) -> FloatArray:
-        steering = np.array([motor.q for motor in lowstate.motor_state[:8:2]], dtype=np.float64)
-
-        wheel_speed = np.array(
-            [motor.dq * self.wheel_radius for motor in lowstate.motor_state[1:8:2]],
-            dtype=np.float64,
+        steering = motor_state_values(lowstate, BASE_STEER_MOTOR_NAMES, "q")
+        wheel_speed = (
+            motor_state_values(lowstate, BASE_WHEEL_MOTOR_NAMES, "dq") * self.wheel_radius
         )
 
         A = np.zeros((8, 3), dtype=np.float64)

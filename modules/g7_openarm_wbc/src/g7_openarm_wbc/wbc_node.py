@@ -13,7 +13,7 @@ from g7_openarm_config import ControlMode, general_config
 from g7_openarm_idl import EETarget, Odom, VRJoy, WBCLowCmd, WBCLowCmd_default
 
 from .config import config
-from .control_layout import split_control_vector
+from .control_layout import openarm_command_from_arm_control, split_control_vector
 from .ik_solver import G7OpenArmIKSolver
 from .vr_joy_control import vr_joy_to_body_command
 
@@ -89,14 +89,10 @@ class Node:
                 base_enabled=self.ik_solver.base_enabled,
             )
 
-            openarm_cmd = np.concatenate(
-                [
-                    arm_cmd[:7],
-                    [self.ee_target.left_gripper],
-                    arm_cmd[7:14],
-                    [self.ee_target.right_gripper],
-                ],
-                dtype=np.float64,
+            openarm_cmd = openarm_command_from_arm_control(
+                arm_cmd,
+                left_gripper=self.ee_target.left_gripper,
+                right_gripper=self.ee_target.right_gripper,
             )
 
             if general_config.control_mode is ControlMode.ARM_ONLY:

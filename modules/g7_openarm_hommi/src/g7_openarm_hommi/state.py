@@ -9,7 +9,12 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 
 from g7_openarm_idl import Odom
 from g7_openarm_pinnzoo import PinnZooModel, kinematics
-from g7_openarm_utils import gripper_command_to_openness
+from g7_openarm_utils import (
+    LEFT_GRIPPER_MOTOR_NAME,
+    RIGHT_GRIPPER_MOTOR_NAME,
+    gripper_command_to_openness,
+    motor_index,
+)
 
 FloatArray = npt.NDArray[np.float32]
 
@@ -59,28 +64,37 @@ class RobotStateProjector:
         *,
         timestamp: float,
     ) -> RobotSnapshot:
-        x_lib = PinnZooModel.build_x_lib(lowstate, odom)
+        x_lib = self._model.build_x_lib(lowstate, odom)
         kin = np.asarray(kinematics(self._model, x_lib), dtype=np.float64)
-        if kin.shape[0] < 14:
+        if kin.shape != (self._model.kinematics_size,):
             raise RuntimeError(
-                f"PinnZoo kinematics returned {kin.shape[0]} values, expected >= 14"
+                f"PinnZoo kinematics returned shape {kin.shape}, "
+                f"expected ({self._model.kinematics_size},)"
             )
 
-        left_pose7 = kin[:7].astype(np.float32, copy=True)
-        right_pose7 = kin[7:14].astype(np.float32, copy=True)
+        left_pose7 = kin[self._model.kinematics_pose_slice("L_tcp")].astype(
+            np.float32, copy=True
+        )
+        right_pose7 = kin[self._model.kinematics_pose_slice("R_tcp")].astype(
+            np.float32, copy=True
+        )
         left_matrix = pose7_wxyz_to_matrix(left_pose7).astype(np.float32, copy=False)
         right_matrix = pose7_wxyz_to_matrix(right_pose7).astype(np.float32, copy=False)
 
         left_open = float(
             np.clip(
-                gripper_command_to_openness(lowstate.motor_state[15].q),
+                gripper_command_to_openness(
+                    lowstate.motor_state[motor_index(LEFT_GRIPPER_MOTOR_NAME)].q
+                ),
                 0.0,
                 1.0,
             )
         )
         right_open = float(
             np.clip(
-                gripper_command_to_openness(lowstate.motor_state[23].q),
+                gripper_command_to_openness(
+                    lowstate.motor_state[motor_index(RIGHT_GRIPPER_MOTOR_NAME)].q
+                ),
                 0.0,
                 1.0,
             )

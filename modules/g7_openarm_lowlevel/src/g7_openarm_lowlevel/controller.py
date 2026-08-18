@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -8,10 +8,20 @@ import numpy.typing as npt
 
 from g7_openarm_pinnzoo import PinnZooModel, inverse_dynamics, mass_matrix
 from g7_openarm_utils import (
-    ARM_MOTOR16_INDICES,
+    ARM_COMMAND_MOTOR_NAMES,
+    ARM_MOTOR_NAMES,
     ARM_POSITION_LOWER_RAD,
     ARM_POSITION_UPPER_RAD,
     ARM_VELOCITY_LIMIT_RAD_S,
+    BASE_STEER_MOTOR_NAMES,
+    FLOATING_BASE_VELOCITY_NAMES,
+    LEFT_GRIPPER_MOTOR_NAME,
+    PRIMARY_MODEL_JOINT_BY_MOTOR_NAME,
+    RIGHT_GRIPPER_MOTOR_NAME,
+    amr_command_values,
+    arm_command_indices,
+    arm_command_values,
+    motor_state_values,
     position_limited_velocity_bounds,
     quat_to_rotation_matrix,
 )
@@ -68,6 +78,34 @@ def odom_vdot_world_to_body(odom: Odom) -> npt.NDArray[np.float64]:
     return np.concatenate([linear_vdot_body, angular_vdot_body])
 
 
+def _arm_joint_number(motor_name: str) -> int:
+    if motor_name in (LEFT_GRIPPER_MOTOR_NAME, RIGHT_GRIPPER_MOTOR_NAME):
+        return 8
+    try:
+        return int(motor_name.split("_")[1])
+    except (IndexError, ValueError) as exc:
+        raise ValueError(f"invalid arm motor name {motor_name!r}") from exc
+
+
+def _default_arm_torque_limit() -> npt.NDArray[np.float64]:
+    values = []
+    for name in ARM_COMMAND_MOTOR_NAMES:
+        joint_number = _arm_joint_number(name)
+        values.append(40.0 if joint_number <= 2 else 27.0 if joint_number <= 4 else 7.0)
+    return np.asarray(values, dtype=np.float64)
+
+
+def _default_tau_static() -> npt.NDArray[np.float64]:
+    return np.asarray(
+        [0.30 if _arm_joint_number(name) == 7 else 0.15 for name in ARM_COMMAND_MOTOR_NAMES],
+        dtype=np.float64,
+    )
+
+
+def _default_arm_gain_scale() -> npt.NDArray[np.float64]:
+    return np.ones(len(ARM_COMMAND_MOTOR_NAMES), dtype=np.float64)
+
+
 @dataclass(slots=True)
 class ControllerConfig:
     wheel_radius_m: float = 0.052
@@ -86,42 +124,10 @@ class ControllerConfig:
     base_idle_linear_threshold_m_s: float = 3e-2
     base_idle_angular_threshold_rad_s: float = 1e-2
 
-    arm_torque_limit = np.array(
-        [
-            40.0,
-            40.0,
-            27.0,
-            27.0,
-            7.0,
-            7.0,
-            7.0,
-            7.0,
-            40.0,
-            40.0,
-            27.0,
-            27.0,
-            7.0,
-            7.0,
-            7.0,
-            7.0,
-        ],
-        dtype=np.float64,
+    arm_torque_limit: npt.NDArray[np.float64] = field(
+        default_factory=_default_arm_torque_limit
     )
-
-    tau_static = np.array(
-        [
-            0.15,
-            0.15,
-            0.15,
-            0.15,
-            0.15,
-            0.15,
-            0.30,
-            0.15,
-        ]
-        * 2,
-        dtype=np.float64,
-    )
+    tau_static: npt.NDArray[np.float64] = field(default_factory=_default_tau_static)
 
     # --- PD / impedance control (arm) ---
     arm_pd_zeta: float = 1.2
@@ -140,10 +146,10 @@ class ControllerConfig:
     # much higher effective shoulder inertia than a folded one) while still
     # letting you hand-correct individual joints whose real behaviour
     # (friction, backlash, cable drag) the diagonal mass-matrix model
-    # doesn't capture. Index order matches motor_cmd[8:24]:
+    # doesn't capture. Scale order follows ARM_COMMAND_MOTOR_NAMES:
     #   [L1..L7, L_gripper, R1..R7, R_gripper]
-    arm_kp_scale = np.ones(16, dtype=np.float64)
-    arm_kd_scale = np.ones(16, dtype=np.float64)
+    arm_kp_scale: npt.NDArray[np.float64] = field(default_factory=_default_arm_gain_scale)
+    arm_kd_scale: npt.NDArray[np.float64] = field(default_factory=_default_arm_gain_scale)
 
     arm_pos_lead_torque_fraction: float = 0.5
 
@@ -160,36 +166,41 @@ class Controller:
         lib_path: str | None = None,
     ) -> None:
         self.config = config if config is not None else ControllerConfig()
+        expected_arm_shape = (len(ARM_COMMAND_MOTOR_NAMES),)
+        for field_name in (
+            "arm_torque_limit",
+            "tau_static",
+            "arm_kp_scale",
+            "arm_kd_scale",
+        ):
+            values = np.asarray(getattr(self.config, field_name), dtype=np.float64)
+            if values.shape != expected_arm_shape:
+                raise ValueError(
+                    f"{field_name} must have shape {expected_arm_shape} in "
+                    f"ARM_COMMAND_MOTOR_NAMES order, got {values.shape}"
+                )
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"{field_name} contains non-finite values")
+            setattr(self.config, field_name, values.copy())
+        if np.any(self.config.arm_torque_limit < 0.0):
+            raise ValueError("arm_torque_limit must be non-negative")
+
         self.model = PinnZooModel(lib_path)
 
-        self._arm_v_idx = [
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24,
-            25,
-            26,
-            27,
-            28,
-            29,
-            30,
-            31,
-        ]
-
-        # Indices into the 16-length motor_cmd[8:24]-shaped arrays that are
-        # grippers, not arm joints. PD gains/torque stay zero there; gripper
-        # channel keeps whatever separate position handling cli.py already does.
-        self._gripper_idx_16 = [7, 15]
+        # Resolve every generalized-velocity index from the names exported by
+        # the loaded .so. No assumption is made about Pinocchio/URDF ordering.
+        self._arm_command_v_idx = self.model.v_indices(
+            PRIMARY_MODEL_JOINT_BY_MOTOR_NAME[name] for name in ARM_COMMAND_MOTOR_NAMES
+        )
+        self._arm_idx_16 = arm_command_indices(list(ARM_MOTOR_NAMES))
+        self._gripper_idx_16 = arm_command_indices(
+            [LEFT_GRIPPER_MOTOR_NAME, RIGHT_GRIPPER_MOTOR_NAME]
+        )
 
         self._q_des_need_init = True
-        self._q_des_16: npt.NDArray[np.float64] = np.zeros((16,), dtype=np.float64)
+        self._q_des_16: npt.NDArray[np.float64] = np.zeros(
+            (len(ARM_COMMAND_MOTOR_NAMES),), dtype=np.float64
+        )
 
         # Stateful swerve branch selection. +1 means the direct-angle branch,
         # -1 means the angle+pi branch with reversed drive speed.
@@ -213,7 +224,7 @@ class Controller:
         omega=8.0,
     ):
         Kd = 2.0 * zeta * omega * np.sqrt(M_diag)
-        return Kd[self._arm_v_idx]
+        return Kd[self._arm_command_v_idx]
 
     def compute_arm_kp(
         self,
@@ -221,15 +232,7 @@ class Controller:
         omega=8.0,
     ):
         Kp = (omega**2) * M_diag
-        return Kp[self._arm_v_idx]
-
-    @staticmethod
-    def _to_motor16(v18: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-        """Drop the two gripper-slot zero-paddings, same slicing as the
-        existing tau_act -> tau_act_cmd conversion, to go from the 18-long
-        generalized-velocity-ordered array to the 16-long motor_cmd[8:24]
-        order."""
-        return np.concatenate([v18[:8], v18[9:17]], dtype=np.float64)
+        return Kp[self._arm_command_v_idx]
 
     def update_base(
         self,
@@ -239,10 +242,7 @@ class Controller:
         base_command_is_idle = self.is_base_idle(amr_cmd)
 
         if base_command_is_idle:
-            steer_pos_des = np.array(
-                [motor.q for motor in lowstate.motor_state[:8:2]],
-                dtype=np.float64,
-            )
+            steer_pos_des = motor_state_values(lowstate, BASE_STEER_MOTOR_NAMES, "q")
             wheel_vel_des = np.zeros((4,), dtype=np.float64)
             self._prev_steer_target = steer_pos_des.copy()
             return steer_pos_des, wheel_vel_des
@@ -250,7 +250,7 @@ class Controller:
         return self.swerve_inverse_kinematics(lowstate=lowstate, amr_cmd=amr_cmd)
 
     def update(self, lowstate: LowState_, odom: Odom, amr_cmd: AMRCmd, openarm_cmd: OpenArmCmd):
-        x = PinnZooModel.build_x_lib(lowstate, odom)
+        x = self.model.build_x_lib(lowstate, odom)
         steer_pos_des, wheel_vel_des = self.update_base(lowstate, amr_cmd)
 
         dt = config.interval
@@ -270,8 +270,9 @@ class Controller:
         return steer_pos_des, wheel_vel_des, q_des, dq_des, Kp, Kd, tau_ff
 
     def is_base_idle(self, amr_cmd: AMRCmd) -> bool:
-        linear_speed = np.sqrt(amr_cmd.data[0] ** 2 + amr_cmd.data[1] ** 2)
-        angular_speed = abs(amr_cmd.data[2])
+        vx, vy, wz = amr_command_values(amr_cmd)
+        linear_speed = np.hypot(vx, vy)
+        angular_speed = abs(wz)
 
         return (
             linear_speed < self.config.base_idle_linear_threshold_m_s
@@ -283,12 +284,9 @@ class Controller:
         lowstate: LowState_,
         amr_cmd: AMRCmd,
     ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        vx, vy, wz = amr_cmd.data
+        vx, vy, wz = amr_command_values(amr_cmd)
 
-        current_steer = np.array(
-            [motor.q for motor in lowstate.motor_state[:8:2]],
-            dtype=np.float64,
-        )
+        current_steer = motor_state_values(lowstate, BASE_STEER_MOTOR_NAMES, "q")
 
         dt = config.interval
 
@@ -392,40 +390,34 @@ class Controller:
         npt.NDArray[np.float64],  # Kp         (16,)
         npt.NDArray[np.float64],  # Kd         (16,)
     ]:
-        dq_des = np.array(
-            openarm_cmd.data.copy(), dtype=np.float64
-        )  # (16,), already in motor_cmd[8:24] order
+        dq_des = arm_command_values(openarm_cmd, list(ARM_COMMAND_MOTOR_NAMES))
 
-        q_meas = np.array(
-            [m.q for m in lowstate.motor_state[8:24]],
-            dtype=np.float64,
-        )
+        q_meas = motor_state_values(lowstate, ARM_COMMAND_MOTOR_NAMES, "q")
 
         if self._q_des_need_init:
             self._q_des_16 = q_meas.copy()
             self._q_des_need_init = False
 
-        arm_q_meas = q_meas[ARM_MOTOR16_INDICES]
+        arm_q_meas = q_meas[self._arm_idx_16]
         arm_dq_lower, arm_dq_upper = position_limited_velocity_bounds(
             arm_q_meas,
             ARM_VELOCITY_LIMIT_RAD_S,
             dt,
+            motor_names=ARM_MOTOR_NAMES,
         )
-        dq_des[ARM_MOTOR16_INDICES] = np.clip(
-            dq_des[ARM_MOTOR16_INDICES],
+        dq_des[self._arm_idx_16] = np.clip(
+            dq_des[self._arm_idx_16],
             arm_dq_lower,
             arm_dq_upper,
         )
 
         M = mass_matrix(self.model, x)
         M_diag = np.diag(M)
-        Kp = self._to_motor16(self.compute_arm_kp(M_diag, omega=self.config.arm_pd_omega))
-        Kd = self._to_motor16(
-            self.compute_arm_kd(
-                M_diag,
-                zeta=self.config.arm_pd_zeta,
-                omega=self.config.arm_pd_omega,
-            )
+        Kp = self.compute_arm_kp(M_diag, omega=self.config.arm_pd_omega)
+        Kd = self.compute_arm_kd(
+            M_diag,
+            zeta=self.config.arm_pd_zeta,
+            omega=self.config.arm_pd_omega,
         )
         Kp = Kp * self.config.arm_kp_scale
         Kd = Kd * self.config.arm_kd_scale * self.config.arm_kd_boost
@@ -451,8 +443,8 @@ class Controller:
             )
 
         q_des_raw = self._q_des_16 + dq_des * dt
-        q_des_raw[ARM_MOTOR16_INDICES] = np.clip(
-            q_des_raw[ARM_MOTOR16_INDICES],
+        q_des_raw[self._arm_idx_16] = np.clip(
+            q_des_raw[self._arm_idx_16],
             ARM_POSITION_LOWER_RAD,
             ARM_POSITION_UPPER_RAD,
         )
@@ -480,23 +472,21 @@ class Controller:
         odom: Odom,
         dq_des: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
-        vdot = np.concatenate(
-            [
-                odom_vdot_world_to_body(odom),  # (6,)
-                [0.0] * 8,  # base wheels/steer, (8,)
-                [0.0] * 18,  # arm accel = 0, (18,)
-            ],
-            dtype=np.float64,
-        )
+        vdot = np.zeros(self.model.nv, dtype=np.float64)
+        for name, value in zip(
+            FLOATING_BASE_VELOCITY_NAMES,
+            odom_vdot_world_to_body(odom),
+            strict=True,
+        ):
+            vdot[self.model.v_index(name)] = value
 
-        tau_ff = inverse_dynamics(model=self.model, x=x, vdot=vdot)[6 + 8 :]
-
-        if not np.all(np.isfinite(tau_ff)):
-            self._q_des_16 = np.zeros((16,), dtype=np.float64)
+        tau_generalized = inverse_dynamics(model=self.model, x=x, vdot=vdot)
+        if not np.all(np.isfinite(tau_generalized)):
+            self._q_des_16 = np.zeros((len(ARM_COMMAND_MOTOR_NAMES),), dtype=np.float64)
             self._q_des_need_init = True
-            raise RuntimeError(f"tau_ff has nan\n{tau_ff!r}")
+            raise RuntimeError(f"tau_ff has nan\n{tau_generalized!r}")
 
-        tau_ff_16 = self._to_motor16(tau_ff)
+        tau_ff_16 = tau_generalized[self._arm_command_v_idx]
 
         want_move = np.abs(dq_des) > 4e-2
         tau_ff_16 = tau_ff_16 + self.config.tau_static * want_move * np.sign(dq_des)

@@ -14,9 +14,14 @@ from unitree_sdk2py.utils.thread import RecurrentThread
 from g7_openarm_idl import EETarget, Odom
 from g7_openarm_utils.idl import pose_to_array
 
-from .actuation import gripper_command_to_mujoco_position
 from .config import config
+from .model_layout import MuJoCoModelLayout
 from .resources import model_directory
+from .state_mapping import (
+    BASE_VISUALIZATION_Z_M,
+    write_floating_base_qpos,
+    write_lowstate_qpos,
+)
 
 
 def _build_model() -> mujoco.MjModel:
@@ -59,6 +64,7 @@ class VRRealVisualizationNode:
     def __init__(self) -> None:
         self.model = _build_model()
         self.data = mujoco.MjData(self.model)
+        self.layout = MuJoCoModelLayout(self.model)
         mujoco.mj_forward(self.model, self.data)
 
         left_hand = self.data.body("L_tcp")
@@ -119,8 +125,8 @@ class VRRealVisualizationNode:
 
         left_arr = pose_to_array(self.eetarget.left_target)
         right_arr = pose_to_array(self.eetarget.right_target)
-        left_arr[2] += 0.160631
-        right_arr[2] += 0.160631
+        left_arr[2] += BASE_VISUALIZATION_Z_M
+        right_arr[2] += BASE_VISUALIZATION_Z_M
         with self.viewer.lock():
             self.data.mocap_pos[self.left_target_mocap_id] = left_arr[:3]
             self.data.mocap_quat[self.left_target_mocap_id] = left_arr[3:]
@@ -134,29 +140,8 @@ class VRRealVisualizationNode:
             return
 
         with self.viewer.lock():
-            self.data.qpos[0] = odom.position.x
-            self.data.qpos[1] = odom.position.y
-            self.data.qpos[2] = 0.160631
-            self.data.qpos[3] = odom.quaternion.w
-            self.data.qpos[4] = odom.quaternion.x
-            self.data.qpos[5] = odom.quaternion.y
-            self.data.qpos[6] = odom.quaternion.z
-
-            for index in range(8):
-                self.data.qpos[7 + index] = lowstate.motor_state[index].q
-            for index in range(7):
-                self.data.qpos[15 + index] = lowstate.motor_state[8 + index].q
-            for index in range(7):
-                self.data.qpos[24 + index] = lowstate.motor_state[16 + index].q
-
-            left_gripper = gripper_command_to_mujoco_position(
-                lowstate.motor_state[15].q
-            )
-            right_gripper = gripper_command_to_mujoco_position(
-                lowstate.motor_state[23].q
-            )
-            self.data.qpos[22:24] = left_gripper
-            self.data.qpos[31:33] = right_gripper
+            write_floating_base_qpos(self.layout, self.data, odom)
+            write_lowstate_qpos(self.layout, self.data, lowstate)
             self.data.qvel[:] = 0.0
             self.data.qacc[:] = 0.0
             mujoco.mj_forward(self.model, self.data)

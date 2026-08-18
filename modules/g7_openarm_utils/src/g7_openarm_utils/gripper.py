@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 GRIPPER_COMMAND_RANGE = 0.45
+GRIPPER_MODEL_OPEN_DISTANCE_M = 0.045
 
 
 def _finite(value: float, *, name: str) -> float:
@@ -85,3 +86,30 @@ def gripper_motor_velocity_to_command_velocity(
     if span == 0.0:
         raise ValueError("open_position and close_position must differ")
     return velocity * GRIPPER_COMMAND_RANGE / span
+
+
+def gripper_command_to_model_position(command: float) -> float:
+    """Convert the lowcmd gripper coordinate to the URDF/MJCF prismatic joint position."""
+    command = _finite(command, name="command")
+    openness = 1.0 - command / GRIPPER_COMMAND_RANGE
+    return openness * GRIPPER_MODEL_OPEN_DISTANCE_M
+
+
+def gripper_command_velocity_to_model_velocity(velocity: float) -> float:
+    """Convert lowcmd gripper velocity to URDF/MJCF prismatic joint velocity."""
+    velocity = _finite(velocity, name="velocity")
+    return -velocity * GRIPPER_MODEL_OPEN_DISTANCE_M / GRIPPER_COMMAND_RANGE
+
+
+def gripper_model_position_to_command(position: float) -> float:
+    """Convert a URDF/MJCF gripper prismatic joint position to lowcmd coordinates."""
+    position = _finite(position, name="position")
+    openness = position / GRIPPER_MODEL_OPEN_DISTANCE_M
+    openness = min(max(openness, 0.0), 1.0)
+    return gripper_openness_to_command(openness)
+
+
+def gripper_model_velocity_to_command_velocity(velocity: float) -> float:
+    """Convert URDF/MJCF gripper prismatic velocity to lowcmd-coordinate velocity."""
+    velocity = _finite(velocity, name="velocity")
+    return -velocity * GRIPPER_COMMAND_RANGE / GRIPPER_MODEL_OPEN_DISTANCE_M

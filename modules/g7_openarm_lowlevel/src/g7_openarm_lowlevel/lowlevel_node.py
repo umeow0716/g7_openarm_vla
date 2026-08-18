@@ -13,11 +13,30 @@ from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
 from g7_openarm_config import general_config
 from g7_openarm_idl import Odom, WBCLowCmd, WBCLowCmd_default
-from g7_openarm_utils import GRIPPER_COMMAND_RANGE
+from g7_openarm_utils import (
+    ARM_COMMAND_MOTOR_NAMES,
+    BASE_STEER_MOTOR_NAMES,
+    BASE_WHEEL_MOTOR_NAMES,
+    GRIPPER_COMMAND_RANGE,
+    LEFT_ARM_MOTOR_NAMES,
+    LEFT_GRIPPER_MOTOR_NAME,
+    RIGHT_ARM_MOTOR_NAMES,
+    RIGHT_GRIPPER_MOTOR_NAME,
+    arm_command_index,
+    arm_command_indices,
+    motor_command,
+    motor_state_values,
+)
 
 from .config import config
 from .controller import Controller
-from .initialization import INITIAL_KD, INITIAL_KP, ArmInitializer
+from .initialization import ArmInitializer, initial_kd, initial_kp
+
+
+LEFT_ARM_COMMAND_INDICES = arm_command_indices(list(LEFT_ARM_MOTOR_NAMES))
+RIGHT_ARM_COMMAND_INDICES = arm_command_indices(list(RIGHT_ARM_MOTOR_NAMES))
+LEFT_GRIPPER_COMMAND_INDEX = arm_command_index(LEFT_GRIPPER_MOTOR_NAME)
+RIGHT_GRIPPER_COMMAND_INDEX = arm_command_index(RIGHT_GRIPPER_MOTOR_NAME)
 
 
 class LowLevelNode:
@@ -79,32 +98,36 @@ class LowLevelNode:
         if not self.base_enable:
             return
 
-        for i, motor in enumerate(self.lowcmd.motor_cmd[:8:2]):
-            motor.q = steer_pos_des[i]
+        for name, q_des in zip(BASE_STEER_MOTOR_NAMES, steer_pos_des, strict=True):
+            motor = motor_command(self.lowcmd, name)
+            motor.q = float(q_des)
             motor.dq = 0.0
             motor.kp = 100.0
             motor.kd = 1.0
             motor.tau = 0.0
 
-        for i, motor in enumerate(self.lowcmd.motor_cmd[1:8:2]):
-            motor.dq = wheel_vel_des[i]
+        for name, dq_des in zip(BASE_WHEEL_MOTOR_NAMES, wheel_vel_des, strict=True):
+            motor = motor_command(self.lowcmd, name)
+            motor.dq = float(dq_des)
             motor.kp = 0.0
             motor.kd = 6.0
             motor.tau = 0.0
 
     @staticmethod
-    def _write_arm_joint_slice(
+    def _write_arm_joint_group(
         lowcmd: LowCmd_,
         *,
-        motor_offset: int,
+        motor_names: tuple[str, ...],
         q_des: np.ndarray,
         dq_des: np.ndarray,
         kp: np.ndarray | float,
         kd: np.ndarray | float,
         tau: np.ndarray | float,
     ) -> None:
-        for i in range(7):
-            motor = lowcmd.motor_cmd[motor_offset + i]
+        if len(motor_names) != len(q_des) or len(q_des) != len(dq_des):
+            raise ValueError("arm command arrays must match motor_names length")
+        for i, name in enumerate(motor_names):
+            motor = motor_command(lowcmd, name)
             motor.q = float(q_des[i])
             motor.dq = float(dq_des[i])
             motor.kp = float(kp[i] if isinstance(kp, np.ndarray) else kp)
@@ -127,37 +150,37 @@ class LowLevelNode:
 
         self._write_base_hold()
         if self.left_arm_enable:
-            self._write_arm_joint_slice(
+            self._write_arm_joint_group(
                 self.lowcmd,
-                motor_offset=8,
-                q_des=q_des[:7],
-                dq_des=dq_des[:7],
-                kp=INITIAL_KP[:7],
-                kd=INITIAL_KD[:7],
+                motor_names=LEFT_ARM_MOTOR_NAMES,
+                q_des=q_des[LEFT_ARM_COMMAND_INDICES],
+                dq_des=dq_des[LEFT_ARM_COMMAND_INDICES],
+                kp=initial_kp(LEFT_ARM_MOTOR_NAMES),
+                kd=initial_kd(LEFT_ARM_MOTOR_NAMES),
                 tau=0.0,
             )
-            left_gripper = self.lowcmd.motor_cmd[15]
-            left_gripper.q = float(q_des[7])
-            left_gripper.dq = float(dq_des[7])
-            left_gripper.kp = INITIAL_KP[7]
-            left_gripper.kd = INITIAL_KD[7]
+            left_gripper = motor_command(self.lowcmd, LEFT_GRIPPER_MOTOR_NAME)
+            left_gripper.q = float(q_des[LEFT_GRIPPER_COMMAND_INDEX])
+            left_gripper.dq = float(dq_des[LEFT_GRIPPER_COMMAND_INDEX])
+            left_gripper.kp = float(initial_kp((LEFT_GRIPPER_MOTOR_NAME,))[0])
+            left_gripper.kd = float(initial_kd((LEFT_GRIPPER_MOTOR_NAME,))[0])
             left_gripper.tau = 0.0
 
         if self.right_arm_enable:
-            self._write_arm_joint_slice(
+            self._write_arm_joint_group(
                 self.lowcmd,
-                motor_offset=16,
-                q_des=q_des[8:15],
-                dq_des=dq_des[8:15],
-                kp=INITIAL_KP[:7],
-                kd=INITIAL_KD[:7],
+                motor_names=RIGHT_ARM_MOTOR_NAMES,
+                q_des=q_des[RIGHT_ARM_COMMAND_INDICES],
+                dq_des=dq_des[RIGHT_ARM_COMMAND_INDICES],
+                kp=initial_kp(RIGHT_ARM_MOTOR_NAMES),
+                kd=initial_kd(RIGHT_ARM_MOTOR_NAMES),
                 tau=0.0,
             )
-            right_gripper = self.lowcmd.motor_cmd[23]
-            right_gripper.q = float(q_des[15])
-            right_gripper.dq = float(dq_des[15])
-            right_gripper.kp = INITIAL_KP[7]
-            right_gripper.kd = INITIAL_KD[7]
+            right_gripper = motor_command(self.lowcmd, RIGHT_GRIPPER_MOTOR_NAME)
+            right_gripper.q = float(q_des[RIGHT_GRIPPER_COMMAND_INDEX])
+            right_gripper.dq = float(dq_des[RIGHT_GRIPPER_COMMAND_INDEX])
+            right_gripper.kp = float(initial_kp((RIGHT_GRIPPER_MOTOR_NAME,))[0])
+            right_gripper.kd = float(initial_kd((RIGHT_GRIPPER_MOTOR_NAME,))[0])
             right_gripper.tau = 0.0
         self.lowcmd_publisher.Write(self.lowcmd)
 
@@ -176,36 +199,42 @@ class LowLevelNode:
         tau_ff: np.ndarray,
     ) -> None:
         if self.left_arm_enable:
-            self._write_arm_joint_slice(
+            self._write_arm_joint_group(
                 self.lowcmd,
-                motor_offset=8,
-                q_des=q_des[:7],
-                dq_des=dq_des[:7],
-                kp=kp[:7],
-                kd=kd[:7],
-                tau=tau_ff[:7],
+                motor_names=LEFT_ARM_MOTOR_NAMES,
+                q_des=q_des[LEFT_ARM_COMMAND_INDICES],
+                dq_des=dq_des[LEFT_ARM_COMMAND_INDICES],
+                kp=kp[LEFT_ARM_COMMAND_INDICES],
+                kd=kd[LEFT_ARM_COMMAND_INDICES],
+                tau=tau_ff[LEFT_ARM_COMMAND_INDICES],
             )
 
-            left_gripper = self.lowcmd.motor_cmd[15]
-            left_gripper.q = self.wbc_lowcmd.openarm.data[7] * GRIPPER_COMMAND_RANGE
+            left_gripper = motor_command(self.lowcmd, LEFT_GRIPPER_MOTOR_NAME)
+            left_gripper.q = (
+                self.wbc_lowcmd.openarm.data[LEFT_GRIPPER_COMMAND_INDEX]
+                * GRIPPER_COMMAND_RANGE
+            )
             left_gripper.dq = 0.0
             left_gripper.kp = 20.0
             left_gripper.kd = 0.5
             left_gripper.tau = 0.0
 
         if self.right_arm_enable:
-            self._write_arm_joint_slice(
+            self._write_arm_joint_group(
                 self.lowcmd,
-                motor_offset=16,
-                q_des=q_des[8:15],
-                dq_des=dq_des[8:15],
-                kp=kp[8:15],
-                kd=kd[8:15],
-                tau=tau_ff[8:15],
+                motor_names=RIGHT_ARM_MOTOR_NAMES,
+                q_des=q_des[RIGHT_ARM_COMMAND_INDICES],
+                dq_des=dq_des[RIGHT_ARM_COMMAND_INDICES],
+                kp=kp[RIGHT_ARM_COMMAND_INDICES],
+                kd=kd[RIGHT_ARM_COMMAND_INDICES],
+                tau=tau_ff[RIGHT_ARM_COMMAND_INDICES],
             )
 
-            right_gripper = self.lowcmd.motor_cmd[23]
-            right_gripper.q = self.wbc_lowcmd.openarm.data[15] * GRIPPER_COMMAND_RANGE
+            right_gripper = motor_command(self.lowcmd, RIGHT_GRIPPER_MOTOR_NAME)
+            right_gripper.q = (
+                self.wbc_lowcmd.openarm.data[RIGHT_GRIPPER_COMMAND_INDEX]
+                * GRIPPER_COMMAND_RANGE
+            )
             right_gripper.dq = 0.0
             right_gripper.kp = 20.0
             right_gripper.kd = 0.5
@@ -252,10 +281,7 @@ class LowLevelNode:
         if self.initial_enable and self.initializer is not None:
             with self.initial_plan_lock:
                 if not self.initializer.started:
-                    q_start = np.array(
-                        [msg.motor_state[i].q for i in range(8, 24)],
-                        dtype=np.float64,
-                    )
+                    q_start = motor_state_values(msg, ARM_COMMAND_MOTOR_NAMES, "q")
                     self.initializer.plan_from_state(q_start, now=time.monotonic())
                     print("Low-level arm initialization planned from first lowstate")
 
