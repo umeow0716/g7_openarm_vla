@@ -11,23 +11,22 @@ from g7_openarm_lowlevel.initialization import (
     ArmInitializer,
 )
 from g7_openarm_mujoco.actuation import (
-    gripper_command_to_mujoco_position,
-    gripper_command_velocity_to_mujoco_velocity,
+    gripper_openness_to_mujoco_position,
+    gripper_openness_velocity_to_mujoco_velocity,
     motor_actuation_enabled,
-    mujoco_gripper_position_to_command,
-    mujoco_gripper_velocity_to_command_velocity,
+    mujoco_gripper_position_to_openness,
+    mujoco_gripper_velocity_to_openness_velocity,
 )
 from g7_openarm_utils import (
     BASE_MOTOR_NAMES,
-    GRIPPER_COMMAND_RANGE,
     LEFT_ARM_MOTOR_NAMES,
     RIGHT_ARM_MOTOR_NAMES,
-    gripper_command_to_motor_position,
-    gripper_command_velocity_to_motor_velocity,
-    gripper_motor_position_to_command,
-    gripper_motor_velocity_to_command_velocity,
-    gripper_openness_to_command,
+    gripper_motor_position_to_openness,
+    gripper_motor_velocity_to_openness_velocity,
+    gripper_openness_to_motor_position,
+    gripper_openness_velocity_to_motor_velocity,
 )
+
 
 
 def _general(mode: str) -> GeneralConfig:
@@ -69,7 +68,7 @@ def test_single_arm_initializer_only_moves_enabled_side(
     q_end, dq_end, done = initializer.sample(now=1.0 + INITIAL_DURATION_S)
 
     expected_active = np.concatenate(
-        [np.asarray(target), [gripper_openness_to_command(1.0)]]
+        [np.asarray(target), [1.0]]
     )
     np.testing.assert_allclose(q_end[active_slice], expected_active)
     np.testing.assert_allclose(q_end[inactive_slice], start[inactive_slice])
@@ -91,7 +90,7 @@ def test_initializer_plan_starts_at_first_measured_state() -> None:
     q_end, _, done_end = initializer.sample(now=10.0 + INITIAL_DURATION_S)
 
     expected_target_8 = np.concatenate(
-        [np.asarray(target), [gripper_openness_to_command(1.0)]]
+        [np.asarray(target), [1.0]]
     )
     expected_target_16 = np.concatenate([expected_target_8, expected_target_8])
 
@@ -106,11 +105,11 @@ def test_initializer_plan_starts_at_first_measured_state() -> None:
 def test_initial_gains_match_openarm_teleop_follower() -> None:
     np.testing.assert_array_equal(
         INITIAL_KP,
-        np.array([240.0, 240.0, 240.0, 240.0, 30.0, 30.0, 30.0, 30.0]),
+        np.array([200.0, 200.0, 200.0, 200.0, 30.0, 30.0, 30.0, 30.0]),
     )
     np.testing.assert_array_equal(
         INITIAL_KD,
-        np.array([3.0, 3.0, 3.0, 3.0, 0.2, 0.2, 0.2, 0.2]),
+        np.array([2.5, 2.5, 2.5, 2.5, 0.2, 0.2, 0.2, 0.2]),
     )
 
 
@@ -136,8 +135,9 @@ def test_lowlevel_initial_is_allowed_for_every_active_arm_mode(
 def test_initial_gripper_is_normalized_openness() -> None:
     general = _general("wbc")
     assert general.initial_gripper == 1.0
-    assert gripper_openness_to_command(general.initial_gripper) == 0.0
-    assert gripper_openness_to_command(0.0) == GRIPPER_COMMAND_RANGE
+    initializer = ArmInitializer(general.initial_pos, target_gripper=general.initial_gripper)
+    assert initializer.target_16[7] == pytest.approx(1.0)
+    assert initializer.target_16[15] == pytest.approx(1.0)
 
 
 def test_initial_gripper_defaults_to_fully_open() -> None:
@@ -164,46 +164,46 @@ def test_initial_gripper_rejects_invalid_values(invalid: float) -> None:
 def test_hardware_gripper_mapping_round_trip() -> None:
     open_position = 0.0
     close_position = -1.2
-    for command in (0.0, 0.1, GRIPPER_COMMAND_RANGE):
-        position = gripper_command_to_motor_position(
-            command,
+    for openness in (0.0, 0.25, 1.0):
+        position = gripper_openness_to_motor_position(
+            openness,
             open_position=open_position,
             close_position=close_position,
         )
-        restored = gripper_motor_position_to_command(
+        restored = gripper_motor_position_to_openness(
             position,
             open_position=open_position,
             close_position=close_position,
         )
-        assert restored == pytest.approx(command)
+        assert restored == pytest.approx(openness)
 
-    command_velocity = -0.03
-    motor_velocity = gripper_command_velocity_to_motor_velocity(
-        command_velocity,
+    openness_velocity = 0.3
+    motor_velocity = gripper_openness_velocity_to_motor_velocity(
+        openness_velocity,
         open_position=open_position,
         close_position=close_position,
     )
-    restored_velocity = gripper_motor_velocity_to_command_velocity(
+    restored_velocity = gripper_motor_velocity_to_openness_velocity(
         motor_velocity,
         open_position=open_position,
         close_position=close_position,
     )
-    assert restored_velocity == pytest.approx(command_velocity)
+    assert restored_velocity == pytest.approx(openness_velocity)
 
 
 def test_mujoco_gripper_mapping_round_trip_and_open_direction() -> None:
-    assert gripper_command_to_mujoco_position(0.0) == pytest.approx(0.045)
-    assert gripper_command_to_mujoco_position(GRIPPER_COMMAND_RANGE) == pytest.approx(0.0)
+    assert gripper_openness_to_mujoco_position(0.0) == pytest.approx(0.0)
+    assert gripper_openness_to_mujoco_position(1.0) == pytest.approx(0.045)
 
-    for command in (0.0, 0.2, GRIPPER_COMMAND_RANGE):
-        position = gripper_command_to_mujoco_position(command)
-        assert mujoco_gripper_position_to_command(position) == pytest.approx(command)
+    for openness in (0.0, 0.25, 1.0):
+        position = gripper_openness_to_mujoco_position(openness)
+        assert mujoco_gripper_position_to_openness(position) == pytest.approx(openness)
 
-    command_velocity = -0.04
-    mujoco_velocity = gripper_command_velocity_to_mujoco_velocity(command_velocity)
+    openness_velocity = 0.4
+    mujoco_velocity = gripper_openness_velocity_to_mujoco_velocity(openness_velocity)
     assert mujoco_velocity > 0.0
-    assert mujoco_gripper_velocity_to_command_velocity(mujoco_velocity) == pytest.approx(
-        command_velocity
+    assert mujoco_gripper_velocity_to_openness_velocity(mujoco_velocity) == pytest.approx(
+        openness_velocity
     )
 
 

@@ -12,7 +12,6 @@ from g7_openarm_pinnzoo import PinnZooModel, kinematics
 from g7_openarm_utils import (
     LEFT_GRIPPER_MOTOR_NAME,
     RIGHT_GRIPPER_MOTOR_NAME,
-    gripper_command_to_openness,
     motor_index,
 )
 
@@ -83,18 +82,14 @@ class RobotStateProjector:
 
         left_open = float(
             np.clip(
-                gripper_command_to_openness(
-                    lowstate.motor_state[motor_index(LEFT_GRIPPER_MOTOR_NAME)].q
-                ),
+                lowstate.motor_state[motor_index(LEFT_GRIPPER_MOTOR_NAME)].q,
                 0.0,
                 1.0,
             )
         )
         right_open = float(
             np.clip(
-                gripper_command_to_openness(
-                    lowstate.motor_state[motor_index(RIGHT_GRIPPER_MOTOR_NAME)].q
-                ),
+                lowstate.motor_state[motor_index(RIGHT_GRIPPER_MOTOR_NAME)].q,
                 0.0,
                 1.0,
             )

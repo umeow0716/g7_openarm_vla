@@ -27,6 +27,7 @@ class HardwareConfig(BaseConfig):
     base_direction: list[float]
     left_arm_direction: list[float]
     right_arm_direction: list[float]
+    # Calibrated physical motor positions in radians.
     left_gripper_open: float
     left_gripper_close: float
     right_gripper_open: float

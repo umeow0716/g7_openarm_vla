@@ -11,7 +11,7 @@ from g7_openarm_utils import (
     MODEL_JOINTS_BY_MOTOR_NAME,
     MOTOR_NAMES,
     RIGHT_GRIPPER_MOTOR_NAME,
-    gripper_command_to_model_position,
+    gripper_openness_to_model_position,
     motor_index,
 )
 
@@ -41,13 +41,15 @@ def test_lowstate_to_mujoco_qpos_uses_joint_names_not_offsets() -> None:
     lowstate = SimpleNamespace(
         motor_state=[SimpleNamespace(q=float(index + 1)) for index in range(len(MOTOR_NAMES))]
     )
+    lowstate.motor_state[motor_index(LEFT_GRIPPER_MOTOR_NAME)].q = 0.25
+    lowstate.motor_state[motor_index(RIGHT_GRIPPER_MOTOR_NAME)].q = 0.75
 
     write_lowstate_qpos(layout, data, lowstate)
 
     for motor_name in MOTOR_NAMES:
         expected = lowstate.motor_state[motor_index(motor_name)].q
         if motor_name in (LEFT_GRIPPER_MOTOR_NAME, RIGHT_GRIPPER_MOTOR_NAME):
-            expected = gripper_command_to_model_position(expected)
+            expected = gripper_openness_to_model_position(expected)
         for joint_name in MODEL_JOINTS_BY_MOTOR_NAME[motor_name]:
             assert data.qpos[layout.qpos_index(joint_name)] == expected
 

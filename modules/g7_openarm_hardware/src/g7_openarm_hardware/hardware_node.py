@@ -25,10 +25,10 @@ from g7_openarm_utils import (
     LEFT_HARDWARE_MOTOR_NAMES,
     RIGHT_GRIPPER_MOTOR_NAME,
     RIGHT_HARDWARE_MOTOR_NAMES,
-    gripper_command_to_motor_position,
-    gripper_command_velocity_to_motor_velocity,
-    gripper_motor_position_to_command,
-    gripper_motor_velocity_to_command_velocity,
+    gripper_openness_to_motor_position,
+    gripper_openness_velocity_to_motor_velocity,
+    gripper_motor_position_to_openness,
+    gripper_motor_velocity_to_openness_velocity,
     motor_command,
     motor_index,
 )
@@ -124,12 +124,6 @@ def build_bus_configs(*, base_enabled: bool, arms_enabled: bool = True) -> dict[
     return bus_configs
 
 
-def mapping_gripper(val: float, open_val: float, close_val: float) -> float:
-    return gripper_command_to_motor_position(
-        val,
-        open_position=open_val,
-        close_position=close_val,
-    )
 
 
 class HardwareNode:
@@ -267,12 +261,12 @@ class HardwareNode:
                 state = self.lowstate.motor_state[motor_index(name)]
                 if name == LEFT_GRIPPER_MOTOR_NAME:
                     print(f'left_gripper: {motor.get_position():.3f}')
-                    state.q = gripper_motor_position_to_command(
+                    state.q = gripper_motor_position_to_openness(
                         motor.get_position(),
                         open_position=config.left_gripper_open,
                         close_position=config.left_gripper_close,
                     )
-                    state.dq = gripper_motor_velocity_to_command_velocity(
+                    state.dq = gripper_motor_velocity_to_openness_velocity(
                         motor.get_velocity(),
                         open_position=config.left_gripper_open,
                         close_position=config.left_gripper_close,
@@ -289,12 +283,12 @@ class HardwareNode:
                 state = self.lowstate.motor_state[motor_index(name)]
                 if name == RIGHT_GRIPPER_MOTOR_NAME:
                     print(f'right_gripper: {motor.get_position():.3f}')
-                    state.q = gripper_motor_position_to_command(
+                    state.q = gripper_motor_position_to_openness(
                         motor.get_position(),
                         open_position=config.right_gripper_open,
                         close_position=config.right_gripper_close,
                     )
-                    state.dq = gripper_motor_velocity_to_command_velocity(
+                    state.dq = gripper_motor_velocity_to_openness_velocity(
                         motor.get_velocity(),
                         open_position=config.right_gripper_open,
                         close_position=config.right_gripper_close,
@@ -319,12 +313,12 @@ class HardwareNode:
                 if name == LEFT_GRIPPER_MOTOR_NAME:
                     left_cmds.append(
                         dc.MITParam(
-                            q=mapping_gripper(
+                            q=gripper_openness_to_motor_position(
                                 command.q,
-                                config.left_gripper_open,
-                                config.left_gripper_close,
+                                open_position=config.left_gripper_open,
+                                close_position=config.left_gripper_close,
                             ),
-                            dq=gripper_command_velocity_to_motor_velocity(
+                            dq=gripper_openness_velocity_to_motor_velocity(
                                 command.dq,
                                 open_position=config.left_gripper_open,
                                 close_position=config.left_gripper_close,
@@ -355,12 +349,12 @@ class HardwareNode:
                 if name == RIGHT_GRIPPER_MOTOR_NAME:
                     right_cmds.append(
                         dc.MITParam(
-                            q=mapping_gripper(
+                            q=gripper_openness_to_motor_position(
                                 command.q,
-                                config.right_gripper_open,
-                                config.right_gripper_close,
+                                open_position=config.right_gripper_open,
+                                close_position=config.right_gripper_close,
                             ),
-                            dq=gripper_command_velocity_to_motor_velocity(
+                            dq=gripper_openness_velocity_to_motor_velocity(
                                 command.dq,
                                 open_position=config.right_gripper_open,
                                 close_position=config.right_gripper_close,

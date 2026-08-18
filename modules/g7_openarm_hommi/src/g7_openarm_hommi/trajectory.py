@@ -9,8 +9,6 @@ import numpy as np
 import numpy.typing as npt
 from hommi_train.dataset import rotation_6d_to_matrix_umi
 
-from g7_openarm_utils import GRIPPER_COMMAND_RANGE, gripper_openness_to_command
-
 from .geometry import matrix_to_pose7_wxyz
 from .state import RobotSnapshot
 
@@ -22,19 +20,13 @@ class TargetPoint:
     execute_at: float
     left_pose7: tuple[float, ...]
     right_pose7: tuple[float, ...]
-    left_gripper: float
-    right_gripper: float
+    left_gripper_openness: float
+    right_gripper_openness: float
 
 
-def _wbc_gripper_scalar(openness: float) -> float:
-    """Convert HoMMI openness to the legacy WBC scalar consumed by lowlevel.
-
-    HoMMI:   0 = closed, 1 = open.
-    WBC path: scalar * GRIPPER_COMMAND_RANGE is the lowcmd coordinate, where
-              0 = open and GRIPPER_COMMAND_RANGE = closed.
-    """
-    clipped = float(np.clip(openness, 0.0, 1.0))
-    return gripper_openness_to_command(clipped) / GRIPPER_COMMAND_RANGE
+def _normalized_gripper_openness(openness: float) -> float:
+    """Return canonical gripper openness: 0=closed, 1=open."""
+    return float(np.clip(openness, 0.0, 1.0))
 
 
 def decode_action_chunk(
@@ -57,8 +49,8 @@ def decode_action_chunk(
     base = reference.matrix(arm).astype(np.float32, copy=False)
     left_hold = tuple(float(x) for x in reference.left_pose7)
     right_hold = tuple(float(x) for x in reference.right_pose7)
-    left_gripper_hold = _wbc_gripper_scalar(reference.left_gripper_openness)
-    right_gripper_hold = _wbc_gripper_scalar(reference.right_gripper_openness)
+    left_gripper_openness_hold = _normalized_gripper_openness(reference.left_gripper_openness)
+    right_gripper_openness_hold = _normalized_gripper_openness(reference.right_gripper_openness)
 
     points: list[TargetPoint] = []
     first_offset_steps = obs_horizon - 1
@@ -69,19 +61,19 @@ def decode_action_chunk(
         relative[:3, :3] = rotation_6d_to_matrix_umi(action[3:9])
         target = base @ relative
         target_pose7 = tuple(float(x) for x in matrix_to_pose7_wxyz(target))
-        model_gripper = _wbc_gripper_scalar(float(action[9]))
+        model_gripper_openness = _normalized_gripper_openness(float(action[9]))
 
         left_pose7 = left_hold
         right_pose7 = right_hold
-        left_gripper = left_gripper_hold
-        right_gripper = right_gripper_hold
+        left_gripper_openness = left_gripper_openness_hold
+        right_gripper_openness = right_gripper_openness_hold
 
         if arm == "left":
             left_pose7 = target_pose7
-            left_gripper = model_gripper
+            left_gripper_openness = model_gripper_openness
         elif arm == "right":
             right_pose7 = target_pose7
-            right_gripper = model_gripper
+            right_gripper_openness = model_gripper_openness
         else:
             raise ValueError(f"unknown arm side {arm!r}")
 
@@ -91,8 +83,8 @@ def decode_action_chunk(
                 + (first_offset_steps + index) * interval,
                 left_pose7=left_pose7,
                 right_pose7=right_pose7,
-                left_gripper=left_gripper,
-                right_gripper=right_gripper,
+                left_gripper_openness=left_gripper_openness,
+                right_gripper_openness=right_gripper_openness,
             )
         )
 
@@ -126,8 +118,8 @@ class AtomicTrajectory:
                     ),
                     left_pose7=point.left_pose7,
                     right_pose7=point.right_pose7,
-                    left_gripper=point.left_gripper,
-                    right_gripper=point.right_gripper,
+                    left_gripper_openness=point.left_gripper_openness,
+                    right_gripper_openness=point.right_gripper_openness,
                 )
                 for index, point in enumerate(points)
             ]

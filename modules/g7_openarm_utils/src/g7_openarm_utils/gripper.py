@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import math
 
-GRIPPER_COMMAND_RANGE = 0.45
 GRIPPER_MODEL_OPEN_DISTANCE_M = 0.045
+GRIPPER_MODEL_VELOCITY_LIMIT_M_S = 0.1
+GRIPPER_OPENNESS_VELOCITY_LIMIT_PER_S = (
+    GRIPPER_MODEL_VELOCITY_LIMIT_M_S / GRIPPER_MODEL_OPEN_DISTANCE_M
+)
 
 
 def _finite(value: float, *, name: str) -> float:
@@ -13,103 +16,100 @@ def _finite(value: float, *, name: str) -> float:
     return value
 
 
-def gripper_openness_to_command(openness: float) -> float:
-    """Convert normalized openness (0=closed, 1=open) to lowcmd coordinates."""
-    openness = _finite(openness, name="openness")
-    if not 0.0 <= openness <= 1.0:
-        raise ValueError(f"openness must be in [0, 1], got {openness}")
-    return (1.0 - openness) * GRIPPER_COMMAND_RANGE
+def _openness(value: float) -> float:
+    value = _finite(value, name="openness")
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"openness must be in [0, 1], got {value}")
+    return value
 
 
-def gripper_command_to_openness(command: float) -> float:
-    """Convert the legacy lowcmd gripper coordinate to normalized openness."""
-    command = _finite(command, name="command")
-    return 1.0 - command / GRIPPER_COMMAND_RANGE
+def _motor_span(*, open_position: float, close_position: float) -> tuple[float, float, float]:
+    open_position = _finite(open_position, name="open_position")
+    close_position = _finite(close_position, name="close_position")
+    span = open_position - close_position
+    if span == 0.0:
+        raise ValueError("open_position and close_position must differ")
+    return open_position, close_position, span
 
 
-def gripper_command_to_motor_position(
-    command: float,
+def gripper_openness_to_model_position(openness: float) -> float:
+    """Map normalized openness (0=closed, 1=open) to model joint position in meters."""
+    return _openness(openness) * GRIPPER_MODEL_OPEN_DISTANCE_M
+
+
+def gripper_openness_velocity_to_model_velocity(openness_velocity: float) -> float:
+    """Map normalized openness velocity (positive=opening) to model velocity in m/s."""
+    return _finite(openness_velocity, name="openness_velocity") * GRIPPER_MODEL_OPEN_DISTANCE_M
+
+
+def gripper_model_position_to_openness(position: float) -> float:
+    """Map model joint position in meters to normalized openness, clamped to [0, 1]."""
+    position = _finite(position, name="position")
+    openness = position / GRIPPER_MODEL_OPEN_DISTANCE_M
+    return min(max(openness, 0.0), 1.0)
+
+
+def gripper_model_velocity_to_openness_velocity(velocity: float) -> float:
+    """Map model joint velocity in m/s to normalized openness velocity."""
+    return _finite(velocity, name="velocity") / GRIPPER_MODEL_OPEN_DISTANCE_M
+
+
+def gripper_openness_to_motor_position(
+    openness: float,
     *,
     open_position: float,
     close_position: float,
 ) -> float:
-    """Map a lowcmd gripper coordinate to a calibrated hardware motor position."""
-    command = _finite(command, name="command")
-    open_position = _finite(open_position, name="open_position")
-    close_position = _finite(close_position, name="close_position")
-    return (
-        (close_position - open_position) * command / GRIPPER_COMMAND_RANGE
-        + open_position
+    """Map normalized openness to a calibrated hardware motor position in radians."""
+    openness = _openness(openness)
+    _, close_position, span = _motor_span(
+        open_position=open_position,
+        close_position=close_position,
     )
+    return close_position + span * openness
 
 
-def gripper_command_velocity_to_motor_velocity(
-    velocity: float,
+def gripper_openness_velocity_to_motor_velocity(
+    openness_velocity: float,
     *,
     open_position: float,
     close_position: float,
 ) -> float:
-    """Convert lowcmd-coordinate velocity to calibrated hardware motor velocity."""
-    velocity = _finite(velocity, name="velocity")
-    open_position = _finite(open_position, name="open_position")
-    close_position = _finite(close_position, name="close_position")
-    return velocity * (close_position - open_position) / GRIPPER_COMMAND_RANGE
+    """Map normalized openness velocity to calibrated hardware motor velocity in rad/s."""
+    openness_velocity = _finite(openness_velocity, name="openness_velocity")
+    _, _, span = _motor_span(
+        open_position=open_position,
+        close_position=close_position,
+    )
+    return span * openness_velocity
 
 
-def gripper_motor_position_to_command(
+def gripper_motor_position_to_openness(
     position: float,
     *,
     open_position: float,
     close_position: float,
 ) -> float:
-    """Map a calibrated hardware motor position back to the lowcmd coordinate."""
+    """Map calibrated hardware motor position in radians to normalized openness."""
     position = _finite(position, name="position")
-    open_position = _finite(open_position, name="open_position")
-    close_position = _finite(close_position, name="close_position")
-    span = close_position - open_position
-    if span == 0.0:
-        raise ValueError("open_position and close_position must differ")
-    return (position - open_position) * GRIPPER_COMMAND_RANGE / span
+    _, close_position, span = _motor_span(
+        open_position=open_position,
+        close_position=close_position,
+    )
+    openness = (position - close_position) / span
+    return min(max(openness, 0.0), 1.0)
 
 
-def gripper_motor_velocity_to_command_velocity(
+def gripper_motor_velocity_to_openness_velocity(
     velocity: float,
     *,
     open_position: float,
     close_position: float,
 ) -> float:
-    """Convert calibrated hardware motor velocity to lowcmd-coordinate velocity."""
+    """Map calibrated hardware motor velocity in rad/s to normalized openness velocity."""
     velocity = _finite(velocity, name="velocity")
-    open_position = _finite(open_position, name="open_position")
-    close_position = _finite(close_position, name="close_position")
-    span = close_position - open_position
-    if span == 0.0:
-        raise ValueError("open_position and close_position must differ")
-    return velocity * GRIPPER_COMMAND_RANGE / span
-
-
-def gripper_command_to_model_position(command: float) -> float:
-    """Convert the lowcmd gripper coordinate to the URDF/MJCF prismatic joint position."""
-    command = _finite(command, name="command")
-    openness = 1.0 - command / GRIPPER_COMMAND_RANGE
-    return openness * GRIPPER_MODEL_OPEN_DISTANCE_M
-
-
-def gripper_command_velocity_to_model_velocity(velocity: float) -> float:
-    """Convert lowcmd gripper velocity to URDF/MJCF prismatic joint velocity."""
-    velocity = _finite(velocity, name="velocity")
-    return -velocity * GRIPPER_MODEL_OPEN_DISTANCE_M / GRIPPER_COMMAND_RANGE
-
-
-def gripper_model_position_to_command(position: float) -> float:
-    """Convert a URDF/MJCF gripper prismatic joint position to lowcmd coordinates."""
-    position = _finite(position, name="position")
-    openness = position / GRIPPER_MODEL_OPEN_DISTANCE_M
-    openness = min(max(openness, 0.0), 1.0)
-    return gripper_openness_to_command(openness)
-
-
-def gripper_model_velocity_to_command_velocity(velocity: float) -> float:
-    """Convert URDF/MJCF gripper prismatic velocity to lowcmd-coordinate velocity."""
-    velocity = _finite(velocity, name="velocity")
-    return -velocity * GRIPPER_COMMAND_RANGE / GRIPPER_MODEL_OPEN_DISTANCE_M
+    _, _, span = _motor_span(
+        open_position=open_position,
+        close_position=close_position,
+    )
+    return velocity / span

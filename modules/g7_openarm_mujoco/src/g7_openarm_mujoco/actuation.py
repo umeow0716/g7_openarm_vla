@@ -4,10 +4,10 @@ from g7_openarm_utils import (
     GRIPPER_MODEL_OPEN_DISTANCE_M,
     LEFT_HARDWARE_MOTOR_NAMES,
     RIGHT_HARDWARE_MOTOR_NAMES,
-    gripper_command_to_model_position,
-    gripper_command_velocity_to_model_velocity,
-    gripper_model_position_to_command,
-    gripper_model_velocity_to_command_velocity,
+    gripper_model_position_to_openness,
+    gripper_model_velocity_to_openness_velocity,
+    gripper_openness_to_model_position,
+    gripper_openness_velocity_to_model_velocity,
 )
 
 MUJOCO_GRIPPER_OPEN_DISTANCE_M = GRIPPER_MODEL_OPEN_DISTANCE_M
@@ -28,9 +28,9 @@ def motor_actuation_enabled(motor_name: str, general: GeneralConfig) -> bool:
     raise KeyError(f"Unknown logical motor name: {motor_name}")
 
 
-# Backward-compatible MuJoCo-specific names. The conversion is model-space,
-# not MuJoCo-order-specific, so PinnZoo can use the same functions.
-gripper_command_to_mujoco_position = gripper_command_to_model_position
-gripper_command_velocity_to_mujoco_velocity = gripper_command_velocity_to_model_velocity
-mujoco_gripper_position_to_command = gripper_model_position_to_command
-mujoco_gripper_velocity_to_command_velocity = gripper_model_velocity_to_command_velocity
+# MuJoCo boundary aliases: transport gripper values are canonical openness
+# (q: 0=closed, 1=open; dq: positive=opening).
+gripper_openness_to_mujoco_position = gripper_openness_to_model_position
+gripper_openness_velocity_to_mujoco_velocity = gripper_openness_velocity_to_model_velocity
+mujoco_gripper_position_to_openness = gripper_model_position_to_openness
+mujoco_gripper_velocity_to_openness_velocity = gripper_model_velocity_to_openness_velocity

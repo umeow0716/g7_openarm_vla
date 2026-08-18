@@ -17,7 +17,6 @@ from g7_openarm_utils import (
     ARM_COMMAND_MOTOR_NAMES,
     BASE_STEER_MOTOR_NAMES,
     BASE_WHEEL_MOTOR_NAMES,
-    GRIPPER_COMMAND_RANGE,
     LEFT_ARM_MOTOR_NAMES,
     LEFT_GRIPPER_MOTOR_NAME,
     RIGHT_ARM_MOTOR_NAMES,
@@ -210,10 +209,9 @@ class LowLevelNode:
             )
 
             left_gripper = motor_command(self.lowcmd, LEFT_GRIPPER_MOTOR_NAME)
-            left_gripper.q = (
-                self.wbc_lowcmd.openarm.data[LEFT_GRIPPER_COMMAND_INDEX]
-                * GRIPPER_COMMAND_RANGE
-            )
+            # Gripper LowCmd uses normalized openness directly: q in [0, 1], dq in 1/s.
+            left_gripper.q = float(self.wbc_lowcmd.openarm.data[LEFT_GRIPPER_COMMAND_INDEX])
+            # WBC currently carries gripper position only; no gripper velocity target exists.
             left_gripper.dq = 0.0
             left_gripper.kp = 20.0
             left_gripper.kd = 0.5
@@ -231,10 +229,9 @@ class LowLevelNode:
             )
 
             right_gripper = motor_command(self.lowcmd, RIGHT_GRIPPER_MOTOR_NAME)
-            right_gripper.q = (
-                self.wbc_lowcmd.openarm.data[RIGHT_GRIPPER_COMMAND_INDEX]
-                * GRIPPER_COMMAND_RANGE
-            )
+            # Gripper LowCmd uses normalized openness directly: q in [0, 1], dq in 1/s.
+            right_gripper.q = float(self.wbc_lowcmd.openarm.data[RIGHT_GRIPPER_COMMAND_INDEX])
+            # WBC currently carries gripper position only; no gripper velocity target exists.
             right_gripper.dq = 0.0
             right_gripper.kp = 20.0
             right_gripper.kd = 0.5

@@ -11,8 +11,8 @@ import numpy.typing as npt
 from cffi import FFI
 
 from g7_openarm_utils.gripper import (
-    gripper_command_to_model_position,
-    gripper_command_velocity_to_model_velocity,
+    gripper_openness_to_model_position,
+    gripper_openness_velocity_to_model_velocity,
 )
 from g7_openarm_utils.joint_layout import (
     ACTUATED_MODEL_JOINT_NAMES,
@@ -364,8 +364,8 @@ void dynamics_deriv_wrapper(
             q_value = float(state.q)
             v_value = float(state.dq)
             if motor_name in (LEFT_GRIPPER_MOTOR_NAME, RIGHT_GRIPPER_MOTOR_NAME):
-                q_value = gripper_command_to_model_position(q_value)
-                v_value = gripper_command_velocity_to_model_velocity(v_value)
+                q_value = gripper_openness_to_model_position(q_value)
+                v_value = gripper_openness_velocity_to_model_velocity(v_value)
 
             for joint_name in MODEL_JOINTS_BY_MOTOR_NAME[motor_name]:
                 q[self.q_index(joint_name)] = q_value

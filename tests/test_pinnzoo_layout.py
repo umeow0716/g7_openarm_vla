@@ -76,8 +76,8 @@ def test_build_x_lib_resolves_independent_permuted_q_and_v_name_orders() -> None
         MODEL_JOINTS_BY_MOTOR_NAME,
         MOTOR_NAMES,
         RIGHT_GRIPPER_MOTOR_NAME,
-        gripper_command_to_model_position,
-        gripper_command_velocity_to_model_velocity,
+        gripper_openness_to_model_position,
+        gripper_openness_velocity_to_model_velocity,
         motor_index,
     )
 
@@ -101,6 +101,10 @@ def test_build_x_lib_resolves_independent_permuted_q_and_v_name_orders() -> None
             for index in range(len(MOTOR_NAMES))
         ]
     )
+    lowstate.motor_state[motor_index(LEFT_GRIPPER_MOTOR_NAME)].q = 0.25
+    lowstate.motor_state[motor_index(LEFT_GRIPPER_MOTOR_NAME)].dq = 0.5
+    lowstate.motor_state[motor_index(RIGHT_GRIPPER_MOTOR_NAME)].q = 0.75
+    lowstate.motor_state[motor_index(RIGHT_GRIPPER_MOTOR_NAME)].dq = -0.5
     odom = SimpleNamespace(
         position=SimpleNamespace(x=1.1, y=2.2, z=3.3),
         quaternion=SimpleNamespace(w=1.0, x=0.0, y=0.0, z=0.0),
@@ -130,8 +134,8 @@ def test_build_x_lib_resolves_independent_permuted_q_and_v_name_orders() -> None
         expected_q = state.q
         expected_v = state.dq
         if motor_name in (LEFT_GRIPPER_MOTOR_NAME, RIGHT_GRIPPER_MOTOR_NAME):
-            expected_q = gripper_command_to_model_position(expected_q)
-            expected_v = gripper_command_velocity_to_model_velocity(expected_v)
+            expected_q = gripper_openness_to_model_position(expected_q)
+            expected_v = gripper_openness_velocity_to_model_velocity(expected_v)
         for joint_name in MODEL_JOINTS_BY_MOTOR_NAME[motor_name]:
             assert q[model.q_index(joint_name)] == expected_q
             assert v[model.v_index(joint_name)] == expected_v

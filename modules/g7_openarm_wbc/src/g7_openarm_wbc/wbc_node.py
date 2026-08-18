@@ -91,8 +91,8 @@ class Node:
 
             openarm_cmd = openarm_command_from_arm_control(
                 arm_cmd,
-                left_gripper=self.ee_target.left_gripper,
-                right_gripper=self.ee_target.right_gripper,
+                left_gripper_openness=self.ee_target.left_gripper,
+                right_gripper_openness=self.ee_target.right_gripper,
             )
 
             if general_config.control_mode is ControlMode.ARM_ONLY:

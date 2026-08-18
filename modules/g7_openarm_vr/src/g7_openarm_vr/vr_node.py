@@ -15,7 +15,7 @@ from g7_openarm_utils.mujoco import load_hand_default_pose
 from .config import config
 from .pose_mapping import RelativePoseMapper
 from .udp_receiver import JsonUdpReceiver
-from .udp_response import VRUDPResponse
+from .udp_response import VRUDPResponse, trigger_to_gripper_openness
 
 
 class VRNode:
@@ -89,8 +89,8 @@ class VRNode:
             EETarget(
                 array_to_pose(left_target),
                 array_to_pose(right_target),
-                message.left_gripper,
-                message.right_gripper,
+                trigger_to_gripper_openness(message.left_trigger),
+                trigger_to_gripper_openness(message.right_trigger),
             )
         )
 

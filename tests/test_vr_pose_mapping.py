@@ -10,6 +10,7 @@ from g7_openarm_vr.udp_response import (
     VR_RH_TO_MUJOCO_QUAT,
     VRControllerPose,
     VRUDPResponse,
+    trigger_to_gripper_openness,
 )
 
 
@@ -36,6 +37,12 @@ def test_udp_response_parses_controller_objects() -> None:
         response.left_controller.as_mujoco_pose()[:3],
         [3.0, -1.0, 2.0],
     )
+
+
+def test_vr_trigger_is_converted_to_canonical_gripper_openness() -> None:
+    assert trigger_to_gripper_openness(0.0) == 1.0
+    assert trigger_to_gripper_openness(0.25) == 0.75
+    assert trigger_to_gripper_openness(1.0) == 0.0
 
 
 def test_vr_position_axes_map_to_mujoco_forward_left_up() -> None:

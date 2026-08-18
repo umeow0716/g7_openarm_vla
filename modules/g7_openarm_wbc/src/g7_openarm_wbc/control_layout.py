@@ -137,21 +137,32 @@ def split_control_vector(
 def openarm_command_from_arm_control(
     arm_u: npt.NDArray[np.float64],
     *,
-    left_gripper: float,
-    right_gripper: float,
+    left_gripper_openness: float,
+    right_gripper_openness: float,
 ) -> npt.NDArray[np.float64]:
     """Build the fixed 16-slot OpenArmCmd wire array from semantic motor names.
 
     The IDL wire format is necessarily index-based, but this is the only WBC
     boundary that converts the 14 named arm controls plus two named grippers
-    into that transport representation.
+    into that transport representation. Gripper q is normalized openness:
+    0=closed, 1=open.
     """
     if arm_u.shape != (ARM_CONTROL_SIZE,):
         raise ValueError(f"Expected arm control shape ({ARM_CONTROL_SIZE},), got {arm_u.shape}")
 
+    gripper_values = {
+        LEFT_GRIPPER_MOTOR_NAME: float(left_gripper_openness),
+        RIGHT_GRIPPER_MOTOR_NAME: float(right_gripper_openness),
+    }
+    for name, openness in gripper_values.items():
+        if not np.isfinite(openness) or not 0.0 <= openness <= 1.0:
+            raise ValueError(
+                f"{name} openness must be finite and in [0, 1], got {openness}"
+            )
+
     output = np.zeros(len(ARM_COMMAND_MOTOR_NAMES), dtype=np.float64)
     for motor_name in ARM_CONTROL_NAMES:
         output[arm_command_index(motor_name)] = arm_u[ARM_CONTROL_INDEX_BY_NAME[motor_name]]
-    output[arm_command_index(LEFT_GRIPPER_MOTOR_NAME)] = float(left_gripper)
-    output[arm_command_index(RIGHT_GRIPPER_MOTOR_NAME)] = float(right_gripper)
+    output[arm_command_index(LEFT_GRIPPER_MOTOR_NAME)] = gripper_values[LEFT_GRIPPER_MOTOR_NAME]
+    output[arm_command_index(RIGHT_GRIPPER_MOTOR_NAME)] = gripper_values[RIGHT_GRIPPER_MOTOR_NAME]
     return output

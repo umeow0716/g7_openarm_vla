@@ -14,7 +14,6 @@ from g7_openarm_utils import (
     RIGHT_ARM_MOTOR_NAMES,
     RIGHT_GRIPPER_MOTOR_NAME,
     RIGHT_HARDWARE_MOTOR_NAMES,
-    gripper_openness_to_command,
 )
 
 INITIAL_DURATION_S = 5.0
@@ -91,12 +90,16 @@ class ArmInitializer:
         if not np.all(np.isfinite(target)):
             raise ValueError("target_7 contains non-finite values")
 
-        gripper_command = gripper_openness_to_command(target_gripper)
+        target_gripper = float(target_gripper)
+        if not np.isfinite(target_gripper) or not 0.0 <= target_gripper <= 1.0:
+            raise ValueError(
+                f"target_gripper must be normalized openness in [0, 1], got {target_gripper}"
+            )
         target_by_name = {
             **dict(zip(LEFT_ARM_MOTOR_NAMES, target, strict=True)),
-            LEFT_GRIPPER_MOTOR_NAME: gripper_command,
+            LEFT_GRIPPER_MOTOR_NAME: target_gripper,
             **dict(zip(RIGHT_ARM_MOTOR_NAMES, target, strict=True)),
-            RIGHT_GRIPPER_MOTOR_NAME: gripper_command,
+            RIGHT_GRIPPER_MOTOR_NAME: target_gripper,
         }
         self.target_16 = np.asarray(
             [target_by_name[name] for name in ARM_COMMAND_MOTOR_NAMES],

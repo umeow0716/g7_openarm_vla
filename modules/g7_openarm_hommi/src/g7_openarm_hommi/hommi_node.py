@@ -224,8 +224,8 @@ class HommiNode:
         return EETarget(
             array_to_pose(point.left_pose7),
             array_to_pose(point.right_pose7),
-            point.left_gripper,
-            point.right_gripper,
+            point.left_gripper_openness,
+            point.right_gripper_openness,
         )
 
     def _publisher_loop(self) -> None:

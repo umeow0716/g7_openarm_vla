@@ -11,11 +11,11 @@ from g7_openarm_utils import (
 )
 
 from .actuation import (
-    gripper_command_to_mujoco_position,
-    gripper_command_velocity_to_mujoco_velocity,
+    gripper_openness_to_mujoco_position,
+    gripper_openness_velocity_to_mujoco_velocity,
     motor_actuation_enabled,
-    mujoco_gripper_position_to_command,
-    mujoco_gripper_velocity_to_command_velocity,
+    mujoco_gripper_position_to_openness,
+    mujoco_gripper_velocity_to_openness_velocity,
 )
 
 BASE_VISUALIZATION_Z_M = 0.160631
@@ -44,7 +44,7 @@ def write_lowstate_qpos(layout, data, lowstate) -> None:
     for motor_name in MOTOR_NAMES:
         value = lowstate.motor_state[motor_index(motor_name)].q
         if motor_name in _GRIPPER_MOTOR_NAMES:
-            value = gripper_command_to_mujoco_position(value)
+            value = gripper_openness_to_mujoco_position(value)
 
         for joint_name in MODEL_JOINTS_BY_MOTOR_NAME[motor_name]:
             data.qpos[layout.qpos_index(joint_name)] = value
@@ -59,8 +59,8 @@ def write_lowstate_from_mujoco(layout, data, lowstate) -> None:
         velocity = data.qvel[joint.qvel_index]
 
         if motor_name in _GRIPPER_MOTOR_NAMES:
-            position = mujoco_gripper_position_to_command(position)
-            velocity = mujoco_gripper_velocity_to_command_velocity(velocity)
+            position = mujoco_gripper_position_to_openness(position)
+            velocity = mujoco_gripper_velocity_to_openness_velocity(velocity)
 
         state = lowstate.motor_state[motor_index(motor_name)]
         state.q = position
@@ -79,8 +79,8 @@ def apply_lowcmd_to_mujoco(layout, data, lowcmd, general: GeneralConfig) -> None
         q_target = command.q
         dq_target = command.dq
         if motor_name in _GRIPPER_MOTOR_NAMES:
-            q_target = gripper_command_to_mujoco_position(q_target)
-            dq_target = gripper_command_velocity_to_mujoco_velocity(dq_target)
+            q_target = gripper_openness_to_mujoco_position(q_target)
+            dq_target = gripper_openness_velocity_to_mujoco_velocity(dq_target)
 
         for joint in layout.motor(motor_name).joints:
             if not enabled:

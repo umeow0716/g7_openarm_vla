@@ -20,6 +20,7 @@ base_ids            = [ 0x01, 0x05, 0x02, 0x06, 0x03, 0x07, 0x04, 0x08 ]
 base_direction      = [ -1.0, 1.0, -1.0, -1.0, -1.0,  1.0, -1.0, -1.0 ]
 left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0, -1.0 ]
 right_arm_direction = [  1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0 ]
+# Calibrated physical gripper motor positions [rad].
 left_gripper_open   = -0.684
 left_gripper_close  =  0.012
 right_gripper_open  = -1.388

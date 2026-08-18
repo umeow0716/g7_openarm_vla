@@ -13,6 +13,7 @@ from unitree_sdk2py.idl.geometry_msgs.msg.dds_ import Pose_
 class EETarget(IdlStruct, typename="EETarget"):
     left_target: Pose_
     right_target: Pose_
+    # Canonical normalized openness: 0.0=closed, 1.0=open.
     left_gripper: types.float64
     right_gripper: types.float64
 

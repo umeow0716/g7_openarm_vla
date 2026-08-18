@@ -74,12 +74,17 @@ class VRControllerPose:
         return np.concatenate((position, orientation), dtype=np.float64)
 
 
+def trigger_to_gripper_openness(trigger: float) -> float:
+    """Convert raw VR trigger amount (0=released, 1=pressed) to openness."""
+    return float(np.clip(1.0 - float(trigger), 0.0, 1.0))
+
+
 @dataclass(frozen=True, slots=True)
 class VRUDPResponse:
     left_controller: VRControllerPose
     right_controller: VRControllerPose
-    left_gripper: float
-    right_gripper: float
+    left_trigger: float  # 0=released/open, 1=pressed/closed
+    right_trigger: float  # 0=released/open, 1=pressed/closed
 
     lsx: float
     lsy: float
@@ -112,8 +117,8 @@ class VRUDPResponse:
         return cls(
             left_controller=VRControllerPose.from_mapping(left),
             right_controller=VRControllerPose.from_mapping(right),
-            left_gripper=float(lt),
-            right_gripper=float(rt),
+            left_trigger=float(lt),
+            right_trigger=float(rt),
             lsx=float(lxs),
             lsy=float(lys),
             rsx=float(rxs),
