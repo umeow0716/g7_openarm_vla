@@ -146,6 +146,10 @@ class HardwareNode:
         can_interfaces = list(self.bus_configs)
         self.group = dc.DamiaoCANGroup(can_interfaces=can_interfaces, enable_fd=config.can_fd)
         for can_interface, can_config in self.bus_configs.items():
+            helper = dc.CANHelper(can_interface)
+            helper.set_down()
+            helper.set_bitrate(1_000_000, 5_000_000, True)
+            helper.set_up()
             device = self.group.get_device(can_interface)
             device.init_motors(
                 can_config["motor_types"],
