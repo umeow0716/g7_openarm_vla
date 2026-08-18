@@ -79,6 +79,7 @@ class GeneralConfig(BaseConfig):
     def base_actuation_enabled(self) -> bool:
         """Whether base CAN and low-level base motor output must be active."""
         return self.control_mode not in (
+            ControlMode.ARM_ONLY,
             ControlMode.LEFT_ARM_ONLY,
             ControlMode.RIGHT_ARM_ONLY,
         )

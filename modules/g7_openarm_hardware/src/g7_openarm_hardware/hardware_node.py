@@ -249,7 +249,7 @@ class HardwareNode:
                 base.posvel_control_one(_base_motor_id(name) - 1, cmd)
 
     def control_loop(self) -> None:
-        self.group.recv_all(10_000)
+        self.group.recv_all(8_000)
 
         if self.base_enabled:
             self._read_base_state()
@@ -259,6 +259,7 @@ class HardwareNode:
             for name, motor in zip(LEFT_HARDWARE_MOTOR_NAMES, left_arm.get_motors(), strict=True):
                 state = self.lowstate.motor_state[motor_index(name)]
                 if name == LEFT_GRIPPER_MOTOR_NAME:
+                    print(f'left_gripper: {motor.get_position():.3f}')
                     state.q = gripper_motor_position_to_command(
                         motor.get_position(),
                         open_position=config.left_gripper_open,
@@ -280,6 +281,7 @@ class HardwareNode:
             for name, motor in zip(RIGHT_HARDWARE_MOTOR_NAMES, right_arm.get_motors(), strict=True):
                 state = self.lowstate.motor_state[motor_index(name)]
                 if name == RIGHT_GRIPPER_MOTOR_NAME:
+                    print(f'right_gripper: {motor.get_position():.3f}')
                     state.q = gripper_motor_position_to_command(
                         motor.get_position(),
                         open_position=config.right_gripper_open,
