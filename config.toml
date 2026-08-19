@@ -1,5 +1,5 @@
 [general]
-debugging = false
+debugging = true
 control_mode = "right-arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
 initial_pos = [0.435, 0.0, 0.0, -0.525, 0.0, 0.0, 0.613]
 initial_gripper = 1.0 # normalized openness: 0.0=closed, 1.0=open
@@ -23,8 +23,8 @@ right_arm_direction = [  1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0 ]
 # Calibrated physical gripper motor positions [rad].
 left_gripper_open   = -0.684
 left_gripper_close  =  0.012
-right_gripper_open  = -1.388
-right_gripper_close = -0.374
+right_gripper_open  =  1.800
+right_gripper_close = -2.550
 
 [lowlevel]
 hz = 200.0

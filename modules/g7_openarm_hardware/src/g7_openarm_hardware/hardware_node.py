@@ -349,6 +349,12 @@ class HardwareNode:
             for name in RIGHT_HARDWARE_MOTOR_NAMES:
                 command = motor_command(self.lowcmd, name)
                 if name == RIGHT_GRIPPER_MOTOR_NAME:
+                    # print('command_r_gripper:', command.q, command.kp)
+                    # print('position_r_gripper:', gripper_openness_to_motor_position(
+                    #     command.q,
+                    #     open_position=config.right_gripper_open,
+                    #     close_position=config.right_gripper_close,
+                    # ))
                     right_cmds.append(
                         dc.MITParam(
                             q=gripper_openness_to_motor_position(
