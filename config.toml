@@ -1,6 +1,6 @@
 [general]
 debugging = false
-control_mode = "arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
+control_mode = "right-arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
 initial_pos = [0.435, 0.0, 0.0, -0.525, 0.0, 0.0, 0.613]
 initial_gripper = 1.0 # normalized openness: 0.0=closed, 1.0=open
 

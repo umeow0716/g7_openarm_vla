@@ -250,6 +250,8 @@ class HardwareNode:
                 base.posvel_control_one(_base_motor_id(name) - 1, cmd)
 
     def control_loop(self) -> None:
+        self.group.flush_rx()
+        self.group.refresh_all()
         self.group.recv_all(8_000)
 
         if self.base_enabled:

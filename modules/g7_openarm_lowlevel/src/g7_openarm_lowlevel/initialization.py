@@ -35,12 +35,12 @@ _INITIAL_KP_BY_MOTOR_NAME = MappingProxyType(
 _INITIAL_KD_BY_MOTOR_NAME = MappingProxyType(
     {
         **{
-            name: (2.5 if int(name.split("_")[1]) <= 4 else 0.2)
+            name: (1.0 if int(name.split("_")[1]) <= 4 else 0.2)
             for name in LEFT_ARM_MOTOR_NAMES
         },
         LEFT_GRIPPER_MOTOR_NAME: 0.2,
         **{
-            name: (2.5 if int(name.split("_")[1]) <= 4 else 0.2)
+            name: (1.0 if int(name.split("_")[1]) <= 4 else 0.2)
             for name in RIGHT_ARM_MOTOR_NAMES
         },
         RIGHT_GRIPPER_MOTOR_NAME: 0.2,
