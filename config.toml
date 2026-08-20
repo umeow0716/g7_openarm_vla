@@ -11,9 +11,9 @@ interface = "lo"
 [hardware]
 hz = 100.0
 imu_hz = 100.0
-base_can = "can2"
-left_arm_can = "can1"
-right_arm_can = "can0"
+base_can = "can3"
+left_arm_can = "can2"
+right_arm_can = "can1"
 can_fd = true
 # base ids: [FL, FLW, FR, FRW, RL, RLW, RR, RRW]
 base_ids            = [ 0x01, 0x05, 0x02, 0x06, 0x03, 0x07, 0x04, 0x08 ]
@@ -46,7 +46,7 @@ hz = 1.0
 
 [hommi]
 hz = 20.0 # HoMMI dataset/control frequency
-arm = "left" # training dataset arm_order; current model is single-arm
+arm = "right" # training dataset arm_order; current model is single-arm
 device = "cuda:0"
 camera_fps = 30
 camera_timeout_ms = 1000
