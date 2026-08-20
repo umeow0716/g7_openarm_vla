@@ -59,30 +59,34 @@ def _build_model() -> mujoco.MjModel:
 
 
 class RealVisualizationNode:
-    def __init__(self) -> None:
+    def __init__(self, push_eetarget=True) -> None:
+        self.push_eetarget = push_eetarget
+
         self.model = _build_model()
         self.data = mujoco.MjData(self.model)
         self.layout = MuJoCoModelLayout(self.model)
-        mujoco.mj_forward(self.model, self.data)
 
-        self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
-        self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
-        if general_config.lowlevel_initial_allowed:
-            left_pose, right_pose = hand_poses_for_arm_position(
-                self.model,
-                general_config.initial_pos,
-            )
-            self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]
-            self.data.mocap_quat[self.left_target_mocap_id] = left_pose[3:]
-            self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]
-            self.data.mocap_quat[self.right_target_mocap_id] = right_pose[3:]
-        else:
-            left_hand = self.data.body("L_tcp")
-            right_hand = self.data.body("R_tcp")
-            self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
-            self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
-            self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
-            self.data.mocap_quat[self.right_target_mocap_id] = right_hand.xquat.copy()
+        if self.push_eetarget:
+            mujoco.mj_forward(self.model, self.data)
+
+            self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
+            self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
+            if general_config.lowlevel_initial_allowed:
+                left_pose, right_pose = hand_poses_for_arm_position(
+                    self.model,
+                    general_config.initial_pos,
+                )
+                self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]
+                self.data.mocap_quat[self.left_target_mocap_id] = left_pose[3:]
+                self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]
+                self.data.mocap_quat[self.right_target_mocap_id] = right_pose[3:]
+            else:
+                left_hand = self.data.body("L_tcp")
+                right_hand = self.data.body("R_tcp")
+                self.data.mocap_pos[self.left_target_mocap_id] = left_hand.xpos.copy()
+                self.data.mocap_quat[self.left_target_mocap_id] = left_hand.xquat.copy()
+                self.data.mocap_pos[self.right_target_mocap_id] = right_hand.xpos.copy()
+                self.data.mocap_quat[self.right_target_mocap_id] = right_hand.xquat.copy()
 
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
@@ -95,8 +99,9 @@ class RealVisualizationNode:
             general_config.lowlevel_initial_allowed or not general_config.arm_actuation_enabled
         )
 
-        self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
-        self.eetarget_publisher.Init()
+        if self.push_eetarget:
+            self.eetarget_publisher = ChannelPublisher("rt/eetarget", EETarget)
+            self.eetarget_publisher.Init()
 
         self.lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
         self.odom_subscriber = ChannelSubscriber("rt/odom", Odom)
@@ -108,11 +113,14 @@ class RealVisualizationNode:
             interval=config.interval,
             target=self.simulation_loop,
         )
-        self.write_eetarget_thread = RecurrentThread(
-            name="write_eetarget",
-            interval=config.eetarget_interval,
-            target=self.write_eetarget,
-        )
+
+        if self.push_eetarget:
+            self.write_eetarget_thread = RecurrentThread(
+                name="write_eetarget",
+                interval=config.eetarget_interval,
+                target=self.write_eetarget,
+            )
+
         self.viewer_thread = RecurrentThread(
             name="viewer_loop",
             interval=config.fps_interval,
@@ -120,7 +128,8 @@ class RealVisualizationNode:
         )
 
         self.simulation_thread.Start()
-        self.write_eetarget_thread.Start()
+        if self.push_eetarget:
+            self.write_eetarget_thread.Start()
         self.viewer_thread.Start()
 
     def lowstate_handler(self, msg: LowState_) -> None:
@@ -188,9 +197,9 @@ class RealVisualizationNode:
             self.viewer.sync(state_only=True)
 
 
-def main() -> None:
+def main(push_eetarget=True) -> None:
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
-    _ = RealVisualizationNode()
+    _ = RealVisualizationNode(push_eetarget)
     while True:
         time.sleep(1)
 
