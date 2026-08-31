@@ -19,6 +19,8 @@ from unitree_sdk2py.utils.thread import RecurrentThread
 
 from g7_openarm_config import general_config
 from g7_openarm_idl import EETarget, EETarget_default
+from g7_openarm_utils.mujoco import load_hand_default_pose
+from g7_openarm_utils.idl import pose_to_array
 
 from .config import config
 from .model_layout import MuJoCoModelLayout
@@ -27,6 +29,9 @@ from .resources import model_directory
 from .state_mapping import apply_lowcmd_to_mujoco, write_lowstate_from_mujoco
 from .sensors import sensor_slice
 
+def get_model_path():
+    with model_directory() as model_dir:
+        return (model_dir / "scene.xml").as_posix()
 
 def _build_model() -> mujoco.MjModel:
     with model_directory() as model_dir:
@@ -65,11 +70,12 @@ def _build_model() -> mujoco.MjModel:
 
 
 class SimulationNode:
-    def __init__(self, push_eetarget=True) -> None:
+    def __init__(self, push_eetarget=True, initial=True) -> None:
         self.model = _build_model()
         self.data = mujoco.MjData(self.model)
         self.layout = MuJoCoModelLayout(self.model)
         self.push_eetarget = push_eetarget
+        self.initial = initial
 
         if self.push_eetarget:
             mujoco.mj_forward(self.model, self.data)
@@ -77,10 +83,13 @@ class SimulationNode:
             self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
             self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
             if general_config.lowlevel_initial_allowed:
-                left_pose, right_pose = hand_poses_for_arm_position(
-                    self.model,
-                    general_config.initial_pos,
-                )
+                # left_pose, right_pose = hand_poses_for_arm_position(
+                #     self.model,
+                #     general_config.initial_pos,
+                # )
+                eetarget = load_hand_default_pose(get_model_path())
+                left_pose = pose_to_array(eetarget.left_target)
+                right_pose = pose_to_array(eetarget.right_target)
                 self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]
                 self.data.mocap_quat[self.left_target_mocap_id] = left_pose[3:]
                 self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]
@@ -103,7 +112,7 @@ class SimulationNode:
         # or RecurrentThread.Start() call.
         self.lowstate = unitree_hg_msg_dds__LowState_()
         self.imustate = unitree_hg_msg_dds__IMUState_()
-        self.eetarget = EETarget_default()
+        self.eetarget = load_hand_default_pose(get_model_path())
         self.lowcmd = unitree_hg_msg_dds__LowCmd_()
 
         self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
@@ -220,9 +229,9 @@ class SimulationNode:
             self.viewer.sync(state_only=True)
 
 
-def main(push_eetarget=True) -> None:
+def main(push_eetarget=True, initial=False) -> None:
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
-    _ = SimulationNode(push_eetarget)
+    _ = SimulationNode(push_eetarget, initial)
     while True:
         time.sleep(1)
 

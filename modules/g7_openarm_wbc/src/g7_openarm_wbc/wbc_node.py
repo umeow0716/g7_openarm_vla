@@ -95,12 +95,11 @@ class Node:
                 right_gripper_openness=self.ee_target.right_gripper,
             )
 
-            if general_config.control_mode is ControlMode.ARM_ONLY:
-                amr_cmd = (
-                    vr_joy_to_body_command(self.vr_joy)
-                    if joy_is_fresh
-                    else np.zeros(3, dtype=np.float64)
-                )
+            amr_cmd = (
+                vr_joy_to_body_command(self.vr_joy)
+                if joy_is_fresh
+                else np.zeros(3, dtype=np.float64)
+            )
 
         self.wbc_lowcmd.amr.data = amr_cmd.tolist()
         self.wbc_lowcmd.openarm.data = openarm_cmd.tolist()

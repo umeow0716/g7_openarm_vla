@@ -92,7 +92,7 @@ class VRSimulationNode:
 
         self.lowstate = unitree_hg_msg_dds__LowState_()
         self.imustate = unitree_hg_msg_dds__IMUState_()
-        self.eetarget = EETarget_default()
+        self.eetarget = None
         self.lowcmd = unitree_hg_msg_dds__LowCmd_()
 
         self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
@@ -166,6 +166,9 @@ class VRSimulationNode:
         self.eetarget = msg
 
     def update_target(self) -> None:
+        if self.eetarget is None:
+            return
+
         left_pose = pose_to_array(self.eetarget.left_target)
         right_pose = pose_to_array(self.eetarget.right_target)
         left_pose[2] += BASE_VISUALIZATION_Z_M

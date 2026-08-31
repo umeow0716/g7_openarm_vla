@@ -10,7 +10,6 @@ dependencies = []
 members = [
     "modules/g7_openarm_config",
     "modules/g7_openarm_hardware",
-    "modules/g7_openarm_hommi",
     "modules/g7_openarm_idl",
     "modules/g7_openarm_lowlevel",
     "modules/g7_openarm_monitor",

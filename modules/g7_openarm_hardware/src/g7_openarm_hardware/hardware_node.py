@@ -140,10 +140,10 @@ class HardwareNode:
         can_interfaces = list(self.bus_configs)
         for can_interface in can_interfaces:
             print(f"Initializing CAN interface {can_interface}...")
-            helper = dc.CANHelper(can_interface)
-            helper.set_down()
-            helper.set_bitrate(1_000_000, 5_000_000, True)
-            helper.set_up()
+            # helper = dc.CANHelper(can_interface)
+            # helper.set_down()
+            # helper.set_bitrate(1_000_000, 5_000_000, True)
+            # helper.set_up()
 
         self.group = dc.DamiaoCANGroup(can_interfaces=can_interfaces, enable_fd=config.can_fd)
         for can_interface, can_config in self.bus_configs.items():

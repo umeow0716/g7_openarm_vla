@@ -14,6 +14,8 @@ from unitree_sdk2py.utils.thread import RecurrentThread
 
 from g7_openarm_config import general_config
 from g7_openarm_idl import EETarget, EETarget_default, Odom
+from g7_openarm_utils.idl import pose_to_array
+from g7_openarm_utils.mujoco import load_hand_default_pose
 
 from .config import config
 from .initial_pose import hand_poses_for_arm_position
@@ -21,6 +23,10 @@ from .model_layout import MuJoCoModelLayout
 from .resources import model_directory
 from .state_mapping import write_floating_base_qpos, write_lowstate_qpos
 
+
+def get_model_path():
+    with model_directory() as model_dir:
+        return (model_dir / "scene.xml").as_posix()
 
 def _build_model() -> mujoco.MjModel:
     with model_directory() as model_dir:
@@ -72,10 +78,9 @@ class RealVisualizationNode:
             self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
             self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
             if general_config.lowlevel_initial_allowed:
-                left_pose, right_pose = hand_poses_for_arm_position(
-                    self.model,
-                    general_config.initial_pos,
-                )
+                eetarget = load_hand_default_pose(get_model_path())
+                left_pose = pose_to_array(eetarget.left_target)
+                right_pose = pose_to_array(eetarget.right_target)
                 self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]
                 self.data.mocap_quat[self.left_target_mocap_id] = left_pose[3:]
                 self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]
