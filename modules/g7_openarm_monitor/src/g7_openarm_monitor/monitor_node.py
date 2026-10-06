@@ -3,7 +3,7 @@ import threading
 import time
 from typing import Any
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+from g7_openarm_utils import ChannelFactoryInitialize, build_sub
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_, LowCmd_, LowState_
 
 from g7_openarm_idl import EETarget, Odom, WBCLowCmd
@@ -19,8 +19,7 @@ class HzMonitor:
         self._start = time.monotonic()
         self._lock = threading.Lock()
         self._hz = 0.0
-        self._sub = ChannelSubscriber(self.topic, self.msg_type)
-        self._sub.Init(self.callback, 10)
+        self._sub = build_sub(self.topic, self.msg_type, self.callback)
 
     def callback(self, _: Any) -> None:
         with self._lock:

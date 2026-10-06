@@ -2,12 +2,13 @@ import multiprocessing as mp
 import os
 import signal
 import time
+
 from collections.abc import Callable
 from datetime import datetime
+from g7_openarm_config import general_config
+from g7_openarm_utils.layout import ControlMode
 from multiprocessing.context import SpawnProcess
 from pathlib import Path
-
-from g7_openarm_config import ControlMode, general_config
 
 LOG_ROOT = Path("logs")
 
@@ -49,9 +50,9 @@ def run_silently(target: Callable[[], None], folder_name: str) -> None:
 
 
 def run_mujoco() -> None:
-    from g7_openarm_mujoco.simulation_node import main
+    from g7_openarm_mujoco.mujoco_node import main
 
-    run_silently(main, "mujoco")
+    run_silently(lambda: main(is_sim=True, is_vr=False, is_hommi=False), "mujoco")
 
 
 def run_lowlevel() -> None:

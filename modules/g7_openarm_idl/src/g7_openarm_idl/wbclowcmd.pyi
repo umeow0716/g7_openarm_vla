@@ -2,20 +2,24 @@ from __future__ import annotations
 
 from cyclonedds.idl import IdlStruct
 from cyclonedds.internal import SampleInfo
+from cyclonedds.idl.types import array, float32
 
-from .amr_cmd import AMRCmd
-from .openarm_cmd import OpenArmCmd
+from typing import Annotated, Sequence
 
 class WBCLowCmd(IdlStruct):
-    amr: AMRCmd
-    openarm: OpenArmCmd
+    mobile: list[float]
+    dq_des: list[float]
+    left_gripper:  float
+    right_gripper: float
 
     sample_info: SampleInfo
 
     def __init__(
         self,
-        amr: AMRCmd,
-        openarm: OpenArmCmd,
+        mobile: Annotated[Sequence[Annotated[float, "float32"]], array[float32, 3]],
+        dq_des: Annotated[Sequence[Annotated[float, "float32"]], array[float32, 3]],
+        left_gripper:  Annotated[float, "float32"],
+        right_gripper: Annotated[float, "float32"],
     ) -> None: ...
 
 def WBCLowCmd_default() -> WBCLowCmd: ...

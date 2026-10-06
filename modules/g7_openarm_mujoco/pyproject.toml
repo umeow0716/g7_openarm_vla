@@ -19,7 +19,7 @@ g7-openarm-utils = { workspace = true }
 unitree-sdk2py = { path = "../../third_party/unitree_sdk2_python", editable = true }
 
 [project.scripts]
-g7-mujoco = "g7_openarm_mujoco.simulation_node:main"
+g7-mujoco = "g7_openarm_mujoco.mujoco_node:main"
 g7-mujoco-real = "g7_openarm_mujoco.real_node:main"
 g7-mujoco-vr-sim = "g7_openarm_mujoco.vr_sim_node:main"
 g7-mujoco-vr-real = "g7_openarm_mujoco.vr_real_node:main"

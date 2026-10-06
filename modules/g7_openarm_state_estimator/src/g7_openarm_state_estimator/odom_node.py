@@ -1,15 +1,11 @@
 import time
 
-from unitree_sdk2py.core.channel import (
-    ChannelFactoryInitialize,
-    ChannelPublisher,
-    ChannelSubscriber,
-)
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+from g7_openarm_utils import ChannelFactoryInitialize, build_pub, build_sub
+from unitree_sdk2py.idl.default import HGIMUState_, HGLowState_
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
-from g7_openarm_config import general_config
 from g7_openarm_idl.odom import Odom, Odom_default
+from g7_openarm_utils.layout import BASE_ENABLED
 
 from .amr_ekf import AMREKF
 from .config import config
@@ -19,13 +15,35 @@ class OdomNode:
     def __init__(self):
         self.ekf = AMREKF()
 
-        self.lowstate: LowState_ | None = None
-        self.lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
-        self.lowstate_subscriber.Init(self.lowstate_handler, 0)
-
+        self.imustate: HGIMUState_ | None = None
+        self.lowstate: HGLowState_ | None = None
         self.odom = Odom_default()
-        self.odom_publisher = ChannelPublisher("rt/odom", Odom)
-        self.odom_publisher.Init()
+        self.static_odom = Odom_default()
+        self.static_odom.position.x = 0.0
+        self.static_odom.position.y = 0.0
+        self.static_odom.position.z = 0.0
+        self.static_odom.quaternion.w = 1.0
+        self.static_odom.quaternion.x = 0.0
+        self.static_odom.quaternion.y = 0.0
+        self.static_odom.quaternion.z = 0.0
+        self.static_odom.velocity.x = 0.0
+        self.static_odom.velocity.y = 0.0
+        self.static_odom.velocity.z = 0.0
+        self.static_odom.angular_velocity.x = 0.0
+        self.static_odom.angular_velocity.y = 0.0
+        self.static_odom.angular_velocity.z = 0.0
+        self.static_odom.vdot.x = 0.0
+        self.static_odom.vdot.y = 0.0
+        self.static_odom.vdot.z = 0.0
+        self.static_odom.angular_vdot.x = 0.0
+        self.static_odom.angular_vdot.y = 0.0
+        self.static_odom.angular_vdot.z = 0.0
+        
+        self.imustate_sub = build_sub("rt/imustate", HGIMUState_, self.imustate_handler)
+        self.lowstate_sub = build_sub("rt/lowstate", HGLowState_, self.lowstate_handler)
+        self.odom_pub = build_pub("rt/odom", Odom)
+        
+        assert self.odom_pub is not None
 
         self.update_thread = RecurrentThread(
             name="update_thread",
@@ -34,15 +52,24 @@ class OdomNode:
         )
         self.update_thread.Start()
 
-    def lowstate_handler(self, msg: LowState_):
+    def lowstate_handler(self, msg: HGLowState_):
         self.lowstate = msg
 
+    def imustate_handler(self, msg: HGIMUState_):
+        self.imustate = msg
+
     def update_state(self, verbose=True):
-        if self.lowstate is None:
-            print("None", end="\r", flush=True)
+        if self.odom_pub is None:
             return
 
-        x = self.ekf.update(lowstate=self.lowstate, dt=config.interval)
+        if not BASE_ENABLED:
+            self.odom_pub.Write(self.static_odom)
+            return
+
+        if self.lowstate is None or self.imustate is None:
+            return
+
+        x = self.ekf.update(self.imustate, self.lowstate)
 
         self.odom.position.x = x.x
         self.odom.position.y = x.y
@@ -64,28 +91,7 @@ class OdomNode:
         self.odom.angular_vdot.y = x.angular_vdot[1]
         self.odom.angular_vdot.z = x.angular_vdot[2]
 
-        if general_config.control_mode == "arm-only":
-            self.odom.position.x = 0.0
-            self.odom.position.y = 0.0
-            self.odom.position.z = 0.0
-            self.odom.quaternion.w = 1.0
-            self.odom.quaternion.x = 0.0
-            self.odom.quaternion.y = 0.0
-            self.odom.quaternion.z = 0.0
-            self.odom.velocity.x = 0.0
-            self.odom.velocity.y = 0.0
-            self.odom.velocity.z = 0.0
-            self.odom.angular_velocity.x = 0.0
-            self.odom.angular_velocity.y = 0.0
-            self.odom.angular_velocity.z = 0.0
-            self.odom.vdot.x = 0.0
-            self.odom.vdot.y = 0.0
-            self.odom.vdot.z = 0.0
-            self.odom.angular_vdot.x = 0.0
-            self.odom.angular_vdot.y = 0.0
-            self.odom.angular_vdot.z = 0.0
-
-        self.odom_publisher.Write(self.odom)
+        self.odom_pub.Write(self.odom)
 
         if verbose:
             print(f"{x.x:.3f}, {x.y:.3f}, {x.z:.3f}", end="\r", flush=True)

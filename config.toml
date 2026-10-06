@@ -1,7 +1,7 @@
 [general]
 debugging = true
-control_mode = "right-arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
-initial_pos = [0.0, 0.0311, 0.0109, -2.21, -0.2, -0.06, -1.47]
+control_mode = "arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
+initial_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 initial_gripper = 1.0 # normalized openness: 0.010=closed, 1.0=open
 
 [dds]
@@ -18,7 +18,7 @@ can_fd = true
 # base ids: [FL, FLW, FR, FRW, RL, RLW, RR, RRW]
 base_ids            = [ 0x01, 0x05, 0x02, 0x06, 0x03, 0x07, 0x04, 0x08 ]
 base_direction      = [ -1.0, 1.0, -1.0, -1.0, -1.0,  1.0, -1.0, -1.0 ]
-left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0, -1.0 ]
+left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0,  1.0 ]
 right_arm_direction = [  1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0 ]
 # Calibrated physical gripper motor positions [rad].
 left_gripper_open   = -0.684
@@ -27,17 +27,17 @@ right_gripper_open  =  1.800
 right_gripper_close = -2.550
 
 [lowlevel]
-hz = 200.0
+hz = 300.0
 
 [state_estimator]
-hz = 200.0
+hz = 100.0
 
 [wbc]
-hz = 200.0
+hz = 300.0
 
 [mujoco]
-hz = 500.0
-imu_hz = 500.0
+hz = 300.0
+imu_hz = 300.0
 eetarget_hz = 50.0
 fps = 60.0
 

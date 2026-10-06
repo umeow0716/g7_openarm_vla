@@ -1,10 +1,12 @@
 import math
 import threading
+import time
 
 import xspublic
-from unitree_sdk2py.core.channel import (
+from g7_openarm_utils.unitree import (
     ChannelFactoryInitialize,
-    ChannelPublisher,
+    build_pub,
+    build_thread,
 )
 from unitree_sdk2py.idl.default import (
     unitree_hg_msg_dds__IMUState_ as IMUState_default,
@@ -20,13 +22,8 @@ class IMUNode(xspublic.XsCallback):
     def __init__(self):
         super().__init__()
 
-        self.publisher = ChannelPublisher(
-            "rt/imustate",
-            IMUState_,
-        )
-        self.publisher.Init()
-
         self.state = IMUState_default()
+        self.imustate_pub = build_pub("rt/imustate", IMUState_)
 
     def onLiveDataAvailable(self, dev, packet) -> None:
         acc = packet.calibrated_acc()
@@ -34,26 +31,25 @@ class IMUNode(xspublic.XsCallback):
         quat = packet.orientation_quaternion()
         euler = packet.orientation_euler()
 
-        state = self.state
+        self.state.accelerometer[0] = acc[0]
+        self.state.accelerometer[1] = acc[1]
+        self.state.accelerometer[2] = acc[2]
 
-        state.accelerometer[0] = acc[0]
-        state.accelerometer[1] = acc[1]
-        state.accelerometer[2] = acc[2]
+        self.state.gyroscope[0] = gyr[0]
+        self.state.gyroscope[1] = gyr[1]
+        self.state.gyroscope[2] = gyr[2]
 
-        state.gyroscope[0] = gyr[0]
-        state.gyroscope[1] = gyr[1]
-        state.gyroscope[2] = gyr[2]
+        self.state.quaternion[0] = quat.w
+        self.state.quaternion[1] = quat.x
+        self.state.quaternion[2] = quat.y
+        self.state.quaternion[3] = quat.z
 
-        state.quaternion[0] = quat.w
-        state.quaternion[1] = quat.x
-        state.quaternion[2] = quat.y
-        state.quaternion[3] = quat.z
+        self.state.rpy[0] = euler.roll * DEG_TO_RAD
+        self.state.rpy[1] = euler.pitch * DEG_TO_RAD
+        self.state.rpy[2] = euler.yaw * DEG_TO_RAD
 
-        state.rpy[0] = euler.roll * DEG_TO_RAD
-        state.rpy[1] = euler.pitch * DEG_TO_RAD
-        state.rpy[2] = euler.yaw * DEG_TO_RAD
-
-        self.publisher.Write(state)
+        if self.imustate_pub is not None:
+            self.imustate_pub.Write(self.state)
 
 
 def find_mti_port():
@@ -94,41 +90,64 @@ def configure_device(device) -> None:
         raise RuntimeError(device.last_result_text())
 
 
-def main() -> None:
-    ChannelFactoryInitialize(
-        config.dds.domain_id,
-        config.dds.interface,
-    )
+class VirtualIMUNode:
+    def __init__(self) -> None:
+        self.state = IMUState_default()
+        self.state.quaternion[0] = 1.0
+        self.state.quaternion[1] = 0.0
+        self.state.quaternion[2] = 0.0
+        self.state.quaternion[3] = 0.0
 
-    control = xspublic.XsControl()
-    port = find_mti_port()
+        for index in range(3):
+            self.state.gyroscope[index] = 0.0
+            self.state.accelerometer[index] = 0.0
+            self.state.rpy[index] = 0.0
 
-    if not control.open_port(
-        port.port_name(),
-        port.baud_rate(),
-    ):
-        raise RuntimeError("Could not open MTi port.")
+        self.imustate_pub = build_pub("rt/imustate", IMUState_)
+        self.control_thread = build_thread(config.imu_hz, self.control_loop)
 
-    device = control.device(port.device_id())
+    def control_loop(self) -> None:
+        if self.imustate_pub is not None:
+            self.imustate_pub.Write(self.state)
 
-    if device is None:
-        control.close()
-        raise RuntimeError("Could not get MTi device.")
 
-    node = IMUNode()
-    device.add_callback_handler(node)
+def main(virtual=False) -> None:
+    ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
 
-    try:
-        configure_device(device)
-        threading.Event().wait()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        device.remove_callback_handler(node)
-        node.publisher.Close()
-        control.close_port(port.port_name())
-        control.close()
+    if not virtual:
+        control = xspublic.XsControl()
+        port = find_mti_port()
+
+        if not control.open_port(
+            port.port_name(),
+            port.baud_rate(),
+        ):
+            raise RuntimeError("Could not open MTi port.")
+
+        device = control.device(port.device_id())
+
+        if device is None:
+            control.close()
+            raise RuntimeError("Could not get MTi device.")
+
+        node = IMUNode()
+        device.add_callback_handler(node)
+
+        try:
+            configure_device(device)
+            threading.Event().wait()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            device.remove_callback_handler(node)
+            node.publisher.Close()
+            control.close_port(port.port_name())
+            control.close()
+    else:
+        node = VirtualIMUNode()
+        while True:
+            time.sleep(1.0)
 
 
 if __name__ == "__main__":
-    main()
+    main(virtual=False)

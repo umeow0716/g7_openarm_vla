@@ -1,396 +1,299 @@
-import atexit
-import signal
-import time
-from typing import Any, TypedDict
-
 import damiao_can as dc
-from unitree_sdk2py.core.channel import (
+import time
+
+from g7_openarm_utils.layout.control_layout import (
+    Joint,
+    BASE_ENABLED,
+    LEFT_ARM_ENABLED,
+    RIGHT_ARM_ENABLED,
+    BASE_JOINT,
+    LEFT_ARM_JOINT,
+    RIGHT_ARM_JOINT,
+    low_idx
+)
+from g7_openarm_utils.layout.gripper import (
+    motor_to_openness,
+    openness_to_motor,
+)
+from g7_openarm_utils.unitree import (
     ChannelFactoryInitialize,
-    ChannelPublisher,
-    ChannelSubscriber,
+    build_sub,
+    build_pub,
+    build_thread,
 )
 from unitree_sdk2py.idl.default import (
-    unitree_hg_msg_dds__IMUState_,
-    unitree_hg_msg_dds__LowCmd_,
-    unitree_hg_msg_dds__LowState_,
-)
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_, LowCmd_, LowState_
-from unitree_sdk2py.utils.hz_sample import RecurrentThread
-
-from g7_openarm_config import general_config
-from g7_openarm_utils import (
-    BASE_MOTOR_NAMES,
-    BASE_WHEEL_MOTOR_NAMES,
-    LEFT_GRIPPER_MOTOR_NAME,
-    LEFT_HARDWARE_MOTOR_NAMES,
-    RIGHT_GRIPPER_MOTOR_NAME,
-    RIGHT_HARDWARE_MOTOR_NAMES,
-    gripper_openness_to_motor_position,
-    gripper_openness_velocity_to_motor_velocity,
-    gripper_motor_position_to_openness,
-    gripper_motor_velocity_to_openness_velocity,
-    motor_command,
-    motor_index,
+    HGLowCmd_,
+    HGLowState_,
+    unitree_hg_msg_dds__LowState_ as HGLowState_default,
 )
 
 from .config import config
 
-
-BASE_CONFIG_INDEX_BY_NAME = {name: index for index, name in enumerate(BASE_MOTOR_NAMES)}
-LEFT_HARDWARE_INDEX_BY_NAME = {
-    name: index for index, name in enumerate(LEFT_HARDWARE_MOTOR_NAMES)
-}
-RIGHT_HARDWARE_INDEX_BY_NAME = {
-    name: index for index, name in enumerate(RIGHT_HARDWARE_MOTOR_NAMES)
-}
-
-
-def _base_config_index(name: str) -> int:
-    return BASE_CONFIG_INDEX_BY_NAME[name]
-
-
-def _base_motor_id(name: str) -> int:
-    return config.base_ids[_base_config_index(name)]
-
-
-def _base_direction(name: str) -> float:
-    return config.base_direction[_base_config_index(name)]
-
-
-def _arm_direction(name: str, *, left: bool) -> float:
-    index_by_name = LEFT_HARDWARE_INDEX_BY_NAME if left else RIGHT_HARDWARE_INDEX_BY_NAME
-    directions = config.left_arm_direction if left else config.right_arm_direction
-    return directions[index_by_name[name]]
-
-
-class BusConfig(TypedDict):
-    motor_types: list[Any]
-    send_ids: list[int]
-    recv_ids: list[int]
-    control_modes: list[Any]
-
-
-def _base_bus_config() -> BusConfig:
-    control_modes: list[Any] = [dc.ControlMode.POS_VEL] * len(BASE_MOTOR_NAMES)
-    for name in BASE_MOTOR_NAMES:
-        motor_id = _base_motor_id(name)
-        control_modes[motor_id - 1] = (
-            dc.ControlMode.VEL if name in BASE_WHEEL_MOTOR_NAMES else dc.ControlMode.POS_VEL
-        )
-
-    return {
+bus_config = {
+    config.base_can: {
+       "motor_types": [
+            dc.MotorType.DM8009, dc.MotorType.DM6006,
+            dc.MotorType.DM8009, dc.MotorType.DM6006,
+            dc.MotorType.DM8009, dc.MotorType.DM6006,
+            dc.MotorType.DM8009, dc.MotorType.DM6006,
+        ],
+        "send_ids": config.base_ids,
+        "recv_ids": [n + 16 for n in config.base_ids],
+        "control_modes": [
+            dc.ControlMode.POS_VEL, dc.ControlMode.VEL,
+            dc.ControlMode.POS_VEL, dc.ControlMode.VEL,
+            dc.ControlMode.POS_VEL, dc.ControlMode.VEL,
+            dc.ControlMode.POS_VEL, dc.ControlMode.VEL
+        ],
+    },
+    config.left_arm_can: {
         "motor_types": [
-            dc.MotorType.DM8009,
-            dc.MotorType.DM6006,
-            dc.MotorType.DM8009,
-            dc.MotorType.DM6006,
-            dc.MotorType.DM8009,
-            dc.MotorType.DM6006,
-            dc.MotorType.DM8009,
-            dc.MotorType.DM6006,
+            dc.MotorType.DM8009, dc.MotorType.DM8009,
+            dc.MotorType.DM4340, dc.MotorType.DM4340,
+            dc.MotorType.DM4310, dc.MotorType.DM4310,
+            dc.MotorType.DM4310, dc.MotorType.DM4310,
         ],
         "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
         "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18],
-        "control_modes": control_modes,
-    }
-
-
-def _arm_bus_config() -> BusConfig:
-    return {
+        "control_modes": [
+            dc.ControlMode.MIT, dc.ControlMode.MIT,
+            dc.ControlMode.MIT, dc.ControlMode.MIT,
+            dc.ControlMode.MIT, dc.ControlMode.MIT,
+            dc.ControlMode.MIT, dc.ControlMode.POS_FORCE,
+        ],
+    },
+    config.right_arm_can: {
         "motor_types": [
-            dc.MotorType.DM8009,
-            dc.MotorType.DM8009,
-            dc.MotorType.DM4340,
-            dc.MotorType.DM4340,
-            dc.MotorType.DM4310,
-            dc.MotorType.DM4310,
-            dc.MotorType.DM4310,
-            dc.MotorType.DM4310,
+            dc.MotorType.DM8009, dc.MotorType.DM8009,
+            dc.MotorType.DM4340, dc.MotorType.DM4340,
+            dc.MotorType.DM4310, dc.MotorType.DM4310,
+            dc.MotorType.DM4310, dc.MotorType.DM4310,
         ],
         "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
         "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18],
-        "control_modes": [dc.ControlMode.MIT] * 8,
-    }
+        "control_modes": [
+            dc.ControlMode.MIT, dc.ControlMode.MIT,
+            dc.ControlMode.MIT, dc.ControlMode.MIT,
+            dc.ControlMode.MIT, dc.ControlMode.MIT,
+            dc.ControlMode.MIT, dc.ControlMode.POS_FORCE,
+        ],
+    },
+}
 
 
-def build_bus_configs(*, base_enabled: bool, arms_enabled: bool = True) -> dict[str, BusConfig]:
-    bus_configs: dict[str, BusConfig] = {}
-    if base_enabled:
-        bus_configs[config.base_can] = _base_bus_config()
-
-    if arms_enabled:
-        bus_configs[config.left_arm_can] = _arm_bus_config()
-        bus_configs[config.right_arm_can] = _arm_bus_config()
-    return bus_configs
-
+def get_enable_interfaces() -> list[str]:
+    result = []
+    if BASE_ENABLED:
+        result.append(config.base_can)
+    if LEFT_ARM_ENABLED or RIGHT_ARM_ENABLED:
+        result.append(config.left_arm_can)
+        result.append(config.right_arm_can)
+    return result
 
 
+def _read_base(device: dc.DamiaoCAN, lowstate: HGLowState_):
+    dev_list = device.get_motors()
+    assert len(dev_list) == 8
+
+    low_list = [
+        lowstate.motor_state[low_idx(joint)] for joint in BASE_JOINT
+    ]
+    
+    for i, (dev, low) in enumerate(zip(dev_list, low_list)):
+        low.q  = dev.get_position() * config.base_direction[i]
+        low.dq = dev.get_velocity() * config.base_direction[i]
+        low.tau_est = dev.get_torque() * config.base_direction[i]
+
+
+def _read_left_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
+    dev_list = device.get_motors()
+    assert len(dev_list) == 8
+
+    low_list = [
+        lowstate.motor_state[low_idx(joint)] for joint in LEFT_ARM_JOINT
+    ]
+    
+    for i, (dev, low) in enumerate(zip(dev_list, low_list)):
+        low.q  = dev.get_position() * config.left_arm_direction[i]
+        low.dq = dev.get_velocity() * config.left_arm_direction[i]
+        low.tau_est = dev.get_torque() * config.left_arm_direction[i]
+
+
+    close_q = config.left_gripper_close
+    open_q  = config.left_gripper_open
+
+    gripper_low = lowstate.motor_state[low_idx(Joint.L8)]
+    gripper_dev = dev_list[-1]
+
+    gripper_low.q  = motor_to_openness(gripper_dev.get_position(), close_q, open_q)
+    gripper_low.dq = gripper_dev.get_velocity() / (open_q - close_q)
+
+def _read_right_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
+    dev_list = device.get_motors()
+    assert len(dev_list) == 8
+
+    low_list = [
+        lowstate.motor_state[low_idx(joint)] for joint in RIGHT_ARM_JOINT
+    ]
+    
+    for i, (dev, low) in enumerate(zip(dev_list, low_list)):
+        low.q  = dev.get_position() * config.right_arm_direction[i]
+        low.dq = dev.get_velocity() * config.right_arm_direction[i]
+        low.tau_est = dev.get_torque() * config.right_arm_direction[i]
+
+    open_q  = config.right_gripper_open
+    close_q = config.right_gripper_close
+
+    gripper_low = lowstate.motor_state[low_idx(Joint.R8)]
+    gripper_dev = dev_list[-1]
+
+    gripper_low.q  = motor_to_openness(gripper_dev.get_position(), close_q, open_q)
+    gripper_low.dq = gripper_dev.get_velocity() / (open_q - close_q)
+
+def _write_base(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
+    dev_list = device.get_motors()
+    assert len(dev_list) == 8
+
+    low_list = [
+        lowcmd.motor_cmd[low_idx(joint)] for joint in BASE_JOINT
+    ]
+
+    for i, (dev, low) in enumerate(zip(dev_list, low_list)):
+        if dev.get_motor_type() == dc.MotorType.DM8009:
+            device.posvel_control_one(i, dc.PosVelParam(q=low.q * config.base_direction[i], dq=20.0))
+        elif dev.get_motor_type() == dc.MotorType.DM6006:
+            device.vel_control_one(i, dc.VelParam(dq=low.dq * config.base_direction[i]))
+
+
+def _write_left_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
+    low_list = [
+        lowcmd.motor_cmd[low_idx(joint)] for joint in LEFT_ARM_JOINT
+    ]
+    
+    for i, low in enumerate(low_list):
+        device.mit_control_one(i, dc.MITParam(
+            kp=low.kp,
+            kd=low.kd,
+            q=low.q * config.left_arm_direction[i],
+            dq=low.dq * config.left_arm_direction[i],
+            tau=low.tau * config.left_arm_direction[i],
+        ))
+
+    open_q  = config.left_gripper_open
+    close_q = config.left_gripper_close
+    gripper_low = lowcmd.motor_cmd[low_idx(Joint.L8)]
+    device.posforce_control_one(7, dc.PosForceParam(
+        q=openness_to_motor(gripper_low.q, close_q, open_q),
+        dq=20.0,
+        i=0.5,
+    ))
+
+
+def _write_right_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
+    low_list = [
+        lowcmd.motor_cmd[low_idx(joint)] for joint in RIGHT_ARM_JOINT
+    ]
+    
+    open_q  = config.right_gripper_open
+    close_q = config.right_gripper_close
+
+    for i, low in enumerate(low_list):
+        device.mit_control_one(i, dc.MITParam(
+            kp=low.kp,
+            kd=low.kd,
+            q=low.q * config.right_arm_direction[i],
+            dq=low.dq * config.right_arm_direction[i],
+            tau=low.tau * config.right_arm_direction[i],
+        ))
+
+    gripper_low = lowcmd.motor_cmd[low_idx(Joint.R8)]
+    device.posforce_control_one(7, dc.PosForceParam(
+        q=openness_to_motor(gripper_low.q, close_q, open_q),
+        dq=20.0,
+        i=5000.0
+    ))
 
 class HardwareNode:
-    def __init__(self) -> None:
-        self.base_enabled = general_config.base_actuation_enabled
-        self.left_arm_command_enabled = general_config.left_arm_actuation_enabled
-        self.right_arm_command_enabled = general_config.right_arm_actuation_enabled
-        self.arms_enabled = general_config.arm_actuation_enabled
-        self.bus_configs = build_bus_configs(
-            base_enabled=self.base_enabled,
-            arms_enabled=self.arms_enabled,
-        )
-
-        can_interfaces = list(self.bus_configs)
-        for can_interface in can_interfaces:
-            print(f"Initializing CAN interface {can_interface}...")
-            helper = dc.CANHelper(can_interface)
+    def __init__(self):
+        self.can_interfaces = get_enable_interfaces()
+        for iface in self.can_interfaces:
+            print(f"Initializing CAN interface {iface}...")
+            helper = dc.CANHelper(iface)
             helper.set_down()
-            helper.set_bitrate(1_000_000, 5_000_000, True)
+            helper.set_bitrate(1_000_000, 5_000_000, config.can_fd)
             helper.set_up()
 
-        self.group = dc.DamiaoCANGroup(can_interfaces=can_interfaces, enable_fd=config.can_fd)
-        for can_interface, can_config in self.bus_configs.items():
-            device = self.group.get_device(can_interface)
+        self.group = dc.DamiaoCANGroup(self.can_interfaces, config.can_fd)
+        for iface in self.can_interfaces:
+            device = self.group.get_device(iface)
             device.init_motors(
-                can_config["motor_types"],
-                can_config["send_ids"],
-                can_config["recv_ids"],
-                can_config["control_modes"],
+                bus_config[iface]["motor_types"],
+                bus_config[iface]["send_ids"],
+                bus_config[iface]["recv_ids"],
+                bus_config[iface]["control_modes"],
             )
             device.set_callback_mode_all(dc.CallbackMode.STATE)
-
-            print(f"{can_interface}: expected responses = {device.expected_response_count()}")
-
-        if not self.base_enabled:
-            print(f"Control mode {general_config.control_mode.value}: skipping {config.base_can}")
-        if not self.arms_enabled:
-            print(
-                f"Control mode {general_config.control_mode.value}: skipping "
-                f"{config.left_arm_can} and {config.right_arm_can}"
-            )
-        else:
-            if not self.left_arm_command_enabled:
-                print(
-                    f"Control mode {general_config.control_mode.value}: "
-                    f"{config.left_arm_can} is state-only (no MIT commands)"
-                )
-            if not self.right_arm_command_enabled:
-                print(
-                    f"Control mode {general_config.control_mode.value}: "
-                    f"{config.right_arm_can} is state-only (no MIT commands)"
-                )
+            print(f"{iface}: expected responses = {device.expected_response_count()}")
 
         self.group.enable_all()
+        for _try in range(5):
+            self.group.flush_rx()
+            self.group.refresh_all()
+            res = self.group.recv_all(1_000_000)
+            if res.ok:
+                break
+            time.sleep(0.2)
+        else:
+            raise RuntimeError("Initialize motor failed over 5 times...")
 
-        # Register cleanup immediately after enabling motors. Any later DDS or
-        # thread-construction failure must still disable the hardware at exit.
-        self._cleanup_done = False
-        signal.signal(signal.SIGTERM, self._handle_sigterm)
-        atexit.register(self.cleanup)
+        self.lowcmd: HGLowCmd_ | None = None
 
-        self.lowstate = unitree_hg_msg_dds__LowState_()
-        self.lowstate_publisher = ChannelPublisher("rt/lowstate", LowState_)
-        self.lowstate_publisher.Init()
+        self.lowcmd_sub = build_sub("rt/lowcmd", HGLowCmd_, self.lowcmd_handle)
+        self.lowstate_pub = build_pub("rt/lowstate", HGLowState_)
 
-        self.lowcmd = unitree_hg_msg_dds__LowCmd_()
-        self.lowcmd_subscriber = ChannelSubscriber("rt/lowcmd", LowCmd_)
-        self.lowcmd_subscriber.Init(self.lowcmd_handler, 0)
+        self.control_thread = build_thread(config.hz, self.control_loop)
 
-        self.imustate = unitree_hg_msg_dds__IMUState_()
-        self.imustate.quaternion[0] = 1.0
-        self.lowstate.imu_state = self.imustate
-
-        self.imustate_subscriber = ChannelSubscriber("rt/imustate", IMUState_)
-        self.imustate_subscriber.Init(self.imustate_handler, 0)
-
-        self.control_thread = RecurrentThread(
-            name="control_thread",
-            target=self.control_loop,
-            interval=config.interval,
-        )
-
-        self.control_thread.Start()
-
-    def cleanup(self) -> None:
-        if self._cleanup_done:
-            return
-
-        self._cleanup_done = True
-        self.group.disable_all()
-
-    def _handle_sigterm(self, _signum: int, _frame: object) -> None:
-        raise SystemExit(0)
-
-    def lowcmd_handler(self, msg: LowCmd_) -> None:
+    def lowcmd_handle(self, msg: HGLowCmd_):
         self.lowcmd = msg
 
-    def imustate_handler(self, msg: IMUState_) -> None:
-        self.imustate = msg
-        self.lowstate.imu_state = self.imustate
-
-    def _read_base_state(self) -> None:
-        base = self.group.get_device(config.base_can)
-        base_motors = base.get_motors()
-
-        for name in BASE_MOTOR_NAMES:
-            motor = base_motors[_base_motor_id(name) - 1]
-            direction = _base_direction(name)
-            state = self.lowstate.motor_state[motor_index(name)]
-            state.q = motor.get_position() * direction
-            state.dq = motor.get_velocity() * direction
-            state.tau_est = motor.get_torque() * direction
-
-    def _write_base_command(self) -> None:
-        base = self.group.get_device(config.base_can)
-        for name in BASE_MOTOR_NAMES:
-            command = motor_command(self.lowcmd, name)
-            direction = _base_direction(name)
-            if name in BASE_WHEEL_MOTOR_NAMES:
-                cmd = dc.VelParam(dq=command.dq * direction)
-                base.vel_control_one(_base_motor_id(name) - 1, cmd)
-            else:
-                cmd = dc.PosVelParam(q=command.q * direction, dq=20.0)
-                base.posvel_control_one(_base_motor_id(name) - 1, cmd)
-
-    def control_loop(self) -> None:
+    def control_loop(self):
         self.group.flush_rx()
         self.group.refresh_all()
         self.group.recv_all(8_000)
 
-        if self.base_enabled:
-            self._read_base_state()
+        lowstate = HGLowState_default()
+        if BASE_ENABLED:
+            device = self.group.get_device(config.base_can)
+            _read_base(device, lowstate)
+        if LEFT_ARM_ENABLED or RIGHT_ARM_ENABLED:
+            left_device = self.group.get_device(config.left_arm_can)
+            right_device = self.group.get_device(config.right_arm_can)
+            _read_left_arm(left_device, lowstate)
+            _read_right_arm(right_device, lowstate)
 
-        if self.arms_enabled:
-            left_arm = self.group.get_device(config.left_arm_can)
-            for name, motor in zip(LEFT_HARDWARE_MOTOR_NAMES, left_arm.get_motors(), strict=True):
-                state = self.lowstate.motor_state[motor_index(name)]
-                if name == LEFT_GRIPPER_MOTOR_NAME:
-                    print(f'left_gripper: {motor.get_position():.3f}')
-                    state.q = gripper_motor_position_to_openness(
-                        motor.get_position(),
-                        open_position=config.left_gripper_open,
-                        close_position=config.left_gripper_close,
-                    )
-                    state.dq = gripper_motor_velocity_to_openness_velocity(
-                        motor.get_velocity(),
-                        open_position=config.left_gripper_open,
-                        close_position=config.left_gripper_close,
-                    )
-                    state.tau_est = motor.get_torque()
-                else:
-                    direction = _arm_direction(name, left=True)
-                    state.q = motor.get_position() * direction
-                    state.dq = motor.get_velocity() * direction
-                    state.tau_est = motor.get_torque() * direction
+        if self.lowstate_pub is not None:
+            self.lowstate_pub.Write(lowstate)
 
-            right_arm = self.group.get_device(config.right_arm_can)
-            for name, motor in zip(RIGHT_HARDWARE_MOTOR_NAMES, right_arm.get_motors(), strict=True):
-                state = self.lowstate.motor_state[motor_index(name)]
-                if name == RIGHT_GRIPPER_MOTOR_NAME:
-                    print(f'right_gripper: {motor.get_position():.3f}')
-                    state.q = gripper_motor_position_to_openness(
-                        motor.get_position(),
-                        open_position=config.right_gripper_open,
-                        close_position=config.right_gripper_close,
-                    )
-                    state.dq = gripper_motor_velocity_to_openness_velocity(
-                        motor.get_velocity(),
-                        open_position=config.right_gripper_open,
-                        close_position=config.right_gripper_close,
-                    )
-                    state.tau_est = motor.get_torque()
-                else:
-                    direction = _arm_direction(name, left=False)
-                    state.q = motor.get_position() * direction
-                    state.dq = motor.get_velocity() * direction
-                    state.tau_est = motor.get_torque() * direction
+        if self.lowcmd is None:
+            return
 
-        self.lowstate_publisher.Write(self.lowstate)
+        if BASE_ENABLED:
+            device = self.group.get_device(config.base_can)
+            _write_base(device, self.lowcmd)
 
-        if self.base_enabled:
-            self._write_base_command()
+        if LEFT_ARM_ENABLED:
+            device = self.group.get_device(config.left_arm_can)
+            _write_left_arm(device, self.lowcmd)
 
-        if self.left_arm_command_enabled:
-            left_arm = self.group.get_device(config.left_arm_can)
-            left_cmds = []
-            for name in LEFT_HARDWARE_MOTOR_NAMES:
-                command = motor_command(self.lowcmd, name)
-                if name == LEFT_GRIPPER_MOTOR_NAME:
-                    left_cmds.append(
-                        dc.MITParam(
-                            q=gripper_openness_to_motor_position(
-                                command.q,
-                                open_position=config.left_gripper_open,
-                                close_position=config.left_gripper_close,
-                            ),
-                            dq=gripper_openness_velocity_to_motor_velocity(
-                                command.dq,
-                                open_position=config.left_gripper_open,
-                                close_position=config.left_gripper_close,
-                            ),
-                            kp=command.kp,
-                            kd=command.kd,
-                            tau=command.tau,
-                        )
-                    )
-                else:
-                    direction = _arm_direction(name, left=True)
-                    left_cmds.append(
-                        dc.MITParam(
-                            q=command.q * direction,
-                            dq=command.dq * direction,
-                            kp=command.kp,
-                            kd=command.kd,
-                            tau=command.tau * direction,
-                        )
-                    )
-            left_arm.mit_control_all(left_cmds)
+        if RIGHT_ARM_ENABLED:
+            device = self.group.get_device(config.right_arm_can)
+            _write_right_arm(device, self.lowcmd)
 
-        if self.right_arm_command_enabled:
-            right_arm = self.group.get_device(config.right_arm_can)
-            right_cmds = []
-            for name in RIGHT_HARDWARE_MOTOR_NAMES:
-                command = motor_command(self.lowcmd, name)
-                if name == RIGHT_GRIPPER_MOTOR_NAME:
-                    # print('command_r_gripper:', command.q, command.kp)
-                    # print('position_r_gripper:', gripper_openness_to_motor_position(
-                    #     command.q,
-                    #     open_position=config.right_gripper_open,
-                    #     close_position=config.right_gripper_close,
-                    # ))
-                    right_cmds.append(
-                        dc.MITParam(
-                            q=gripper_openness_to_motor_position(
-                                command.q,
-                                open_position=config.right_gripper_open,
-                                close_position=config.right_gripper_close,
-                            ),
-                            dq=gripper_openness_velocity_to_motor_velocity(
-                                command.dq,
-                                open_position=config.right_gripper_open,
-                                close_position=config.right_gripper_close,
-                            ),
-                            kp=command.kp,
-                            kd=command.kd,
-                            tau=command.tau,
-                        )
-                    )
-                else:
-                    direction = _arm_direction(name, left=False)
-                    right_cmds.append(
-                        dc.MITParam(
-                            q=command.q * direction,
-                            dq=command.dq * direction,
-                            kp=command.kp,
-                            kd=command.kd,
-                            tau=command.tau * direction,
-                        )
-                    )
-            right_arm.mit_control_all(right_cmds)
-
-
-def main() -> None:
+def main():
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
-    _ = HardwareNode()
+    node = HardwareNode()
     while True:
-        time.sleep(1)
+        time.sleep(1.0)
 
 
 if __name__ == "__main__":
