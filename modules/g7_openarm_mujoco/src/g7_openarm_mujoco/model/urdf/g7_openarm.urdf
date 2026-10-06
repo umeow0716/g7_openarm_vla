@@ -480,7 +480,7 @@
     <visual>
       <origin xyz="1.05e-07 0.002749998 -2.5e-08" rpy="1.570800408 1.376982741e-06 1.570804785" />
       <geometry>
-        <mesh filename="../meshes/gripper_L_link.stl" />
+        <mesh filename="../meshes/L_link7.stl" />
       </geometry>
       <material name="">
         <color rgba="0.75294 0.75294 0.75294 1" />
@@ -489,7 +489,7 @@
     <collision>
       <origin xyz="1.05e-07 0.002749998 -2.5e-08" rpy="1.570800408 1.376982741e-06 1.570804785" />
       <geometry>
-        <mesh filename="../meshes/gripper_L_link_collision.stl" />
+        <mesh filename="../meshes/L_link7_collision.stl" />
       </geometry>
     </collision>
   </link>
@@ -507,7 +507,7 @@
     <parent link="L_link7" />
     <child link="L_tcp" />
   </joint>
-  <link name="gripper_LL_link">
+  <link name="L_link8_L">
     <inertial>
       <origin xyz="-0.062385846084 0.102369531752 -0.00240213715976" rpy="0 0 0" />
       <mass value="0.12" />
@@ -516,7 +516,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="../meshes/gripper_LL_link.stl" />
+        <mesh filename="../meshes/L_link8_L.stl" />
       </geometry>
       <material name="">
         <color rgba="0.75294 0.75294 0.75294 1" />
@@ -525,19 +525,19 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="../meshes/gripper_LL_link_collision.stl" />
+        <mesh filename="../meshes/L_link8_L_collision.stl" />
       </geometry>
     </collision>
   </link>
-  <joint name="gripper_LL_joint" type="prismatic">
+  <joint name="L_8_L_joint" type="prismatic">
     <origin xyz="-0.001886802417 0.012799907 -0.05450003114" rpy="-1.570784899 1.376982741e-06 1.570804785" />
     <parent link="L_link7" />
-    <child link="gripper_LL_link" />
+    <child link="L_link8_L" />
     <axis xyz="-1 0 0" />
     <dynamics damping="0.4" friction="0.1" />
     <limit lower="0" upper="0.045" effort="15" velocity="0.1" />
   </joint>
-  <link name="gripper_LR_link">
+  <link name="L_link8_R">
     <inertial>
       <origin xyz="0.0633541798782 0.102531189994 0.000347283595257" rpy="0 0 0" />
       <mass value="0.12" />
@@ -546,7 +546,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="../meshes/gripper_LR_link.stl" />
+        <mesh filename="../meshes/L_link8_R.stl" />
       </geometry>
       <material name="">
         <color rgba="0.75294 0.75294 0.75294 1" />
@@ -555,14 +555,14 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="../meshes/gripper_LR_link_collision.stl" />
+        <mesh filename="../meshes/L_link8_R_collision.stl" />
       </geometry>
     </collision>
   </link>
-  <joint name="gripper_LR_joint" type="prismatic">
+  <joint name="L_8_R_joint" type="prismatic">
     <origin xyz="-0.002086032739 -0.07820009469 -0.05449990502" rpy="-1.570784899 1.376982741e-06 1.570804785" />
     <parent link="L_link7" />
-    <child link="gripper_LR_link" />
+    <child link="L_link8_R" />
     <axis xyz="1 0 0" />
     <dynamics damping="0.4" friction="0.1" />
     <limit lower="0" upper="0.045" effort="15" velocity="0.1" />
@@ -750,7 +750,7 @@
     <visual>
       <origin xyz="7.2e-08 -0.002749924 -8.9e-08" rpy="1.570802202 -3.739654139e-07 1.570784553" />
       <geometry>
-        <mesh filename="../meshes/gripper_R_link.stl" />
+        <mesh filename="../meshes/R_link7.stl" />
       </geometry>
       <material name="">
         <color rgba="0.75294 0.75294 0.75294 1" />
@@ -759,7 +759,7 @@
     <collision>
       <origin xyz="7.2e-08 -0.002749924 -8.9e-08" rpy="1.570802202 -3.739654139e-07 1.570784553" />
       <geometry>
-        <mesh filename="../meshes/gripper_R_link_collision.stl" />
+        <mesh filename="../meshes/R_link7_collision.stl" />
       </geometry>
     </collision>
   </link>
@@ -777,7 +777,7 @@
     <parent link="R_link7" />
     <child link="R_tcp" />
   </joint>
-  <link name="gripper_RL_link">
+  <link name="R_link8_L">
     <inertial>
       <origin xyz="-0.0533267936398 0.10323629087 -0.00245047459374" rpy="0 0 0" />
       <mass value="0.12" />
@@ -786,7 +786,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="../meshes/gripper_RL_link.stl" />
+        <mesh filename="../meshes/R_link8_L.stl" />
       </geometry>
       <material name="">
         <color rgba="0.75294 0.75294 0.75294 1" />
@@ -795,19 +795,19 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="../meshes/gripper_RL_link_collision.stl" />
+        <mesh filename="../meshes/R_link8_L_collision.stl" />
       </geometry>
     </collision>
   </link>
-  <joint name="gripper_RL_joint" type="prismatic">
+  <joint name="R_8_L_joint" type="prismatic">
     <origin xyz="-0.0002002716942 -0.00474640126 -0.05450008857" rpy="-1.570802202 7.72037562e-06 -1.570808101" />
     <parent link="R_link7" />
-    <child link="gripper_RL_link" />
+    <child link="R_link8_L" />
     <axis xyz="-1 0 0" />
     <dynamics damping="0.4" friction="0.1" />
     <limit lower="0" upper="0.045" effort="15" velocity="0.1" />
   </joint>
-  <link name="gripper_RR_link">
+  <link name="R_link8_R">
     <inertial>
       <origin xyz="0.0542805002895 0.103826702968 0.00032440771198" rpy="0 0 0" />
       <mass value="0.12" />
@@ -816,7 +816,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="../meshes/gripper_RR_link.stl" />
+        <mesh filename="../meshes/R_link8_R.stl" />
       </geometry>
       <material name="">
         <color rgba="0.75294 0.75294 0.75294 1" />
@@ -825,14 +825,14 @@
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh filename="../meshes/gripper_RR_link_collision.stl" />
+        <mesh filename="../meshes/R_link8_R_collision.stl" />
       </geometry>
     </collision>
   </link>
-  <joint name="gripper_RR_joint" type="prismatic">
+  <joint name="R_8_R_joint" type="prismatic">
     <origin xyz="-0.0001994122686 0.06824709873 -0.05450006127" rpy="-1.570802202 7.72037562e-06 -1.570808101" />
     <parent link="R_link7" />
-    <child link="gripper_RR_link" />
+    <child link="R_link8_R" />
     <axis xyz="1 0 0" />
     <dynamics damping="0.4" friction="0.1" />
     <limit lower="0" upper="0.045" effort="15" velocity="0.1" />
