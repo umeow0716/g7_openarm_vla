@@ -101,7 +101,7 @@ class MujocoNode:
         self.left_target_mocap_id  = self.model.body_mocapid[self.model.body("left_target").id]
         self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
 
-        self.acc_slice: slice | None = None
+        self.acc_slice:  slice | None = None
         self.gyro_slice: slice | None = None
         self.quat_slice: slice | None = None
         self.init_imu()
@@ -190,11 +190,11 @@ class MujocoNode:
     def sim_loop(self):
         with self.viewer.lock():
             if self.eetarget is not None:
-                left_pose = pose_to_array(self.eetarget.left_target)
+                left_pose  = pose_to_array(self.eetarget.left_target)
                 right_pose = pose_to_array(self.eetarget.right_target)
-                self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]
-                self.data.mocap_quat[self.left_target_mocap_id] = left_pose[3:]
-                self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]
+                self.data.mocap_pos[self.left_target_mocap_id]   = left_pose[:3]
+                self.data.mocap_quat[self.left_target_mocap_id]  = left_pose[3:]
+                self.data.mocap_pos[self.right_target_mocap_id]  = right_pose[:3]
                 self.data.mocap_quat[self.right_target_mocap_id] = right_pose[3:]
 
             if self.lowstate is not None:
@@ -245,7 +245,7 @@ class MujocoNode:
                         motor_cmd.tau
                     if Joint.is_gripper(joint):
                         self.data.ctrl[self.ctrl_index_register.get(joint)+1] = \
-                            q_err * motor_cmd.kp + \
+                            q_err  * motor_cmd.kp + \
                             dq_err * motor_cmd.kd + \
                             motor_cmd.tau
 
@@ -366,10 +366,10 @@ class MujocoNode:
                 
         mujoco.mj_forward(model, data)
 
-        left_hand = data.body("L_tcp")
+        left_hand  = data.body("L_tcp")
         right_hand = data.body("R_tcp")
 
-        left_pose = np.concatenate((left_hand.xpos, left_hand.xquat), dtype=np.float64)
+        left_pose  = np.concatenate((left_hand.xpos, left_hand.xquat), dtype=np.float64)
         right_pose = np.concatenate((right_hand.xpos, right_hand.xquat), dtype=np.float64)
         return EETarget(array_to_pose(left_pose), array_to_pose(right_pose), 0.0, 0.0)
 
