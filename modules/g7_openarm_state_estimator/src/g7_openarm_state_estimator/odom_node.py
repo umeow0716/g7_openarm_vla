@@ -21,7 +21,7 @@ class OdomNode:
         self.static_odom = Odom_default()
         self.static_odom.position.x = 0.0
         self.static_odom.position.y = 0.0
-        self.static_odom.position.z = 0.0
+        self.static_odom.position.z = 0.160631
         self.static_odom.quaternion.w = 1.0
         self.static_odom.quaternion.x = 0.0
         self.static_odom.quaternion.y = 0.0

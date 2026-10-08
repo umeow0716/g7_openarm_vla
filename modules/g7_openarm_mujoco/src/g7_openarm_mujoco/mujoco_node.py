@@ -150,8 +150,6 @@ class MujocoNode:
         left_pose = np.concatenate((left_target.xpos, left_target.xquat), dtype=np.float64)
         right_pose = np.concatenate((right_target.xpos, right_target.xquat), dtype=np.float64)
         msg = EETarget(array_to_pose(left_pose), array_to_pose(right_pose), 0.0, 0.0)
-        msg.left_target.position.z -= 0.160631
-        msg.right_target.position.z -= 0.160631
         self.eetarget_pub.Write(msg)
 
     def write_lowstate(self):
@@ -194,8 +192,6 @@ class MujocoNode:
             if self.eetarget is not None:
                 left_pose = pose_to_array(self.eetarget.left_target)
                 right_pose = pose_to_array(self.eetarget.right_target)
-                left_pose[2]  += 0.160631
-                right_pose[2] += 0.160631
                 self.data.mocap_pos[self.left_target_mocap_id] = left_pose[:3]
                 self.data.mocap_quat[self.left_target_mocap_id] = left_pose[3:]
                 self.data.mocap_pos[self.right_target_mocap_id] = right_pose[:3]

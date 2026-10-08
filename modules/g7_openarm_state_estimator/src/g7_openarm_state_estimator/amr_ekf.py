@@ -64,8 +64,8 @@ class AMREKF:
         self,
         wheel_radius: float = 0.052,
         front_x: float = 0.198,
-        rear_x: float = -0.198,
-        left_y: float = 0.13,
+        rear_x: float  = -0.198,
+        left_y: float  = 0.13,
         right_y: float = -0.13,
     ) -> None:
         self.config = AMREKFConfig()
@@ -249,7 +249,7 @@ class AMREKF:
         return State(
             x=float(self.x[0]),
             y=float(self.x[1]),
-            z=0.0,
+            z=0.160631,
             quat=quat,
             vx=float(linear_velocity_body[0]),
             vy=float(linear_velocity_body[1]),
