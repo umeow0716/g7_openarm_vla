@@ -75,12 +75,12 @@ class MujocoNode:
         is_vr: bool,
         is_hommi: bool,
     ) -> None:
-        self.is_sim = is_sim
-        self.is_vr = is_vr
+        self.is_sim   = is_sim
+        self.is_vr    = is_vr
         self.is_hommi = is_hommi
 
         self.qpos_index_register = IndexRegister()
-        self.dof_index_register = IndexRegister()
+        self.dof_index_register  = IndexRegister()
         self.ctrl_index_register = IndexRegister()
         self.init_index_register()
 
@@ -98,7 +98,7 @@ class MujocoNode:
         self.model  = self.build_model()
         self.data   = mujoco.MjData(self.model)
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
-        self.left_target_mocap_id = self.model.body_mocapid[self.model.body("left_target").id]
+        self.left_target_mocap_id  = self.model.body_mocapid[self.model.body("left_target").id]
         self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
 
         self.acc_slice: slice | None = None
@@ -109,20 +109,20 @@ class MujocoNode:
         self.imustate = HGIMUState_default()
         self.lowstate = HGLowState_default()
 
-        self.eetarget_pub = build_pub("rt/eetarget", EETarget, self.is_sim and not self.is_vr)
-        self.eetarget_sub = build_sub("rt/eetarget", EETarget, self.eetarget_handler, self.is_vr or not self.is_sim)
-        self.imustate_pub = build_pub("rt/imustate", HGIMUState_, self.is_sim)
-        self.lowstate_pub = build_pub("rt/lowstate", HGLowState_, self.is_sim)
-        self.lowstate_sub = build_sub("rt/lowstate", HGLowState_, self.lowstate_handler, not self.is_sim)
-        self.lowcmd_sub   = build_sub("rt/lowcmd", HGLowCmd_, self.lowcmd_handler, self.is_sim)
-        self.odom_sub     = build_sub("rt/odom", Odom, self.odom_handler, not self.is_sim)
+        self.eetarget_pub  = build_pub("rt/eetarget", EETarget, self.is_sim and not self.is_vr)
+        self.eetarget_sub  = build_sub("rt/eetarget", EETarget, self.eetarget_handler, self.is_vr or not self.is_sim)
+        self.imustate_pub  = build_pub("rt/imustate", HGIMUState_, self.is_sim)
+        self.lowstate_pub  = build_pub("rt/lowstate", HGLowState_, self.is_sim)
+        self.lowstate_sub  = build_sub("rt/lowstate", HGLowState_, self.lowstate_handler, not self.is_sim)
+        self.lowcmd_sub    = build_sub("rt/lowcmd", HGLowCmd_, self.lowcmd_handler, self.is_sim)
+        self.odom_sub      = build_sub("rt/odom", Odom, self.odom_handler, not self.is_sim)
         self.wbclowcmd_sub = build_sub("rt/wbclowcmd", WBCLowCmd, self.wbclowcmd_handler)
 
         self.eetarget_thread = build_thread(config.hz, self.write_eetarget, self.is_sim and not self.is_vr)
-        self.sim_thread = build_thread(config.hz, self.sim_loop)
+        self.sim_thread      = build_thread(config.hz, self.sim_loop)
         self.lowstate_thread = build_thread(config.hz, self.write_lowstate, self.is_sim)
         self.imustate_thread = build_thread(config.imu_hz, self.write_imustate, self.is_sim)
-        self.viewer_thread = build_thread(config.fps, self.viewer_loop)
+        self.viewer_thread   = build_thread(config.fps, self.viewer_loop)
 
     def eetarget_handler(self, msg: EETarget):
         self.eetarget = msg
@@ -155,7 +155,7 @@ class MujocoNode:
         self.eetarget_pub.Write(msg)
 
     def write_lowstate(self):
-        if self.lowstate_pub is None:
+        if self.lowstate_pub is None or self.lowstate is None:
             return
 
         with self.viewer.lock():
@@ -177,7 +177,7 @@ class MujocoNode:
         self.lowstate_pub.Write(self.lowstate)
 
     def write_imustate(self):
-        if self.imustate_pub is None:
+        if self.imustate_pub is None or self.imustate is None:
             return
 
         with self.viewer.lock():
@@ -297,8 +297,8 @@ class MujocoNode:
             if "floating_base" in name or "head" in name:
                 continue
             joint = Joint.name_to_joint(name)
-            qposadr = model.jnt_qposadr[model_joint.id]
-            dofadr = model.jnt_dofadr[model_joint.id]
+            qposadr = int(model.jnt_qposadr[model_joint.id])
+            dofadr  = int(model.jnt_dofadr[model_joint.id])
             
             if self.qpos_index_register.is_registered(joint):
                 continue
