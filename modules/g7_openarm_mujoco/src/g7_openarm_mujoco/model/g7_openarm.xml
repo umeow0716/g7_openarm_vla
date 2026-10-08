@@ -93,36 +93,36 @@
           <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="chest_link_collision" class="collision" />
           <body name="L_link1" pos="0 0.0874999999957 0">
             <inertial pos="0.00285795 0.0632321 -6.09e-06" quat="0.705405 0.708544 -0.0134023 -0.013784" mass="1.141" diaginertia="0.00139296 0.00110704 0.00103994" />
-            <joint name="L_1_joint" pos="0 0 0" axis="0 -1 0" range="-1.39626 3.49066" class="motor_DM8009P"  frictionloss="0.65" damping="0" />
+            <joint name="L_1_joint" pos="0 0 0" axis="0 -1 0" range="-1.39626 3.49066" class="motor_DM8009P"  frictionloss="0.65" damping="0.242886601249" />
             <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="L_link1" />
             <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="shoulder_L_link_collision" class="collision" />
             <body name="L_link2" pos="-0.0284 0.065 0">
               <inertial pos="0.00301991 0 -0.0217183" quat="0.959565 0.000122129 -0.281488 -0.000671765" mass="0.277" diaginertia="0.000583891 0.00048214 0.000272609" />
-              <joint name="L_2_joint" pos="0 0 0" axis="1 0 0" range="-0.174533 3.31613" class="motor_DM8009P"  frictionloss="0.68" damping="0" />
+              <joint name="L_2_joint" pos="0 0 0" axis="1 0 0" range="-0.174533 3.31613" class="motor_DM8009P"  frictionloss="0.68" damping="0.242886601249" />
               <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="L_link2" />
               <body name="L_link3" pos="0.0284 0 -0.051">
                 <inertial pos="-0.00800186 -0.00033975 -0.0531398" quat="0.999747 -0.00602619 0.0216179 0.00177453" mass="1.073" diaginertia="0.00443953 0.00414023 0.000774874" />
-                <joint name="L_3_joint" pos="0 0 0" axis="0 0 -1" range="-1.5708 1.5708" class="motor_DM4340P"  frictionloss="0.516" damping="0.238" />
+                <joint name="L_3_joint" pos="0 0 0" axis="0 0 -1" range="-1.5708 1.5708" class="motor_DM4340P"  frictionloss="0.516" damping="0.273700803518" />
                 <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="L_link3" />
                 <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="upper_arm_L_link_collision" class="collision" />
                 <body name="L_link4" pos="0 -5e-05 -0.169">
                   <inertial pos="-0.00037734 -0.00097263 -0.00461696" quat="0.999381 0.015656 0.0313694 -0.00286401" mass="0.634" diaginertia="0.000610432 0.000470224 0.000402434" />
-                  <joint name="L_4_joint" pos="0 0 0" axis="0 1 0" range="-2.44346 0" class="motor_DM4340P"  frictionloss="0.99" damping="0.21" />
+                  <joint name="L_4_joint" pos="0 0 0" axis="0 1 0" range="-2.44346 0" class="motor_DM4340P"  frictionloss="0.99" damping="0.273700803518" />
                   <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="L_link4" />
                   <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="lower_arm_L_link_collision" class="collision" />
                   <body name="L_link5" pos="0 0 -0.0955">
                     <inertial pos="-0.00157437 0.00139758 -0.0368166" quat="0.631661 0.0523669 0.0147535 0.773333" mass="0.615" diaginertia="0.000841857 0.000743186 0.000582338" />
-                    <joint name="L_5_joint" pos="0 0 0" axis="0 0 -1" range="-1.5708 1.5708" class="motor_DM4310"  frictionloss="0.13" damping="0" />
+                    <joint name="L_5_joint" pos="0 0 0" axis="0 0 -1" range="-1.5708 1.5708" class="motor_DM4310"  frictionloss="0.13" damping="0.0301286985632" />
                     <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="L_link5" />
                     <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="wrist1_L_link_collision" class="collision" />
                     <body name="L_link6" pos="0 0 -0.1205">
                       <inertial pos="-0.00011822 0.00048177 9.191e-05" quat="0.553594 0.409925 0.572546 0.44462" mass="0.475" diaginertia="0.000212439 0.00020842 0.000189701" />
-                      <joint name="L_6_joint" pos="0 0 0" axis="-1 0 0" range="-0.785398 0.785398" class="motor_DM4310"  frictionloss="0.135" damping="0" />
+                      <joint name="L_6_joint" pos="0 0 0" axis="-1 0 0" range="-0.785398 0.785398" class="motor_DM4310"  frictionloss="0.135" damping="0.0301286985632" />
                       <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="L_link6" />
                       <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="L_link6_collision" class="collision" />
                       <body name="L_link7" pos="0 0.03175 0" quat="0.995004165278026 0 -0.0998334166468282 0">
                         <inertial pos="0.00348093900851 -0.0315286246096 -0.0828453789792" quat="0.187366769945 -0.675102454587 0.687508753375 -0.19095047359" mass="0.63" diaginertia="0.00040367853814 0.000614842990329 0.000645524134026" />
-                        <joint name="L_7_joint" pos="0 0 0" axis="0 -1 0" range="-1.5708 1.5708" ref="0.2" class="motor_DM4310"  frictionloss="0.14" damping="0.014" />
+                        <joint name="L_7_joint" pos="0 0 0" axis="0 -1 0" range="-1.5708 1.5708" ref="0.2" class="motor_DM4310" frictionloss="0.14" damping="0.0301286985632" />
                         <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="L_link7" pos="1.05e-07 0.002749998 -2.5e-08" quat="0.4999972095 0.4999985615 0.500003479 0.50000075" />
                         <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="L_link7_collision" class="collision" pos="1.05e-07 0.002749998 -2.5e-08" quat="0.4999972095 0.4999985615 0.500003479 0.50000075" />
                         <body name="L_tcp" pos="-0.00102 -0.03226 -0.20576" quat="0 0.7071067811865476 -0.7071067811865476 0" />
@@ -147,36 +147,36 @@
           </body>
           <body name="R_link1" pos="0 -0.0875000000043 0">
             <inertial pos="0.00285822 -0.063232 6.03e-06" quat="0.705406 0.708543 0.0133834 0.0137654" mass="1.141" diaginertia="0.00139293 0.00110708 0.00103994" />
-            <joint name="R_1_joint" pos="0 0 0" axis="0 -1 0" range="-1.39626 3.49066" class="motor_DM8009P"  frictionloss="0.65" damping="0" />
+            <joint name="R_1_joint" pos="0 0 0" axis="0 -1 0" range="-1.39626 3.49066" class="motor_DM8009P" frictionloss="0.65" damping="0.242886601249" />
             <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="R_link1" />
             <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="shoulder_R_link_collision" class="collision" />
             <body name="R_link2" pos="-0.0284 -0.065 0">
               <inertial pos="0.00301991 0 -0.0217183" quat="0.959565 0.000122129 -0.281488 -0.000671765" mass="0.277" diaginertia="0.000583891 0.00048214 0.000272609" />
-              <joint name="R_2_joint" pos="0 0 0" axis="-1 0 0" range="-0.174533 3.31613" class="motor_DM8009P"  frictionloss="0.68" damping="0" />
+              <joint name="R_2_joint" pos="0 0 0" axis="-1 0 0" range="-0.174533 3.31613" class="motor_DM8009P" frictionloss="0.68" damping="0.242886601249" />
               <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="R_link2" />
               <body name="R_link3" pos="0.0284 0 -0.051">
                 <inertial pos="-0.00800186 -0.00033975 -0.0531398" quat="0.999747 -0.00602619 0.0216179 0.00177453" mass="1.073" diaginertia="0.00443953 0.00414023 0.000774874" />
-                <joint name="R_3_joint" pos="0 0 0" axis="0 0 -1" range="-1.5708 1.5708" class="motor_DM4340P"  frictionloss="0.516" damping="0.238" />
+                <joint name="R_3_joint" pos="0 0 0" axis="0 0 -1" range="-1.5708 1.5708" class="motor_DM4340P" frictionloss="0.516" damping="0.273700803518" />
                 <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="R_link3" />
                 <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="upper_arm_L_link_collision" class="collision" />
                 <body name="R_link4" pos="0 0 -0.169">
                   <inertial pos="-0.00037734 -0.00102263 -0.00461696" quat="0.999381 0.015656 0.0313694 -0.00286401" mass="0.634" diaginertia="0.000610432 0.000470224 0.000402434" />
-                  <joint name="R_4_joint" pos="0 0 0" axis="0 1 0" range="-2.44346 0" class="motor_DM4340P"  frictionloss="0.99" damping="0.21" />
+                  <joint name="R_4_joint" pos="0 0 0" axis="0 1 0" range="-2.44346 0" class="motor_DM4340P" frictionloss="0.99" damping="0.273700803518" />
                   <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="R_link4" />
                   <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="lower_arm_L_link_collision" class="collision" />
                   <body name="R_link5" pos="0 0 -0.0955">
                     <inertial pos="-0.00156592 -0.00144926 -0.0368151" quat="0.77369 0.0148717 0.0523812 0.631221" mass="0.615" diaginertia="0.000841891 0.000743093 0.000582326" />
-                    <joint name="R_5_joint" pos="0 0 0" axis="0 0 -1" range="-1.5708 1.5708" class="motor_DM4310"  frictionloss="0.13" damping="0" />
+                    <joint name="R_5_joint" pos="0 0 0" axis="0 0 -1" range="-1.5708 1.5708" class="motor_DM4310" frictionloss="0.13" damping="0.0301286985632" />
                     <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="R_link5" />
                     <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="wrist1_L_link_collision" class="collision" />
                     <body name="R_link6" pos="0 0 -0.1205">
                       <inertial pos="0.00011815 -0.00053178 9.193e-05" quat="0.411589 0.551301 0.441536 0.575941" mass="0.475" diaginertia="0.000212445 0.000208413 0.000189702" />
-                      <joint name="R_6_joint" pos="0 0 0" axis="-1 0 0" range="-0.785398 0.785398" class="motor_DM4310"  frictionloss="0.135" damping="0" />
+                      <joint name="R_6_joint" pos="0 0 0" axis="-1 0 0" range="-0.785398 0.785398" class="motor_DM4310" frictionloss="0.135" damping="0.0301286985632" />
                       <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="R_link6" />
                       <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="L_link6_collision" class="collision" />
                       <body name="R_link7" pos="0 -0.0318 0" quat="0.995004165278026 0 -0.0998334166468282 0">
                         <inertial pos="0.00360433900632 0.0320885150267 -0.0828230647277" quat="-0.66392493449 -0.229388247165 0.23164507489 0.672997230829" mass="0.63" diaginertia="0.000404985774331 0.000615401384855 0.000647239420369" />
-                        <joint name="R_7_joint" pos="0 0 0" axis="0 -1 0" range="-1.5708 1.5708" ref="0.2" class="motor_DM4310"  frictionloss="0.14" damping="0.014" />
+                        <joint name="R_7_joint" pos="0 0 0" axis="0 -1 0" range="-1.5708 1.5708" ref="0.2" class="motor_DM4310" frictionloss="0.14" damping="0.0301286985632" />
                         <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="R_link7" pos="7.2e-08 -0.002749924 -8.9e-08" quat="0.5000013812 0.5000045057 0.4999984317 0.4999956812" />
                         <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="R_link7_collision" class="collision" pos="7.2e-08 -0.002749924 -8.9e-08" quat="0.5000013812 0.5000045057 0.4999984317 0.4999956812" />
                         <body name="R_tcp" pos="-0.00103 0.03132 -0.20576" quat="0 0.7071067811865476 0.7071067811865476 0" />
