@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import time
 import mujoco
 import mujoco.viewer
@@ -12,14 +13,15 @@ from g7_openarm_idl import (
     Odom,
     WBCLowCmd,
 )
-from g7_openarm_utils.layout.index_register import IndexRegister
-from g7_openarm_utils.unitree import (
+from g7_openarm_utils import (
     ChannelFactoryInitialize,
     build_pub,
     build_sub,
     build_thread,
+    force_kill,
 )
 from g7_openarm_utils.layout import (
+    IndexRegister,
     Joint,
     BASE_ENABLED,
     RIGHT_ARM_ENABLED,
@@ -41,7 +43,8 @@ from g7_openarm_idl import (
     array_to_pose,
 )
 from importlib.resources import as_file, files
-from typing import TYPE_CHECKING
+import signal
+from typing import TYPE_CHECKING, Tuple
 from unitree_sdk2py.idl.default import (
     HGIMUState_,
     HGLowCmd_,
@@ -95,8 +98,7 @@ class MujocoNode:
         self.odom: Odom | None = None
         self.wbclowcmd: WBCLowCmd | None = None
 
-        self.model  = self.build_model()
-        self.data   = mujoco.MjData(self.model)
+        self.model, self.data = self.build_model()
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
         self.left_target_mocap_id  = self.model.body_mocapid[self.model.body("left_target").id]
         self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
@@ -105,9 +107,6 @@ class MujocoNode:
         self.gyro_slice: slice | None = None
         self.quat_slice: slice | None = None
         self.init_imu()
-
-        self.imustate = HGIMUState_default()
-        self.lowstate = HGLowState_default()
 
         self.eetarget_pub  = build_pub("rt/eetarget", EETarget, self.is_sim and not self.is_vr)
         self.eetarget_sub  = build_sub("rt/eetarget", EETarget, self.eetarget_handler, self.is_vr or not self.is_sim)
@@ -249,29 +248,6 @@ class MujocoNode:
                             dq_err * motor_cmd.kd + \
                             motor_cmd.tau
 
-                print(
-                    "[MUJOCO_ARM] "
-                    "columns=joint,cmd_q,sim_q,cmd_dq,sim_dq,kp,kd,p_tau,d_tau,ff_tau,"
-                    "ctrl,actuator_force,qfrc_actuator; rows="
-                    + " | ".join(
-                        f"{joint.name},"
-                        f"{self.lowcmd.motor_cmd[low_idx(joint)].q:+.6f},"
-                        f"{self.data.qpos[self.qpos_index_register.get(joint)]:+.6f},"
-                        f"{self.lowcmd.motor_cmd[low_idx(joint)].dq:+.6f},"
-                        f"{self.data.qvel[self.dof_index_register.get(joint)]:+.6f},"
-                        f"{self.lowcmd.motor_cmd[low_idx(joint)].kp:+.6f},"
-                        f"{self.lowcmd.motor_cmd[low_idx(joint)].kd:+.6f},"
-                        f"{self.lowcmd.motor_cmd[low_idx(joint)].kp * (self.lowcmd.motor_cmd[low_idx(joint)].q - self.data.qpos[self.qpos_index_register.get(joint)]):+.6f},"
-                        f"{self.lowcmd.motor_cmd[low_idx(joint)].kd * (self.lowcmd.motor_cmd[low_idx(joint)].dq - self.data.qvel[self.dof_index_register.get(joint)]):+.6f},"
-                        f"{self.lowcmd.motor_cmd[low_idx(joint)].tau:+.6f},"
-                        f"{self.data.ctrl[self.ctrl_index_register.get(joint)]:+.6f},"
-                        f"{self.data.actuator_force[self.ctrl_index_register.get(joint)]:+.6f},"
-                        f"{self.data.qfrc_actuator[self.dof_index_register.get(joint)]:+.6f}"
-                        for joint in ARM_JOINT
-                    ),
-                    flush=True,
-                )
-
             if True and self.wbclowcmd is not None:
                 self.data.ctrl[:] = 0.0
                 for i, joint in enumerate(ARM_JOINT):
@@ -358,9 +334,11 @@ class MujocoNode:
             if self.is_vr:
                 continue
             joint = Joint.name_to_joint(joint_config)
-            if not RIGHT_ARM_ENABLED and (joint in RIGHT_ARM_JOINT or joint == Joint.R8):
+            if joint is Joint.R8 or Joint is Joint.L8:
                 continue
-            if not LEFT_ARM_ENABLED and (joint in LEFT_ARM_JOINT or joint == Joint.L8):
+            if not RIGHT_ARM_ENABLED and joint in RIGHT_ARM_JOINT:
+                continue
+            if not LEFT_ARM_ENABLED  and joint in LEFT_ARM_JOINT:
                 continue
             data.qpos[self.qpos_index_register.get(joint)] = qpos
                 
@@ -373,10 +351,10 @@ class MujocoNode:
         right_pose = np.concatenate((right_hand.xpos, right_hand.xquat), dtype=np.float64)
         return EETarget(array_to_pose(left_pose), array_to_pose(right_pose), 0.0, 0.0)
 
-    def build_model(self) -> mujoco.MjModel:
+    def build_model(self) -> Tuple[mujoco.MjModel, mujoco.MjData]:
         with model_directory() as model_dir:
             model_path = (model_dir / "scene.xml").as_posix()
-        default_pose =  self.load_hand_default_pose()
+        default_pose = self.load_hand_default_pose()
         
         spec = mujoco.MjSpec.from_file(model_path)
         spec.option.timestep = 1.0 / config.hz
@@ -411,9 +389,25 @@ class MujocoNode:
             conaffinity=0,
         )
 
-        return spec.compile()
+        model = spec.compile()
+        data  = mujoco.MjData(model)
+        for joint_config, qpos in general_config.initial_pos.items():
+            if self.is_vr:
+                continue
+            joint = Joint.name_to_joint(joint_config)
+            if joint is Joint.R8 or Joint is Joint.L8:
+                continue
+            if not RIGHT_ARM_ENABLED and joint in RIGHT_ARM_JOINT:
+                continue
+            if not LEFT_ARM_ENABLED  and joint in LEFT_ARM_JOINT:
+                continue
+            data.qpos[self.qpos_index_register.get(joint)] = qpos
+                    
+        return model, data
 
 def main(is_sim=True, is_vr=False, is_hommi=False):
+    atexit.register(force_kill)
+    signal.signal(signal.SIGINT, force_kill)
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
     node = MujocoNode(is_sim, is_vr, is_hommi)
     while True:

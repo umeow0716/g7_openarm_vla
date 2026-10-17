@@ -1,4 +1,7 @@
 from . import layout
+from .process import (
+    force_kill,
+)
 from .quat import (
     quat_conj,
     quat_from_yaw,
@@ -16,6 +19,7 @@ from .unitree import (
 )
 
 __all__ = [
+    "force_kill",
     "layout",
     "quat_conj",
     "quat_from_yaw",
