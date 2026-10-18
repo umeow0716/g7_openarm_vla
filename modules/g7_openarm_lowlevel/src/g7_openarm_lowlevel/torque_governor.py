@@ -27,12 +27,13 @@ class TorqueGovernor:
         self._positive = np.empty((n, n), dtype=int)
         self._negative = np.empty((n, n), dtype=int)
         for col in range(n):
-            start, end = matrix.indptr[col:col + 2] # type: ignore
-            rows = matrix.indices[start:end] # type: ignore
+            start, end = matrix.indptr[col:col + 2]
+            rows = matrix.indices[start:end]
             self._positive[:, col] = start + np.searchsorted(rows, np.arange(2 * n, 3 * n))
             self._negative[:, col] = start + np.searchsorted(rows, np.arange(3 * n, 4 * n))
 
         self._qp = osqp.OSQP()
+        self._fallback_active = False
         self._qp.setup(
             P=sparse.diags(np.r_[np.ones(n), np.full(n, 100.0)], format="csc"),
             q=np.zeros(2 * n), A=matrix,
@@ -82,7 +83,22 @@ class TorqueGovernor:
             u=np.r_[high, np.full(14, np.inf), 1.0 - offset, 1.0 + offset],
             Ax=ax,
         )
-        result = self._qp.solve()
-        if result.info.status_val not in (1, 2) or not np.all(np.isfinite(result.x)):
-            raise RuntimeError(f"Torque governor QP: {result.info.status}")
-        return self.jerk_max * np.clip(result.x[:14], low, high)
+        try:
+            result = self._qp.solve()
+            valid = (result.info.status_val in (1, 2)
+                     and result.x is not None
+                     and np.all(np.isfinite(result.x[:14])))
+            reason = result.info.status
+        except Exception as exc:
+            valid = False
+            reason = str(exc)
+
+        if valid:
+            self._fallback_active = False
+            return self.jerk_max * np.clip(result.x[:14], low, high)
+
+        if not self._fallback_active:
+            print(f"[TorqueGovernor] QP failed: {reason}; using nominal jerk")
+        self._fallback_active = True
+        nominal = np.clip(jerk_nom / self.jerk_max, -1.0, 1.0)
+        return self.jerk_max * np.where(low <= high, np.clip(nominal, low, high), nominal)
