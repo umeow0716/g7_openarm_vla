@@ -84,6 +84,10 @@ class G7OpenArmLQR():
         self.Q_hand_pos = 200.0
         self.Q_hand_ori = 40.0
 
+        self.task_gain = 10.0  # g/H scaling: 0.1 / 0.01
+        self.max_hand_pos_speed = 0.3  # m/s
+        self.max_hand_angular_speed = 1.2  # rad/s
+
         self.nu: int = len(LEFT_ARM_JOINT) + len(RIGHT_ARM_JOINT)
         if BASE_ENABLED:
             self.nu += len(BASE_JOINT)
@@ -257,6 +261,11 @@ class G7OpenArmLQR():
 
         return float(cost)
 
+    @staticmethod
+    def _limit_norm(value: npt.NDArray[np.float64], limit: float) -> npt.NDArray[np.float64]:
+        norm = np.linalg.norm(value)
+        return value * min(1.0, limit / max(norm, 1e-12))
+
     def state_cost_deriv(
         self,
         state: TaskState,
@@ -284,16 +293,22 @@ class G7OpenArmLQR():
             Jq_left = J_left[3:, :]
             Jr_left = quat_residual_jacobian(Jq_left, state.left_pose.quat)
             Je_left_pos = -Jp_left
+            pos_err = self._limit_norm(
+                task_evaluation.left_pos_err, self.max_hand_pos_speed / self.task_gain
+            )
+            ori_err = self._limit_norm(
+                task_evaluation.left_ori_err, self.max_hand_angular_speed / (2.0 * self.task_gain)
+            )
 
             lx_pos += self.Q_hand_pos * (
-                Je_left_pos.T @ task_evaluation.left_pos_err
+                Je_left_pos.T @ pos_err
             )
             lxx_pos += self.Q_hand_pos * (
                 Je_left_pos.T @ Je_left_pos
             )
 
             lx_ori += self.Q_hand_ori * (
-                Jr_left.T @ task_evaluation.left_ori_err
+                Jr_left.T @ ori_err
             )
             lxx_ori += self.Q_hand_ori * (
                 Jr_left.T @ Jr_left
@@ -305,16 +320,22 @@ class G7OpenArmLQR():
             Jq_right = J_right[3:, :]
             Jr_right = quat_residual_jacobian(Jq_right, state.right_pose.quat)
             Je_right_pos = -Jp_right
+            pos_err = self._limit_norm(
+                task_evaluation.right_pos_err, self.max_hand_pos_speed / self.task_gain
+            )
+            ori_err = self._limit_norm(
+                task_evaluation.right_ori_err, self.max_hand_angular_speed / (2.0 * self.task_gain)
+            )
 
             lx_pos += self.Q_hand_pos * (
-                Je_right_pos.T @ task_evaluation.right_pos_err
+                Je_right_pos.T @ pos_err
             )
             lxx_pos += self.Q_hand_pos * (
                 Je_right_pos.T @ Je_right_pos
             )
 
             lx_ori += self.Q_hand_ori * (
-                Jr_right.T @ task_evaluation.right_ori_err
+                Jr_right.T @ ori_err
             )
             lxx_ori += self.Q_hand_ori * (
                 Jr_right.T @ Jr_right
