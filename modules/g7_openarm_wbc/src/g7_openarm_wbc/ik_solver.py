@@ -88,7 +88,7 @@ class G7OpenArmLQR():
         self.Qf_hand_ori = 300.0
 
         self.task_gain = 10.0  # g/H scaling: 0.1 / 0.01
-        self.max_hand_pos_speed = 0.40  # m/s
+        self.max_hand_pos_speed = 0.8  # m/s
         self.max_hand_angular_speed = 2.0  # rad/s
 
         self.nu: int = len(LEFT_ARM_JOINT) + len(RIGHT_ARM_JOINT)
