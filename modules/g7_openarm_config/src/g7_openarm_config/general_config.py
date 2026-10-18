@@ -8,10 +8,6 @@ from typing import Any, Sequence
 from .base import BaseConfig
 from .parsing import parse_bool
 
-DEFAULT_INITIAL_POS = [0.435, 0.0, 0.0, -0.525, 0.0, 0.0, 0.613]
-DEFAULT_INITIAL_GRIPPER = 1.0
-
-
 @dataclass(frozen=True, slots=True)
 class GeneralConfig(BaseConfig):
     debugging: bool
@@ -51,9 +47,13 @@ class GeneralConfig(BaseConfig):
         if not isinstance(section, Mapping):
             raise ValueError("Missing [general] section")
 
-        initial_pos_raw = section.get("initial_pos", DEFAULT_INITIAL_POS)
+        initial_pos_raw = section.get("initial_pos")
         if not isinstance(initial_pos_raw, (list, tuple)) or len(initial_pos_raw) != 7:
             raise ValueError("general.initial_pos must be an array of 7 joint positions")
+
+        initial_gripper = section.get("initial_gripper")
+        if not isinstance(initial_gripper, (int, float)):
+            raise ValueError("general.initial_gripper must be a float")
 
         return cls(
             debugging=parse_bool(
@@ -78,8 +78,7 @@ class GeneralConfig(BaseConfig):
                 "R6": initial_pos_raw[5],
                 "R7": initial_pos_raw[6], 
             },
-            initial_gripper=float(section.get("initial_gripper", DEFAULT_INITIAL_GRIPPER)),
-        )
+            initial_gripper=initial_gripper)
 
 
 config = GeneralConfig.load()

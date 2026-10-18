@@ -96,6 +96,23 @@ class Joint(StrEnum):
                 return j
         raise RuntimeError(f"Could not found joint `{name}`")
 
+    @classmethod
+    def is_enabled(cls, joint: Self, control_mode: ControlMode|str) -> bool:
+        mode = ControlMode.parse(control_mode)
+        is_base = cls.is_base(joint)
+        is_left = joint.name.startswith("L")
+        is_right = joint.name.startswith("R")
+
+        return {
+            ControlMode.WBC: True,
+            ControlMode.ARM_ONLY: not is_base,
+            ControlMode.BASE_ONLY: is_base,
+            ControlMode.LEFT_ARM: is_base or is_left,
+            ControlMode.RIGHT_ARM: is_base or is_right,
+            ControlMode.LEFT_ARM_ONLY: is_left,
+            ControlMode.RIGHT_ARM_ONLY: is_right,
+        }[mode]
+
 class Dim(StrEnum):
     X = "x"
     Y = "y"

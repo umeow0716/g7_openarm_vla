@@ -12,6 +12,7 @@ from g7_openarm_utils.layout.control_layout import (
 from typing import TYPE_CHECKING
 
 from .config import config
+from .torque_governor import TorqueGovernor
 
 if TYPE_CHECKING:
     from unitree_sdk2py.idl.default import HGLowState_
@@ -36,9 +37,9 @@ ACCEL_MAX = np.tile(np.array([
 ]), 2)
 
 VEL_MAX = np.tile(np.array([
-    10.0, 10.0,
-    3.5,  3.5,
-    12.0, 12.0, 12.0,
+    6.0, 5.0,
+    2.5, 2.5,
+    7.0, 4.5, 7.0,
 ]), 2)
 
 POS_MAX = np.tile(np.array([
@@ -70,27 +71,24 @@ class ReferenceResult:
 class ReferenceGenerator:
     def __init__(self):
         self.initialized = False
-        self.started = False
-        
-        self.e_soft = 0.05
-        self.e_hard = 0.10
-        
-        self.rho_tau = 0.8
         
         assert len(ARM_JOINT) == 14
 
         self.q_ref   = np.zeros((14,))
-        self.q_meas  = np.zeros((14,)) 
+        self.q_meas  = np.zeros((14,))
+        self.dq_meas = np.zeros((14,))
         self.dq_ref  = np.zeros((14,))
         self.ddq_ref = np.zeros((14,))
         
-        self.tau_raw = np.zeros((14,))
-        
-        self.gamma = 0.0
-        
         self.delta_t = 1.0 / config.hz
-        self.r_fall = 5.0
-        self.r_rise = 0.5
+        self.governor = TorqueGovernor(
+            self.delta_t, JERK_MAX, ACCEL_MAX, VEL_MAX,
+            POS_MIN, POS_MAX, TORQUE_MAX,
+        )
+        self.omega = np.array([
+            2.0 * np.pi * config.natural_frequency[j] for j in ARM_JOINT
+        ])
+        self.zeta = np.array([config.damping_ratio[j] for j in ARM_JOINT])
         
         self.omega_c = 50.0
         self.omega_f = 0.5 * self.omega_c
@@ -108,55 +106,7 @@ class ReferenceGenerator:
             self.ddq_ref[i] = 0.0
         self.initialized = True
 
-    def generate(
-        self,
-        lowstate: "HGLowState_",
-        dq_des: npt.NDArray[np.float64],
-    ):
-        assert self.initialized
-
-        dq_des_active = np.where(ACTIVE_ARM_MASK, dq_des, 0.0)
-
-        for i, joint in enumerate(ARM_JOINT):
-            self.q_meas[i] = lowstate.motor_state[low_idx(joint)].q
-
-        if not self.started:
-            self.q_ref[:] = self.q_meas
-            self.dq_ref[:] = 0.0
-            self.ddq_ref[:] = 0.0
-            self.started = True
-
-        tracking_error = self.q_ref - self.q_meas
-        outside_tracking_bound = np.abs(tracking_error) > self.e_hard
-        self.q_ref = np.where(
-            outside_tracking_bound,
-            self.q_meas + np.clip(tracking_error, -self.e_soft, self.e_soft),
-            self.q_ref,
-        )
-
-        tau_allow = self.rho_tau * TORQUE_MAX
-        
-        gamma_tau = tau_allow / np.maximum(
-            np.abs(self.tau_raw),
-            tau_allow,
-        )
-        
-        gamma_all = gamma_tau
-
-        r_gamma = np.where(
-            gamma_all < self.gamma,
-            self.r_fall,
-            self.r_rise,
-        )
-        
-        self.gamma += np.clip(
-            gamma_all - self.gamma,
-            -r_gamma * self.delta_t,
-            r_gamma * self.delta_t
-        )
-
-        dq_goal = self.gamma * np.clip(dq_des_active, -VEL_MAX, VEL_MAX)
-
+    def _step(self, dq_goal, M_arm, tau_bias):
         upper_distance = np.maximum(POS_MAX - self.q_ref, 0.0)
         lower_distance = np.maximum(self.q_ref - POS_MIN, 0.0)
 
@@ -174,7 +124,12 @@ class ReferenceGenerator:
             | ((self.ddq_ref <= -ACCEL_MAX) & (j_tilde < 0))
         )
                 
-        j_ref = np.where(block_jerk, 0.0, j_tilde)
+        j_nom = np.where(block_jerk, 0.0, j_tilde)
+        j_ref = self.governor.solve(
+            j_nom, self.q_ref, self.dq_ref, self.ddq_ref,
+            self.q_meas, self.dq_meas, M_arm, tau_bias,
+            self.omega, self.zeta,
+        )
         
         next_ddq_ref = np.clip(
             self.ddq_ref + j_ref * self.delta_t,
@@ -196,10 +151,32 @@ class ReferenceGenerator:
         next_dq_ref = np.where(hit_limit, 0.0, next_dq_ref)
         next_ddq_ref = np.where(hit_limit, 0.0, next_ddq_ref)
         
-        self.ddq_ref = next_ddq_ref
-        self.dq_ref  = next_dq_ref
-        self.q_ref   = next_q_ref
-        
+        return next_q_ref, next_dq_ref, next_ddq_ref
+
+    def generate(
+        self,
+        lowstate: "HGLowState_",
+        dq_des: npt.NDArray[np.float64],
+        M_arm: npt.NDArray[np.float64],
+        tau_bias: npt.NDArray[np.float64],
+    ):
+        if not self.initialized:
+            raise RuntimeError("Reference Generator must initialize first")
+
+        dq_des_active = np.where(ACTIVE_ARM_MASK, dq_des, 0.0)
+        dq_des_active = np.clip(dq_des_active, -VEL_MAX, VEL_MAX)
+
+        for i, joint in enumerate(ARM_JOINT):
+            state = lowstate.motor_state[low_idx(joint)]
+            self.q_meas[i] = state.q
+            self.dq_meas[i] = state.dq
+
+        error = self.q_ref - self.q_meas
+        recovery_weight = np.clip((np.abs(error) - 0.05) / 0.10, 0.0, 1.0)
+        dq_goal = (1.0 - recovery_weight) * dq_des_active - 2.0 * recovery_weight * error
+        dq_goal = np.where(ACTIVE_ARM_MASK, np.clip(dq_goal, -VEL_MAX, VEL_MAX), 0.0)
+        self.q_ref, self.dq_ref, self.ddq_ref = self._step(dq_goal, M_arm, tau_bias)
+
         q_result = {
             joint: self.q_ref[i]
             for i, joint in enumerate(ARM_JOINT)
@@ -220,13 +197,3 @@ class ReferenceGenerator:
             dq=dq_result,
             ddq=ddq_result,
         )
-
-    def update_tau_raw(
-        self,
-        tau_raw: npt.NDArray[np.float64],
-    ):
-        tau_raw = np.asarray(tau_raw, dtype=np.float64)
-
-        assert tau_raw.shape == (14,)
-
-        self.tau_raw[:] = tau_raw

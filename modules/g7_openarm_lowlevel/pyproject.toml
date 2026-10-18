@@ -10,6 +10,7 @@ dependencies = [
     "g7-openarm-utils",
     "g7-openarm-pinnzoo",
     "unitree-sdk2py",
+    "osqp",
 ]
 
 [tool.uv.sources]

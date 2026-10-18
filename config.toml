@@ -1,7 +1,7 @@
 [general]
 debugging = true
 control_mode = "arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
-initial_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2]
+initial_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3]
 initial_gripper = 1.0 # normalized openness: 0.010=closed, 1.0=open
 
 [dds]
@@ -27,17 +27,19 @@ right_gripper_open  =  1.800
 right_gripper_close = -2.550
 
 [lowlevel]
-hz = 300.0
+hz = 100.0
+natural_frequency = [ 4.5, 4.5, 4.0, 4.0, 6.0, 6.0, 6.0 ] # Hz
+damping_ratio = [ 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9 ]
 
 [state_estimator]
 hz = 100.0
 
 [wbc]
-hz = 300.0
+hz = 100.0
 
 [mujoco]
-hz = 300.0
-imu_hz = 300.0
+hz = 500.0
+imu_hz = 100.0
 eetarget_hz = 50.0
 fps = 60.0
 

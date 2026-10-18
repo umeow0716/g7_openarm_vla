@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import time
+from g7_openarm_idl.odom import Odom_default
 import mujoco
 import mujoco.viewer
 import numpy as np
@@ -95,7 +96,7 @@ class MujocoNode:
         self.imustate: HGIMUState_ | None = None
         self.lowcmd: HGLowCmd_ | None = None
         self.lowstate: HGLowState_ | None = None
-        self.odom: Odom | None = None
+        self.odom : Odom | None = None
         self.wbclowcmd: WBCLowCmd | None = None
 
         self.model, self.data = self.build_model()
@@ -117,7 +118,10 @@ class MujocoNode:
         self.odom_sub      = build_sub("rt/odom", Odom, self.odom_handler, not self.is_sim)
         self.wbclowcmd_sub = build_sub("rt/wbclowcmd", WBCLowCmd, self.wbclowcmd_handler)
 
-        self.eetarget_thread = build_thread(config.hz, self.write_eetarget, self.is_sim and not self.is_vr)
+        self.lowstate_out: HGLowState_ | None = HGLowState_default() if self.lowstate_pub is not None else None
+        self.imustate_out: HGIMUState_ | None = HGIMUState_default() if self.imustate_pub is not None else None
+
+        self.eetarget_thread = build_thread(config.eetarget_hz, self.write_eetarget, self.is_sim and not self.is_vr)
         self.sim_thread      = build_thread(config.hz, self.sim_loop)
         self.lowstate_thread = build_thread(config.hz, self.write_lowstate, self.is_sim)
         self.imustate_thread = build_thread(config.imu_hz, self.write_imustate, self.is_sim)
@@ -152,7 +156,7 @@ class MujocoNode:
         self.eetarget_pub.Write(msg)
 
     def write_lowstate(self):
-        if self.lowstate_pub is None or self.lowstate is None:
+        if self.lowstate_pub is None or self.lowstate_out is None:
             return
 
         with self.viewer.lock():
@@ -164,27 +168,27 @@ class MujocoNode:
             qposadr = self.qpos_index_register.get(joint)
             dofadr  = self.dof_index_register.get(joint)
             if Joint.is_gripper(joint):
-                self.lowstate.motor_state[low_idx(joint)].q  = qpos_to_openness(qpos[qposadr])
-                self.lowstate.motor_state[low_idx(joint)].dq = qvel_to_openness_rate(qvel[dofadr])
-                self.lowstate.motor_state[low_idx(joint)].tau_est = 0.0
+                self.lowstate_out.motor_state[low_idx(joint)].q  = qpos_to_openness(qpos[qposadr])
+                self.lowstate_out.motor_state[low_idx(joint)].dq = qvel_to_openness_rate(qvel[dofadr])
+                self.lowstate_out.motor_state[low_idx(joint)].tau_est = 0.0
             else:
-                self.lowstate.motor_state[low_idx(joint)].q  = qpos[qposadr]
-                self.lowstate.motor_state[low_idx(joint)].dq = qvel[dofadr]
-                self.lowstate.motor_state[low_idx(joint)].tau_est = qfrc_actuator[dofadr]
-        self.lowstate_pub.Write(self.lowstate)
+                self.lowstate_out.motor_state[low_idx(joint)].q  = qpos[qposadr]
+                self.lowstate_out.motor_state[low_idx(joint)].dq = qvel[dofadr]
+                self.lowstate_out.motor_state[low_idx(joint)].tau_est = qfrc_actuator[dofadr]
+        self.lowstate_pub.Write(self.lowstate_out)
 
     def write_imustate(self):
-        if self.imustate_pub is None or self.imustate is None:
+        if self.imustate_pub is None or self.imustate_out is None:
             return
 
         with self.viewer.lock():
             sensordata = self.data.sensordata.copy()
 
         sensordata_list = sensordata.tolist()
-        self.imustate.accelerometer = sensordata_list[self.acc_slice]
-        self.imustate.gyroscope     = sensordata_list[self.gyro_slice]
-        self.imustate.quaternion    = sensordata_list[self.quat_slice]
-        self.imustate_pub.Write(self.imustate)
+        self.imustate_out.accelerometer = sensordata_list[self.acc_slice]
+        self.imustate_out.gyroscope     = sensordata_list[self.gyro_slice]
+        self.imustate_out.quaternion    = sensordata_list[self.quat_slice]
+        self.imustate_pub.Write(self.imustate_out)
 
     def sim_loop(self):
         with self.viewer.lock():
@@ -207,7 +211,7 @@ class MujocoNode:
                         self.data.qpos[self.qpos_index_register.get(joint)] = \
                             self.lowstate.motor_state[low_idx(joint)].q
 
-            if self.odom is not None:
+            if self.odom is not None and self.odom_sub is not None:
                 self.data.qpos[0] = self.odom.position.x
                 self.data.qpos[1] = self.odom.position.y
                 self.data.qpos[2] = self.odom.position.z
@@ -217,18 +221,10 @@ class MujocoNode:
                 self.data.qpos[6] = self.odom.quaternion.z
 
             if self.lowcmd is not None:
-                joint_list: list[Joint] = []
-                if BASE_ENABLED:
-                    joint_list += BASE_JOINT
-                if LEFT_ARM_ENABLED:
-                    joint_list += LEFT_ARM_JOINT
-                    joint_list += [Joint.L8]
-                if RIGHT_ARM_ENABLED:
-                    joint_list += RIGHT_ARM_JOINT
-                    joint_list += [Joint.R8]
-
-                for joint in joint_list:
+                for joint in Joint:
                     motor_cmd = self.lowcmd.motor_cmd[low_idx(joint)]
+                    if not Joint.is_enabled(joint, general_config.control_mode):
+                        continue
                     if Joint.is_gripper(joint):
                         qpos = openness_to_qpos(motor_cmd.q)
                         qvel = openness_rate_to_qvel(motor_cmd.dq)
@@ -248,16 +244,11 @@ class MujocoNode:
                             dq_err * motor_cmd.kd + \
                             motor_cmd.tau
 
-            if True and self.wbclowcmd is not None:
-                self.data.ctrl[:] = 0.0
-                for i, joint in enumerate(ARM_JOINT):
-                    self.data.qvel[self.dof_index_register.get(joint)] = self.wbclowcmd.dq_des[i]
-
             mujoco.mj_step(self.model, self.data)
 
     def viewer_loop(self):
         with self.viewer.lock():
-            self.viewer.sync()
+            self.viewer.sync(state_only=True)
 
     def init_index_register(self):
         with model_directory() as model_dir:
