@@ -27,8 +27,8 @@ from g7_openarm_utils.layout import (
 from typing import TYPE_CHECKING
 
 from .utils import (
-    ori_err_quat,
-    quat_jac_to_ori_err_jac,
+    quat_residual,
+    quat_residual_jacobian,
 )
 
 if TYPE_CHECKING:
@@ -82,7 +82,7 @@ class G7OpenArmLQR():
         self.damping = 1e-4
 
         self.Q_hand_pos = 200.0
-        self.Q_hand_ori = 10.0
+        self.Q_hand_ori = 40.0
 
         self.nu: int = len(LEFT_ARM_JOINT) + len(RIGHT_ARM_JOINT)
         if BASE_ENABLED:
@@ -168,9 +168,9 @@ class G7OpenArmLQR():
             else np.zeros(3, dtype=np.float64)
         )
         left_ori_err = (
-            ori_err_quat(state.left_pose.quat, target.left_pose.quat)
+            quat_residual(state.left_pose.quat, target.left_pose.quat)
             if LEFT_ARM_ENABLED
-            else np.zeros(3, dtype=np.float64)
+            else np.zeros(4, dtype=np.float64)
         )
         right_pos_err = (
             target.right_pose.pos - state.right_pose.pos
@@ -178,9 +178,9 @@ class G7OpenArmLQR():
             else np.zeros(3, dtype=np.float64)
         )
         right_ori_err = (
-            ori_err_quat(state.right_pose.quat, target.right_pose.quat)
+            quat_residual(state.right_pose.quat, target.right_pose.quat)
             if RIGHT_ARM_ENABLED
-            else np.zeros(3, dtype=np.float64)
+            else np.zeros(4, dtype=np.float64)
         )
 
         return TaskEvaluation(
@@ -282,11 +282,7 @@ class G7OpenArmLQR():
             J_left = Jkin[self.kin_slice[KinBody.L_TCP], :]
             Jp_left = J_left[:3, :]
             Jq_left = J_left[3:, :]
-            _, Jr_left = quat_jac_to_ori_err_jac(
-                Jq=Jq_left,
-                state_quat=state.left_pose.quat,
-                target_quat=target.left_pose.quat,
-            )
+            Jr_left = quat_residual_jacobian(Jq_left, state.left_pose.quat)
             Je_left_pos = -Jp_left
 
             lx_pos += self.Q_hand_pos * (
@@ -307,11 +303,7 @@ class G7OpenArmLQR():
             J_right = Jkin[self.kin_slice[KinBody.R_TCP], :]
             Jp_right = J_right[:3, :]
             Jq_right = J_right[3:, :]
-            _, Jr_right = quat_jac_to_ori_err_jac(
-                Jq=Jq_right,
-                state_quat=state.right_pose.quat,
-                target_quat=target.right_pose.quat,
-            )
+            Jr_right = quat_residual_jacobian(Jq_right, state.right_pose.quat)
             Je_right_pos = -Jp_right
 
             lx_pos += self.Q_hand_pos * (
