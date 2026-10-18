@@ -239,6 +239,8 @@ class MujocoNode:
                         dq_err * motor_cmd.kd + \
                         motor_cmd.tau
                     if Joint.is_gripper(joint):
+                        q_err  = qpos - self.data.qpos[self.qpos_index_register.get(joint)+1]
+                        dq_err = qvel - self.data.qvel[self.dof_index_register.get(joint)+1]
                         self.data.ctrl[self.ctrl_index_register.get(joint)+1] = \
                             q_err  * motor_cmd.kp + \
                             dq_err * motor_cmd.kd + \

@@ -30,6 +30,7 @@ from .utils import (
     quat_residual,
     quat_residual_jacobian,
 )
+from .kinematic_mpc import KinematicMPC
 
 if TYPE_CHECKING:
     from g7_openarm_idl import EETarget, Odom
@@ -85,8 +86,8 @@ class G7OpenArmLQR():
         self.Q_hand_ori = 40.0
 
         self.task_gain = 10.0  # g/H scaling: 0.1 / 0.01
-        self.max_hand_pos_speed = 0.3  # m/s
-        self.max_hand_angular_speed = 1.2  # rad/s
+        self.max_hand_pos_speed = 0.50  # m/s
+        self.max_hand_angular_speed = 2.0  # rad/s
 
         self.nu: int = len(LEFT_ARM_JOINT) + len(RIGHT_ARM_JOINT)
         if BASE_ENABLED:
@@ -123,6 +124,39 @@ class G7OpenArmLQR():
         self.u_base_slice = slice(0, 3)
         self.u_left_slice  = slice(3, 3+len(LEFT_ARM_JOINT))    if BASE_ENABLED else slice(0, len(LEFT_ARM_JOINT))
         self.u_right_slice = slice(3+len(LEFT_ARM_JOINT), None) if BASE_ENABLED else slice(len(LEFT_ARM_JOINT), None)
+
+        # Velocity limits match the low-level joint order; the Cartesian limits
+        # below apply separately to each enabled end effector.
+        arm_vel_max = np.array([6.0, 5.0, 2.5, 2.5, 7.0, 4.5, 7.0])
+        vel_max = np.tile(arm_vel_max, 2)
+        if BASE_ENABLED:
+            vel_max = np.r_[[0.3, 0.3, 0.6], vel_max]
+        if not LEFT_ARM_ENABLED:
+            vel_max[self.u_left_slice] = 0.0
+        if not RIGHT_ARM_ENABLED:
+            vel_max[self.u_right_slice] = 0.0
+
+        directions = np.array([
+            [1, 0, 0], [0, 1, 0], [0, 0, 1],
+            [1, 1, 0], [1, -1, 0],
+            [1, 0, 1], [1, 0, -1],
+            [0, 1, 1], [0, 1, -1],
+            [1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1],
+        ], dtype=np.float64)
+        directions /= np.linalg.norm(directions, axis=1)[:, None]
+        self._task_directions = directions
+        task_limits = np.concatenate([
+            np.r_[np.full(len(directions), self.max_hand_pos_speed),
+                  np.full(len(directions), self.max_hand_angular_speed)]
+            for enabled in (LEFT_ARM_ENABLED, RIGHT_ARM_ENABLED) if enabled
+        ]) if (LEFT_ARM_ENABLED or RIGHT_ARM_ENABLED) else np.empty(0)
+        arm_accel_max = np.array([10.0, 10.0, 15.0, 15.0, 30.0, 30.0, 30.0])
+        accel_max = np.tile(arm_accel_max, 2)
+        if BASE_ENABLED:
+            accel_max = np.r_[[2.0, 2.0, 4.0], accel_max]
+        self.mpc = KinematicMPC(
+            self.nu, vel_max, accel_max, task_limits, dt=0.01, horizon=20,
+        )
 
     def task_state_from_x_lib(
         self,
@@ -343,6 +377,64 @@ class G7OpenArmLQR():
 
         return l, lx_pos, lxx_pos, lx_ori, lxx_ori
 
+    @staticmethod
+    def _bounded_error_jacobian(err: npt.NDArray[np.float64], limit: float):
+        """Local derivative of norm-clipped task error."""
+        size = np.linalg.norm(err)
+        if size <= limit:
+            return np.eye(len(err))
+        direction = err / size
+        return (limit / size) * (np.eye(len(err)) - np.outer(direction, direction))
+
+    def bounded_ik_feedback(self, state, task_eval, Jkin, A_pos, A_ori, u_nom):
+        """Linearize the unchanged bounded IK policy: u_ik(x) = u_nom - F x."""
+        G_pos = np.zeros((self.nu, self.nu))
+        G_ori = np.zeros((self.nu, self.nu))
+        for enabled, body, pose, ep, eo in (
+            (LEFT_ARM_ENABLED, KinBody.L_TCP, state.left_pose,
+             task_eval.left_pos_err, task_eval.left_ori_err),
+            (RIGHT_ARM_ENABLED, KinBody.R_TCP, state.right_pose,
+             task_eval.right_pos_err, task_eval.right_ori_err),
+        ):
+            if not enabled:
+                continue
+            J = Jkin[self.kin_slice[body], :]
+            Je = -J[:3, :]
+            Jr = quat_residual_jacobian(J[3:, :], pose.quat)
+            G_pos += self.Q_hand_pos * (Je.T @ self._bounded_error_jacobian(
+                ep, self.max_hand_pos_speed / self.task_gain) @ Je)
+            G_ori += self.Q_hand_ori * (Jr.T @ self._bounded_error_jacobian(
+                eo, self.max_hand_angular_speed / (2.0 * self.task_gain)) @ Jr)
+        F = 0.1 * (
+            np.linalg.solve(A_pos, G_pos)
+            + np.linalg.solve(A_ori, G_ori)
+        )
+        return u_nom, F, A_pos + A_ori
+
+    def task_velocity_jacobian(self, state: TaskState, Jkin: npt.NDArray[np.float64]):
+        """Linearized Cartesian and angular velocities for MPC constraints."""
+        blocks = []
+        for enabled, body, pose in (
+            (LEFT_ARM_ENABLED, KinBody.L_TCP, state.left_pose),
+            (RIGHT_ARM_ENABLED, KinBody.R_TCP, state.right_pose),
+        ):
+            if not enabled:
+                continue
+            J = Jkin[self.kin_slice[body], :]
+            q = pose.quat / np.linalg.norm(pose.quat)
+            # Tangent basis of unit quaternions; omega = 4 * B(q).T * q_dot.
+            w, x, y, z = q
+            B = 0.5 * np.array([
+                [-x, -y, -z],
+                [w, -z, y],
+                [z, w, -x],
+                [-y, x, w],
+            ])
+            Jquat = quat_residual_jacobian(J[3:, :], pose.quat)
+            D = self._task_directions
+            blocks.extend((D @ J[:3, :], D @ (4.0 * B.T @ Jquat)))
+        return np.vstack(blocks) if blocks else np.zeros((0, self.nu))
+
     def solve_once(
         self,
         lowstate: "HGLowState_",
@@ -364,17 +456,22 @@ class G7OpenArmLQR():
             Jkin=Jkin,
         )
 
-        H_pos = 0.01 * lxx_pos + self.R_pos
-        g_pos = 0.1 * lx_pos
-        H_pos += self.damping * np.eye(self.nu)
-        u_pos = -np.linalg.solve(H_pos, g_pos)
-
-        H_ori = 0.01 * lxx_ori + self.R_ori
-        g_ori = 0.1 * lx_ori
-        H_ori += self.damping * np.eye(self.nu)
-        u_ori = -np.linalg.solve(H_ori, g_ori)
-
-        u = u_pos + u_ori
+        I = self.damping * np.eye(self.nu)
+        A_pos = 0.01 * lxx_pos + self.R_pos + I
+        A_ori = 0.01 * lxx_ori + self.R_ori + I
+        u_nom = (
+            -np.linalg.solve(A_pos, 0.1 * lx_pos)
+            -np.linalg.solve(A_ori, 0.1 * lx_ori)
+        )
+        nominal, feedback, weight = self.bounded_ik_feedback(
+            state, task_eval, Jkin, A_pos, A_ori, u_nom,
+        )
+        u = self.mpc.solve(
+            nominal, feedback, weight,
+            self.task_velocity_jacobian(state, Jkin),
+        )
+        if u is None:
+            u = u_nom
         if not LEFT_ARM_ENABLED:
             u[self.u_left_slice]  = 0.0
         if not RIGHT_ARM_ENABLED:
@@ -383,6 +480,4 @@ class G7OpenArmLQR():
             u_cache = u
             u = np.zeros((self.nu+3,), dtype=np.float64)
             u[3:] = u_cache
-        else:
-            self.prev_u_base = u[:3].copy()
         return u
