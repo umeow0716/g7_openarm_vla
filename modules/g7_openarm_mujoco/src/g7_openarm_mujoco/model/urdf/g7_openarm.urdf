@@ -837,12 +837,12 @@
     <dynamics damping="0.4" friction="0.1" />
     <limit lower="0" upper="0.045" effort="15" velocity="0.1" />
   </joint>
-  <joint name="head_mount_joint" type="fixed">
+  <joint name="HEAD_mount_joint" type="fixed">
     <origin xyz="0 0 0.063" rpy="0 0 0" />
     <parent link="chest_link" />
-    <child link="head_base_link" />
+    <child link="HEAD_base_link" />
   </joint>
-  <link name="head_base_link">
+  <link name="HEAD_base_link">
     <inertial>
       <origin xyz="1.16642806524681E-14 -1.16269840977345E-14 0.000956840258174677" rpy="0 0 0" />
       <mass value="0.0288553383340636" />
@@ -864,7 +864,7 @@
       </geometry>
     </collision>
   </link>
-  <link name="head_yaw_link">
+  <link name="HEAD_yaw_link">
     <inertial>
       <origin xyz="7.2402E-05 -0.0018855 -0.019525" rpy="0 0 0" />
       <mass value="0.21377" />
@@ -886,15 +886,15 @@
       </geometry>
     </collision>
   </link>
-  <joint name="head_yaw_joint" type="revolute">
+  <joint name="HEAD_yaw_joint" type="revolute">
     <origin xyz="0 0 0.06" rpy="0 0 0" />
-    <parent link="head_base_link" />
-    <child link="head_yaw_link" />
+    <parent link="HEAD_base_link" />
+    <child link="HEAD_yaw_link" />
     <axis xyz="0 0 1" />
     <dynamics damping="0.15" friction="0.02" />
-    <limit lower="-1.5708" upper="1.5708" effort="5" velocity="2.0" />
+    <limit lower="-1.5707963267948966" upper="1.5707963267948966" effort="5" velocity="2.0" />
   </joint>
-  <link name="head_pitch_link">
+  <link name="HEAD_pitch_link">
     <inertial>
       <origin xyz="0.00271681067625434 -0.0229316511206702 0.000110306449730303" rpy="0 0 0" />
       <mass value="0.180865339049976" />
@@ -916,15 +916,15 @@
       </geometry>
     </collision>
   </link>
-  <joint name="head_pitch_joint" type="revolute">
+  <joint name="HEAD_pitch_joint" type="revolute">
     <origin xyz="0 0.02775 0.0385" rpy="0 0 0" />
-    <parent link="head_yaw_link" />
-    <child link="head_pitch_link" />
+    <parent link="HEAD_yaw_link" />
+    <child link="HEAD_pitch_link" />
     <axis xyz="0 -1 0" />
     <dynamics damping="0.15" friction="0.02" />
-    <limit lower="-0.7854" upper="0.7854" effort="5" velocity="2.0" />
+    <limit lower="-3.1415926535897931" upper="3.1415926535897931" effort="5" velocity="2.0" />
   </joint>
-  <link name="head_eye_link">
+  <link name="HEAD_eye_link">
     <inertial>
       <origin xyz="-0.007444 0.030945 -0.00060557" rpy="0 0 0" />
       <mass value="0.10791" />
@@ -946,22 +946,47 @@
       </geometry>
     </collision>
   </link>
-  <joint name="head_eye_joint" type="fixed">
+  <joint name="HEAD_eye_joint" type="fixed">
     <origin xyz="0.079703 -0.023818 0.0031558" rpy="0 0 0" />
-    <parent link="head_pitch_link" />
-    <child link="head_eye_link" />
+    <parent link="HEAD_pitch_link" />
+    <child link="HEAD_eye_link" />
     <axis xyz="0 0 0" />
   </joint>
-  <link name="head_camera_link" />
-  <joint name="head_camera_mount_joint" type="fixed">
-    <origin xyz="0 0 0" rpy="0 0 0" />
-    <parent link="head_eye_link" />
-    <child link="head_camera_link" />
+  <!-- D435i: camera_link = depth origin (infra1), Z+ up / X+ forward (REP 103); IR2 and RGB offsets mirrored in Y to match the eye mesh (RGB on the other side) -->
+  <link name="HEAD_camera_link" />
+  <joint name="HEAD_camera_mount_joint" type="fixed">
+    <origin xyz="0.0009 0.0135 0" rpy="0 0 0" />
+    <parent link="HEAD_eye_link" />
+    <child link="HEAD_camera_link" />
   </joint>
-  <link name="head_camera_optical_frame" />
-  <joint name="head_camera_optical_joint" type="fixed">
+  <link name="HEAD_camera_optical_frame" />
+  <joint name="HEAD_camera_optical_joint" type="fixed">
     <origin xyz="0 0 0" rpy="-1.57079632679 0 -1.57079632679" />
-    <parent link="head_camera_link" />
-    <child link="head_camera_optical_frame" />
+    <parent link="HEAD_camera_link" />
+    <child link="HEAD_camera_optical_frame" />
+  </joint>
+  <link name="HEAD_infra2_link" />
+  <joint name="HEAD_infra2_mount_joint" type="fixed">
+    <origin xyz="0 0.05 0" rpy="0 0 0" />
+    <parent link="HEAD_camera_link" />
+    <child link="HEAD_infra2_link" />
+  </joint>
+  <link name="HEAD_infra2_optical_frame" />
+  <joint name="HEAD_infra2_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.57079632679 0 -1.57079632679" />
+    <parent link="HEAD_infra2_link" />
+    <child link="HEAD_infra2_optical_frame" />
+  </joint>
+  <link name="HEAD_color_link" />
+  <joint name="HEAD_color_mount_joint" type="fixed">
+    <origin xyz="0 -0.015 0" rpy="0 0 0" />
+    <parent link="HEAD_camera_link" />
+    <child link="HEAD_color_link" />
+  </joint>
+  <link name="HEAD_color_optical_frame" />
+  <joint name="HEAD_color_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.57079632679 0 -1.57079632679" />
+    <parent link="HEAD_color_link" />
+    <child link="HEAD_color_optical_frame" />
   </joint>
 </robot>

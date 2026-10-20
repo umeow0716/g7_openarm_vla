@@ -71,10 +71,10 @@
     <mesh name="R_link8_L" file="R_link8_L.stl" />
     <mesh name="R_link8_R_collision" file="R_link8_R_collision.stl" />
     <mesh name="R_link8_R" file="R_link8_R.stl" />
-    <mesh name="head_base_mesh" file="base_link.STL" />
-    <mesh name="head_yaw_mesh" file="yaw_Link.STL" />
-    <mesh name="head_pitch_mesh" file="pitch_Link.STL" />
-    <mesh name="head_eye_mesh" file="eye_Link.STL" />
+    <mesh name="HEAD_base_mesh" file="base_link.STL" />
+    <mesh name="HEAD_yaw_mesh" file="yaw_Link.STL" />
+    <mesh name="HEAD_pitch_mesh" file="pitch_Link.STL" />
+    <mesh name="HEAD_eye_mesh" file="eye_Link.STL" />
   </asset>
   <worldbody>
     <body name="AMR_base_link" pos="0 0 0.160631" childclass="g7_openarm">
@@ -199,28 +199,41 @@
               </body>
             </body>
           </body>
-          <body name="head_base_link" pos="0 0 0.063">
+          <body name="HEAD_base_link" pos="0 0 0.063">
             <inertial pos="1.16642806524681e-14 -1.16269840977345e-14 0.000956840258174677" mass="0.0288553383340636" fullinertia="1.04389183451251e-05 1.18347674887442e-05 2.15916795372883e-05 -9.53197855320756e-22 1.35787886752617e-16 -1.18791827788314e-16" />
-            <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="head_base_mesh" />
-            <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="head_base_mesh" class="collision" />
-            <body name="head_yaw_link" pos="0 0 0.06">
+            <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="HEAD_base_mesh" />
+            <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="HEAD_base_mesh" class="collision" />
+            <body name="HEAD_yaw_link" pos="0 0 0.06">
               <inertial pos="7.2402e-05 -0.0018855 -0.019525" mass="0.21377" fullinertia="9.7938e-05 9.8136e-05 0.00013087 2.3608e-08 -6.6892e-08 5.2161e-06" />
-              <joint name="head_yaw_joint" axis="0 0 1" range="-1.5708 1.5708" class="head_joint" />
-              <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="head_yaw_mesh" />
-              <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="head_yaw_mesh" class="collision" />
-              <body name="head_pitch_link" pos="0 0.02775 0.0385">
+              <joint name="HEAD_yaw_joint" axis="0 0 1" range="-1.5707963267948966 1.5707963267948966" class="head_joint" />
+              <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="HEAD_yaw_mesh" />
+              <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="HEAD_yaw_mesh" class="collision" />
+              <body name="HEAD_pitch_link" pos="0 0.02775 0.0385">
                 <inertial pos="0.00271681067625434 -0.0229316511206702 0.000110306449730303" mass="0.180865339049976" fullinertia="7.91023298275954e-05 0.000107986072113461 8.90460192105385e-05 -2.79622384338422e-07 -2.90108963375468e-07 6.26009542339238e-08" />
-                <joint name="head_pitch_joint" axis="0 -1 0" range="-0.7854 0.7854" class="head_joint" />
-                <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="head_pitch_mesh" />
-                <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="head_pitch_mesh" class="collision" />
-                <body name="head_eye_link" pos="0.079703 -0.023818 0.0031558">
+                <joint name="HEAD_pitch_joint" axis="0 -1 0" range="-3.1415926535897931 3.1415926535897931" class="head_joint" />
+                <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.792157 0.819608 0.933333 1" mesh="HEAD_pitch_mesh" />
+                <geom type="mesh" rgba="0.792157 0.819608 0.933333 1" mesh="HEAD_pitch_mesh" class="collision" />
+                <body name="HEAD_eye_link" pos="0.079703 -0.023818 0.0031558">
                   <inertial pos="-0.007444 0.030945 -0.00060557" mass="0.10791" fullinertia="7.1255e-05 7.7459e-06 7.0221e-05 1.6865e-08 -4.9715e-08 1.4975e-06" />
-                  <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.89804 0.91765 0.92941 1" mesh="head_eye_mesh" />
-                  <geom type="mesh" rgba="0.89804 0.91765 0.92941 1" mesh="head_eye_mesh" class="collision" />
-                  <body name="head_camera_link">
-                    <site name="head_camera_site" pos="0 0 0" size="0.005" />
-                    <body name="head_camera_optical_frame" euler="-1.57079632679 0 -1.57079632679">
-                      <site name="head_camera_optical_site" pos="0 0 0" size="0.004" />
+                  <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.89804 0.91765 0.92941 1" mesh="HEAD_eye_mesh" />
+                  <geom type="mesh" rgba="0.89804 0.91765 0.92941 1" mesh="HEAD_eye_mesh" class="collision" />
+                  <!-- D435i: camera_link = depth origin (infra1), Z+ up / X+ forward (REP 103); IR2 and RGB offsets mirrored in Y to match the eye mesh (RGB on the other side) -->
+                  <body name="HEAD_camera_link" pos="0.0009 0.0135 0">
+                    <site name="HEAD_camera_site" pos="0 0 0" size="0.005" />
+                    <body name="HEAD_camera_optical_frame" quat="-0.5 0.5 -0.5 0.5">
+                      <site name="HEAD_camera_optical_site" pos="0 0 0" size="0.004" />
+                    </body>
+                    <body name="HEAD_infra2_link" pos="0 0.05 0">
+                      <site name="HEAD_infra2_site" pos="0 0 0" size="0.004" />
+                      <body name="HEAD_infra2_optical_frame" quat="-0.5 0.5 -0.5 0.5">
+                        <site name="HEAD_infra2_optical_site" pos="0 0 0" size="0.003" />
+                      </body>
+                    </body>
+                    <body name="HEAD_color_link" pos="0 -0.015 0">
+                      <site name="HEAD_color_site" pos="0 0 0" size="0.004" />
+                      <body name="HEAD_color_optical_frame" quat="-0.5 0.5 -0.5 0.5">
+                        <site name="HEAD_color_optical_site" pos="0 0 0" size="0.003" />
+                      </body>
                     </body>
                   </body>
                 </body>
@@ -302,8 +315,8 @@
     <motor ctrlrange="-7 7" name="R_7_motor" joint="R_7_joint" />
     <motor ctrlrange="-15 15" name="R_8_L_motor" joint="R_8_L_joint" />
     <motor ctrlrange="-15 15" name="R_8_R_motor" joint="R_8_R_joint" />
-    <motor ctrlrange="-5 5" name="head_yaw_motor" joint="head_yaw_joint" />
-    <motor ctrlrange="-5 5" name="head_pitch_motor" joint="head_pitch_joint" />
+    <motor ctrlrange="-5 5" name="HEAD_yaw_motor" joint="HEAD_yaw_joint" />
+    <motor ctrlrange="-5 5" name="HEAD_pitch_motor" joint="HEAD_pitch_joint" />
   </actuator>
   <sensor>
     <jointpos name="AMR_FL_pos" joint="AMR_FL_joint" />
@@ -390,11 +403,11 @@
     <framepos name="frame_pos" objtype="site" objname="imu" />
     <framelinvel name="frame_lin_vel" objtype="site" objname="imu" />
     <frameangvel name="frame_ang_vel" objtype="site" objname="imu" />
-    <jointpos name="head_yaw_pos" joint="head_yaw_joint" />
-    <jointvel name="head_yaw_vel" joint="head_yaw_joint" />
-    <jointactuatorfrc name="head_yaw_torque" joint="head_yaw_joint" />
-    <jointpos name="head_pitch_pos" joint="head_pitch_joint" />
-    <jointvel name="head_pitch_vel" joint="head_pitch_joint" />
-    <jointactuatorfrc name="head_pitch_torque" joint="head_pitch_joint" />
+    <jointpos name="HEAD_yaw_pos" joint="HEAD_yaw_joint" />
+    <jointvel name="HEAD_yaw_vel" joint="HEAD_yaw_joint" />
+    <jointactuatorfrc name="HEAD_yaw_torque" joint="HEAD_yaw_joint" />
+    <jointpos name="HEAD_pitch_pos" joint="HEAD_pitch_joint" />
+    <jointvel name="HEAD_pitch_vel" joint="HEAD_pitch_joint" />
+    <jointactuatorfrc name="HEAD_pitch_torque" joint="HEAD_pitch_joint" />
   </sensor>
 </mujoco>
