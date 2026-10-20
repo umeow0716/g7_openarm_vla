@@ -575,7 +575,7 @@ requires-dist = [
     { name = "g7-openarm-idl", editable = "modules/g7_openarm_idl" },
     { name = "g7-openarm-pinnzoo", editable = "modules/g7_openarm_pinnzoo" },
     { name = "g7-openarm-utils", editable = "modules/g7_openarm_utils" },
-    { name = "osqp", specifier = ">=1.0" },
+    { name = "osqp" },
     { name = "scipy" },
     { name = "unitree-sdk2py", editable = "third_party/unitree_sdk2_python" },
 ]

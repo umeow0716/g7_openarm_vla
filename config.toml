@@ -1,5 +1,5 @@
 [general]
-debugging = true
+debugging = false
 control_mode = "wbc" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
 initial_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3]
 initial_gripper = 1.0 # normalized openness: 0.010=closed, 1.0=open
