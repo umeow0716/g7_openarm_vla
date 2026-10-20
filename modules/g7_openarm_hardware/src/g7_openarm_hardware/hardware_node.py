@@ -61,6 +61,7 @@ bus_config = {
             dc.ControlMode.MIT, dc.ControlMode.MIT,
             dc.ControlMode.MIT, dc.ControlMode.POS_FORCE,
         ],
+        "offset": config.left_arm_offset,
     },
     config.right_arm_can: {
         "motor_types": [
@@ -77,6 +78,7 @@ bus_config = {
             dc.ControlMode.MIT, dc.ControlMode.MIT,
             dc.ControlMode.MIT, dc.ControlMode.POS_FORCE,
         ],
+        "offset": config.right_arm_offset,
     },
 }
 
@@ -227,10 +229,11 @@ class HardwareNode:
         for iface in self.can_interfaces:
             device = self.group.get_device(iface)
             device.init_motors(
-                bus_config[iface]["motor_types"],
-                bus_config[iface]["send_ids"],
-                bus_config[iface]["recv_ids"],
-                bus_config[iface]["control_modes"],
+                motor_types=bus_config[iface]["motor_types"],
+                send_ids=bus_config[iface]["send_ids"],
+                recv_ids=bus_config[iface]["recv_ids"],
+                control_modes=bus_config[iface]["control_modes"],
+                offset=bus_config[iface].get("offset"),
             )
             device.set_callback_mode_all(dc.CallbackMode.STATE)
             print(f"{iface}: expected responses = {device.expected_response_count()}")

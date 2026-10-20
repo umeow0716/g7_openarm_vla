@@ -26,7 +26,9 @@ class HardwareConfig(BaseConfig):
     base_ids: list[int]
     base_direction: list[float]
     left_arm_direction: list[float]
+    left_arm_offset: list[float]
     right_arm_direction: list[float]
+    right_arm_offset: list[float]
     # Calibrated physical motor positions in radians.
     left_gripper_open: float
     left_gripper_close: float
@@ -68,6 +70,13 @@ class HardwareConfig(BaseConfig):
             if invalid:
                 raise ValueError(f"{field} values must be -1.0 or 1.0, got {invalid!r}")
 
+        _require_sequence_length(self.base_ids, field="hardware.left_arm_offset", length=7)
+        if any(type(value) not in (int, float) for value in self.left_arm_offset):
+            raise ValueError(f"hardware.base_ids must contain only float: {self.left_arm_offset!r}")
+        _require_sequence_length(self.base_ids, field="hardware.right_arm_offset", length=7)
+        if any(type(value) not in (int, float) for value in self.right_arm_offset):
+            raise ValueError(f"hardware.base_ids must contain only float: {self.right_arm_offset!r}")
+
     @property
     def interval(self) -> float:
         return 1.0 / self.hz
@@ -105,7 +114,9 @@ class HardwareConfig(BaseConfig):
             base_ids=list(section["base_ids"]),
             base_direction=[float(value) for value in section["base_direction"]],
             left_arm_direction=[float(value) for value in section["left_arm_direction"]],
+            left_arm_offset=[float(value) for value in section["left_arm_offset"]],
             right_arm_direction=[float(value) for value in section["right_arm_direction"]],
+            right_arm_offset=[float(value) for value in section["right_arm_offset"]],
             left_gripper_open=float(section["left_gripper_open"]),
             left_gripper_close=float(section["left_gripper_close"]),
             right_gripper_open=float(section["right_gripper_open"]),
