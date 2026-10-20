@@ -108,11 +108,11 @@ class G7OpenArmLQR():
 
         if BASE_ENABLED:
             r_pos = np.concatenate([
-                np.array([2.5, 2.5, 2.0], dtype=np.float64),
+                np.array([1.0, 1.0, 0.3], dtype=np.float64),
                 r_pos,
             ])
             r_ori = np.concatenate([
-                np.array([10.0, 10.0, 1.0], dtype=np.float64),
+                np.array([5.0, 5.0, 0.2], dtype=np.float64),
                 r_ori,
             ])
 

@@ -22,8 +22,8 @@ class WheelKinematic:
             ],
             dtype=np.float64,
         )
-        self._base_idle_linear_threshold_m_s: float = 3e-2
-        self._base_idle_angular_threshold_rad_s: float = 1e-2
+        self._base_idle_linear_threshold_m_s: float = 5e-2
+        self._base_idle_angular_threshold_rad_s: float = 5e-3
 
     def choose_best_pose(
         self,
