@@ -1,4 +1,4 @@
-"""Linearized pose-cost MPC with independent joint-speed penalty."""
+"""Kinematic MPC that follows the original bounded IK policy and plans deceleration."""
 
 import numpy as np
 import osqp
@@ -6,8 +6,7 @@ from scipy import sparse
 
 
 class KinematicMPC:
-    def __init__(self, nu, velocity_limit, acceleration_limit, task_limit,
-                 control_weight, dt=0.01, horizon=20):
+    def __init__(self, nu, velocity_limit, acceleration_limit, task_limit, dt=0.01, horizon=20):
         self.nu = nu
         self.dt = dt
         self.horizon = horizon
@@ -15,7 +14,6 @@ class KinematicMPC:
         self.velocity_limit = np.asarray(velocity_limit, dtype=np.float64)
         self.acceleration_limit = np.asarray(acceleration_limit, dtype=np.float64)
         self.task_limit = np.asarray(task_limit, dtype=np.float64)
-        self.control_weight = np.asarray(control_weight, dtype=np.float64)
         self.nt = len(self.task_limit)
         self._failed = False
 
@@ -48,27 +46,36 @@ class KinematicMPC:
         self._task_cols = col[self._task_entries] % n
         self._fixed_A = self.A.data.copy()
 
-        # Cost: sum_k 0.5*x_k.T*H_pose*x_k + g_pose.T*x_k
-        #            + 0.5*u_k.T*diag(control_weight)*u_k.
-        # x_k is displacement from measured state; true pose weights set H/g.
-        P_x = sparse.triu(sparse.kron(
-            sparse.eye(N), sparse.csc_matrix(np.ones((n, n))), format="csc"
-        ), format="csc")
-        P_u = sparse.diags(np.tile(self.control_weight, N), format="csc")
-        self.P = sparse.block_diag([P_x, P_u], format="csc")
+        # Stage cost: 0.5 * ||u_k + F x_k - u_ik||_W^2.
+        # u_ik is exactly the output of the preceding bounded two-part IK;
+        # F is its local position-dependent feedback gain.
+        dense = sparse.csc_matrix(np.ones((n, n)))
+        P_x = sparse.triu(sparse.kron(sparse.eye(N), dense, format="csc"), format="csc")
+        P_u = sparse.triu(sparse.kron(sparse.eye(N), dense, format="csc"), format="csc")
+        # x_k only participates in cost for k >= 1, paired with u_k.
+        P_xu = sparse.kron(
+            sparse.diags(np.ones(N - 1), 1, shape=(N, N), format="csc"),
+            dense, format="csc",
+        )
+        self.P = sparse.bmat([
+            [P_x, P_xu],
+            [None, P_u],
+        ], format="csc")
         prow = self.P.indices
         pcol = np.repeat(np.arange(2 * nx), np.diff(self.P.indptr))
-        self._state_entries = pcol < nx
-        self._state_rows = prow[self._state_entries] % n
-        self._state_cols = pcol[self._state_entries] % n
-        self._terminal_entries = self._state_entries & (pcol // n == N - 1)
-        self._terminal_rows = prow[self._terminal_entries] % n
-        self._terminal_cols = pcol[self._terminal_entries] % n
-        self._fixed_P = self.P.data.copy()
-        # Start at a strictly convex, numerically valid Hessian.
-        self.P.data[self._state_entries] = (
-            self._state_rows == self._state_cols
-        ).astype(np.float64)
+        self._xx = (pcol < nx)
+        self._xu = (pcol >= nx) & (prow < nx)
+        self._uu = prow >= nx
+        self._xx_i = prow[self._xx] % n
+        self._xx_j = pcol[self._xx] % n
+        self._xx_last = (prow[self._xx] // n) == (N - 1)
+        self._xu_i = prow[self._xu] % n
+        self._xu_j = pcol[self._xu] % n
+        self._uu_i = (prow[self._uu] - nx) % n
+        self._uu_j = (pcol[self._uu] - nx) % n
+        # OSQP setup must start with a convex Hessian, not the nonconvex
+        # all-ones placeholder used to retain the sparse update pattern.
+        self.P.data[:] = np.where(prow == pcol, 1.0, 0.0)
 
         bound = np.tile(self.velocity_limit, N)
         task_bound = np.tile(self.task_limit, N)
@@ -83,26 +90,31 @@ class KinematicMPC:
             eps_abs=1e-4, eps_rel=1e-4, max_iter=400,
         )
 
-    def solve(self, H, g, J_task, H_terminal=None, g_terminal=None):
-        H = 0.5 * (H + H.T)
-        Px = self._fixed_P.copy()
-        Px[self._state_entries] = H[self._state_rows, self._state_cols]
-        if H_terminal is not None:
-            H_terminal = 0.5 * (H_terminal + H_terminal.T)
-            Px[self._terminal_entries] = H_terminal[
-                self._terminal_rows, self._terminal_cols
-            ]
-        q_state = np.tile(g, self.horizon)
-        if g_terminal is not None:
-            q_state[-self.nu:] = g_terminal
+    def solve(self, u_ik, F, W, J_task):
+        W = 0.5 * (W + W.T)
+        Fx = F.T @ W
+        Hx = Fx @ F
+        target = W @ u_ik
+        x_target = F.T @ target
+
+        Px = np.empty_like(self.P.data)
+        Px[self._xx] = Hx[self._xx_i, self._xx_j]
+        # The terminal displacement has no stage cost; tiny regularization.
+        xx = Px[self._xx]
+        xx[self._xx_last] = 1e-8 * (self._xx_i[self._xx_last] == self._xx_j[self._xx_last])
+        Px[self._xx] = xx
+        Px[self._xu] = Fx[self._xu_i, self._xu_j]
+        Px[self._uu] = W[self._uu_i, self._uu_j]
+
+        q = np.r_[
+            np.tile(-x_target, self.horizon - 1), np.zeros(self.nu),
+            np.tile(-target, self.horizon),
+        ]
         Ax = self._fixed_A.copy()
         if self.nt:
             Ax[self._task_entries] = J_task[self._task_rows, self._task_cols]
         try:
-            self._qp.update(
-                Px=Px, Ax=Ax,
-                q=np.r_[q_state, np.zeros(self.nx)],
-            )
+            self._qp.update(Px=Px, Ax=Ax, q=q)
             result = self._qp.solve()
             ok = (
                 result.info.status_val in (1, 2)

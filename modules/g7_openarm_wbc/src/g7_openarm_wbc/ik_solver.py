@@ -83,9 +83,7 @@ class G7OpenArmLQR():
         self.damping = 1e-4
 
         self.Q_hand_pos  = 200.0
-        self.Qf_hand_pos = 400.0
-        self.Q_hand_ori  = 1.0
-        self.Qf_hand_ori = 300.0
+        self.Q_hand_ori  = 40.0
 
         self.task_gain = 10.0  # g/H scaling: 0.1 / 0.01
         self.max_hand_pos_speed = 0.8  # m/s
@@ -158,7 +156,6 @@ class G7OpenArmLQR():
             accel_max = np.r_[[2.0, 2.0, 4.0], accel_max]
         self.mpc = KinematicMPC(
             self.nu, vel_max, accel_max, task_limits,
-            control_weight=np.diag(self.R_pos + self.R_ori),
             dt=0.01, horizon=20,
         )
 
@@ -386,6 +383,44 @@ class G7OpenArmLQR():
 
         return l, lx_pos, lxx_pos, lx_ori, lxx_ori
 
+    @staticmethod
+    def _bounded_error_jacobian(err: npt.NDArray[np.float64], limit: float):
+        size = np.linalg.norm(err)
+        if size <= limit:
+            return np.eye(len(err))
+        direction = err / size
+        return (limit / size) * (np.eye(len(err)) - np.outer(direction, direction))
+
+    def bounded_ik_feedback(self, state, task_eval, Jkin, A_pos, A_ori):
+        """Local slope of the original two-part, bounded IK velocity law."""
+        G_pos = np.zeros((self.nu, self.nu))
+        G_ori = np.zeros((self.nu, self.nu))
+        for enabled, body, pose, ep, eo in (
+            (LEFT_ARM_ENABLED, KinBody.L_TCP, state.left_pose,
+             task_eval.left_pos_err, task_eval.left_ori_err),
+            (RIGHT_ARM_ENABLED, KinBody.R_TCP, state.right_pose,
+             task_eval.right_pos_err, task_eval.right_ori_err),
+        ):
+            if not enabled:
+                continue
+            J = Jkin[self.kin_slice[body], :]
+            Je = -J[:3, :]
+            Jr = quat_residual_jacobian(J[3:, :], pose.quat)
+            G_pos += self.Q_hand_pos * (
+                Je.T @ self._bounded_error_jacobian(
+                    ep, self.max_hand_pos_speed / self.task_gain,
+                ) @ Je
+            )
+            G_ori += self.Q_hand_ori * (
+                Jr.T @ self._bounded_error_jacobian(
+                    eo, self.max_hand_angular_speed / (2.0 * self.task_gain),
+                ) @ Jr
+            )
+        return 0.1 * (
+            np.linalg.solve(A_pos, G_pos)
+            + np.linalg.solve(A_ori, G_ori)
+        )
+
     def task_velocity_jacobian(self, state: TaskState, Jkin: npt.NDArray[np.float64]):
         """Linearized Cartesian and angular velocities for MPC constraints."""
         blocks = []
@@ -424,29 +459,24 @@ class G7OpenArmLQR():
         task_eval = self.task_evaluate(state, target)
 
         Jkin = self.task_kinematic_jacobian(lib_x)
-        # True pose cost determines the equilibrium; control effort only affects speed.
-        _, lx_pos, lxx_pos, lx_ori, lxx_ori = self.state_cost_deriv(
+        # Preserve the original IK's independent position/orientation penalties.
+        _, gp, Hp, go, Ho = self.state_cost_deriv(
             state=state, target=target, task_evaluation=task_eval,
-            Jkin=Jkin, bounded=False,
+            Jkin=Jkin, bounded=True,
         )
-        pos_terminal_scale = self.Qf_hand_pos / self.Q_hand_pos
-        ori_terminal_scale = self.Qf_hand_ori / self.Q_hand_ori
+        I = self.damping * np.eye(self.nu)
+        A_pos = 0.01 * Hp + self.R_pos + I
+        A_ori = 0.01 * Ho + self.R_ori + I
+        u_pos = -np.linalg.solve(A_pos, 0.1 * gp)
+        u_ori = -np.linalg.solve(A_ori, 0.1 * go)
+        u_nom = u_pos + u_ori
+        F = self.bounded_ik_feedback(state, task_eval, Jkin, A_pos, A_ori)
         u = self.mpc.solve(
-            lxx_pos + lxx_ori,
-            lx_pos + lx_ori,
+            u_nom, F, A_pos + A_ori,
             self.task_velocity_jacobian(state, Jkin),
-            H_terminal=pos_terminal_scale * lxx_pos + ori_terminal_scale * lxx_ori,
-            g_terminal=pos_terminal_scale * lx_pos + ori_terminal_scale * lx_ori,
         )
         if u is None:
-            # Preserve the original bounded IK for exceptional solver failures.
-            _, gp, Hp, go, Ho = self.state_cost_deriv(
-                state=state, target=target, task_evaluation=task_eval,
-                Jkin=Jkin, bounded=True,
-            )
-            I = self.damping * np.eye(self.nu)
-            u = -np.linalg.solve(0.01 * Hp + self.R_pos + I, 0.1 * gp)
-            u -= np.linalg.solve(0.01 * Ho + self.R_ori + I, 0.1 * go)
+            u = u_nom
         if not LEFT_ARM_ENABLED:
             u[self.u_left_slice]  = 0.0
         if not RIGHT_ARM_ENABLED:
