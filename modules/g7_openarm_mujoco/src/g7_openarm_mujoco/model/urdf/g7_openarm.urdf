@@ -324,7 +324,7 @@
     <parent link="chest_link" />
     <child link="L_link1" />
     <axis xyz="0 -1 0" />
-    <dynamics damping="0" friction="0.65" />
+    <dynamics damping="0.242886601249" friction="0.65" />
     <limit lower="-1.3962629999999998" upper="3.490659" effort="40" velocity="16.754666" />
   </joint>
   <link name="L_link2">
@@ -348,7 +348,7 @@
     <parent link="L_link1" />
     <child link="L_link2" />
     <axis xyz="1 0 0" />
-    <dynamics damping="0" friction="0.68" />
+    <dynamics damping="0.242886601249" friction="0.68" />
     <limit effort="40" lower="-0.17453267320510335" upper="3.3161253267948965" velocity="16.754666" />
   </joint>
   <link name="L_link3">
@@ -378,7 +378,7 @@
     <parent link="L_link2" />
     <child link="L_link3" />
     <axis xyz="0 0 -1" />
-    <dynamics damping="0.238" friction="0.516" />
+    <dynamics damping="0.273700803518" friction="0.516" />
     <limit effort="27" lower="-1.570796" upper="1.570796" velocity="5.445426" />
   </joint>
   <link name="L_link4">
@@ -408,7 +408,7 @@
     <parent link="L_link3" />
     <child link="L_link4" />
     <axis xyz="0 1 0" />
-    <dynamics damping="0.21" friction="0.99" />
+    <dynamics damping="0.273700803518" friction="0.99" />
     <limit effort="27" lower="-2.443461" upper="0.0" velocity="5.445426" />
   </joint>
   <link name="L_link5">
@@ -438,7 +438,7 @@
     <parent link="L_link4" />
     <child link="L_link5" />
     <axis xyz="0 0 -1" />
-    <dynamics damping="0" friction="0.13" />
+    <dynamics damping="0.0301286985632" friction="0.13" />
     <limit effort="7" lower="-1.570796" upper="1.570796" velocity="20.943946" />
   </joint>
   <link name="L_link6">
@@ -468,7 +468,7 @@
     <parent link="L_link5" />
     <child link="L_link6" />
     <axis xyz="-1 0 0" />
-    <dynamics damping="0" friction="0.135" />
+    <dynamics damping="0.0301286985632" friction="0.135" />
     <limit effort="7" lower="-0.785398" upper="0.785398" velocity="20.943946" />
   </joint>
   <link name="L_link7">
@@ -483,7 +483,7 @@
         <mesh filename="../meshes/L_link7.stl" />
       </geometry>
       <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
+        <color rgba="0.792157 0.819608 0.933333 1" />
       </material>
     </visual>
     <collision>
@@ -494,11 +494,11 @@
     </collision>
   </link>
   <joint name="L_7_joint" type="revolute">
-    <origin xyz="0 0.031749999999996 0" rpy="0 0 0" />
+    <origin xyz="0 0.031749999999996 0" rpy="0 -0.2 0" />
     <parent link="L_link6" />
     <child link="L_link7" />
     <axis xyz="0 -1 0" />
-    <dynamics damping="0.014" friction="0.14" />
+    <dynamics damping="0.0301286985632" friction="0.14" />
     <limit effort="7" lower="-1.570796" upper="1.570796" velocity="20.943946" />
   </joint>
   <link name="L_tcp" />
@@ -519,7 +519,7 @@
         <mesh filename="../meshes/L_link8_L.stl" />
       </geometry>
       <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
+        <color rgba="0.792157 0.819608 0.933333 1" />
       </material>
     </visual>
     <collision>
@@ -549,7 +549,7 @@
         <mesh filename="../meshes/L_link8_R.stl" />
       </geometry>
       <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
+        <color rgba="0.792157 0.819608 0.933333 1" />
       </material>
     </visual>
     <collision>
@@ -594,7 +594,7 @@
     <parent link="chest_link" />
     <child link="R_link1" />
     <axis xyz="0 -1 0" />
-    <dynamics damping="0" friction="0.65" />
+    <dynamics damping="0.242886601249" friction="0.65" />
     <limit effort="40" lower="-1.396263" upper="3.490659" velocity="16.754666" />
   </joint>
   <link name="R_link2">
@@ -618,7 +618,7 @@
     <parent link="R_link1" />
     <child link="R_link2" />
     <axis xyz="-1 0 0" />
-    <dynamics damping="0" friction="0.68" />
+    <dynamics damping="0.242886601249" friction="0.68" />
     <limit effort="40" lower="-0.17453267320510335" upper="3.3161253267948965" velocity="16.754666" />
   </joint>
   <link name="R_link3">
@@ -648,7 +648,7 @@
     <parent link="R_link2" />
     <child link="R_link3" />
     <axis xyz="0 0 -1" />
-    <dynamics damping="0.238" friction="0.516" />
+    <dynamics damping="0.273700803518" friction="0.516" />
     <limit effort="27" lower="-1.570796" upper="1.570796" velocity="5.445426" />
   </joint>
   <link name="R_link4">
@@ -678,7 +678,7 @@
     <parent link="R_link3" />
     <child link="R_link4" />
     <axis xyz="0 1 0" />
-    <dynamics damping="0.21" friction="0.99" />
+    <dynamics damping="0.273700803518" friction="0.99" />
     <limit effort="27" lower="-2.443461" upper="0.0" velocity="5.445426" />
   </joint>
   <link name="R_link5">
@@ -708,7 +708,7 @@
     <parent link="R_link4" />
     <child link="R_link5" />
     <axis xyz="0 0 -1" />
-    <dynamics damping="0" friction="0.13" />
+    <dynamics damping="0.0301286985632" friction="0.13" />
     <limit effort="7" lower="-1.570796" upper="1.570796" velocity="20.943946" />
   </joint>
   <link name="R_link6">
@@ -738,7 +738,7 @@
     <parent link="R_link5" />
     <child link="R_link6" />
     <axis xyz="-1 0 0" />
-    <dynamics damping="0" friction="0.135" />
+    <dynamics damping="0.0301286985632" friction="0.135" />
     <limit effort="7" lower="-0.785398" upper="0.785398" velocity="20.943946" />
   </joint>
   <link name="R_link7">
@@ -753,7 +753,7 @@
         <mesh filename="../meshes/R_link7.stl" />
       </geometry>
       <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
+        <color rgba="0.792157 0.819608 0.933333 1" />
       </material>
     </visual>
     <collision>
@@ -764,11 +764,11 @@
     </collision>
   </link>
   <joint name="R_7_joint" type="revolute">
-    <origin xyz="0 -0.0317999999999935 0" rpy="0 0 0" />
+    <origin xyz="0 -0.0317999999999935 0" rpy="0 -0.2 0" />
     <parent link="R_link6" />
     <child link="R_link7" />
     <axis xyz="0 -1 0" />
-    <dynamics damping="0.014" friction="0.14" />
+    <dynamics damping="0.0301286985632" friction="0.14" />
     <limit effort="7" lower="-1.570796" upper="1.570796" velocity="20.943946" />
   </joint>
   <link name="R_tcp" />
@@ -789,7 +789,7 @@
         <mesh filename="../meshes/R_link8_L.stl" />
       </geometry>
       <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
+        <color rgba="0.792157 0.819608 0.933333 1" />
       </material>
     </visual>
     <collision>
@@ -819,7 +819,7 @@
         <mesh filename="../meshes/R_link8_R.stl" />
       </geometry>
       <material name="">
-        <color rgba="0.75294 0.75294 0.75294 1" />
+        <color rgba="0.792157 0.819608 0.933333 1" />
       </material>
     </visual>
     <collision>
