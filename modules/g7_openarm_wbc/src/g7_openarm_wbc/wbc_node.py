@@ -17,6 +17,7 @@ from g7_openarm_utils import (
 )
 from unitree_sdk2py.idl.default import HGLowState_
 
+from .base_filter import LowPassFilter
 from .config import config
 from .ik_solver import G7OpenArmLQR
 
@@ -34,6 +35,9 @@ class WBCNode:
     def __init__(self, is_vr=False):
         self.is_vr = is_vr
         self.solver = G7OpenArmLQR()
+        self.base_lpf = LowPassFilter(
+            sample_hz=config.hz, cutoff_hz=config.base_lpf_cutoff_hz
+        )
 
         self.eetarget: EETarget | None = None
         self.lowstate: HGLowState_ | None = None
@@ -79,10 +83,10 @@ class WBCNode:
 
         cmd = WBCLowCmd_default()
         result = self.solver.solve_once(self.lowstate, self.odom, self.eetarget)
-        cmd.mobile = result[:3].tolist()
         cmd.dq_des = result[3:].tolist()
-        if body_cmd is not None:
-            cmd.mobile = body_cmd.tolist()
+        # Select WBC or VR command before filtering the published base velocity.
+        raw_base_cmd = body_cmd if body_cmd is not None else result[:3]
+        cmd.mobile = self.base_lpf.update(raw_base_cmd).tolist()
 
         self.wbclowcmd_pub.Write(cmd)
 

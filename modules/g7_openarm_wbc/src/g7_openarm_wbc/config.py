@@ -12,10 +12,16 @@ from g7_openarm_config import BaseConfig, DDSConfig
 class WBCConfig(BaseConfig):
     hz: float
     dds: DDSConfig
+    base_lpf_cutoff_hz: float = 3.0
 
     def __post_init__(self) -> None:
-        if self.hz <= 0.0:
-            raise ValueError(f"wbc.hz must be positive, got {self.hz}")
+        if not isfinite(self.hz) or self.hz <= 0.0:
+            raise ValueError(f"wbc.hz must be positive and finite, got {self.hz}")
+        if not isfinite(self.base_lpf_cutoff_hz) or self.base_lpf_cutoff_hz <= 0.0:
+            raise ValueError(
+                "wbc.base_lpf_cutoff_hz must be positive and finite, "
+                f"got {self.base_lpf_cutoff_hz}"
+            )
 
     @property
     def interval(self) -> float:
@@ -34,6 +40,7 @@ class WBCConfig(BaseConfig):
         return cls(
             hz=float(section["hz"]),
             dds=DDSConfig.from_mapping(data),
+            base_lpf_cutoff_hz=float(section.get("base_lpf_cutoff_hz", 3.0)),
         )
 
 

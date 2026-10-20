@@ -38,6 +38,7 @@ hz = 100.0
 
 [wbc]
 hz = 100.0
+base_lpf_cutoff_hz = 3.0
 
 [mujoco]
 hz = 500.0
