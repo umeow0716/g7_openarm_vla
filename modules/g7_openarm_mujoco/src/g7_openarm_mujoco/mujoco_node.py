@@ -259,7 +259,7 @@ class MujocoNode:
         for i in range(model.njnt):
             model_joint = model.joint(i)
             name = model_joint.name
-            if "floating_base" in name or "head" in name:
+            if "floating_base" in name or "HEAD" in name:
                 continue
             joint = Joint.name_to_joint(name)
             qposadr = int(model.jnt_qposadr[model_joint.id])
@@ -286,7 +286,7 @@ class MujocoNode:
                     f"Invalid ctrl address {ctrl_adr} for actuator {name}"
                 )
 
-            if "head" in name:
+            if "HEAD" in name:
                 continue
 
             joint = Joint.name_to_joint(name)
