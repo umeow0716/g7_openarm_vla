@@ -9,7 +9,7 @@ dependencies = [
     "g7-openarm-idl",
     "g7-openarm-pinnzoo",
     "g7-openarm-utils",
-    "osqp>=1.0",
+    "osqp",
     "scipy",
     "unitree-sdk2py",
 ]
