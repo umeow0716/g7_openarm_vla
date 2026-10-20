@@ -494,7 +494,7 @@
     </collision>
   </link>
   <joint name="L_7_joint" type="revolute">
-    <origin xyz="0 0.031749999999996 0" rpy="0 -0.2 0" />
+    <origin xyz="0 0.031749999999996 0" rpy="0 0 0" />
     <parent link="L_link6" />
     <child link="L_link7" />
     <axis xyz="0 -1 0" />
@@ -764,7 +764,7 @@
     </collision>
   </link>
   <joint name="R_7_joint" type="revolute">
-    <origin xyz="0 -0.0317999999999935 0" rpy="0 -0.2 0" />
+    <origin xyz="0 -0.0317999999999935 0" rpy="0 0 0" />
     <parent link="R_link6" />
     <child link="R_link7" />
     <axis xyz="0 -1 0" />
