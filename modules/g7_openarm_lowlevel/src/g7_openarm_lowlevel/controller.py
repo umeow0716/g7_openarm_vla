@@ -166,13 +166,21 @@ class Controller:
 
         result = HGLowCmd_default()
         
+        wheel_enabled = True
+        for joint in BASE_JOINT:
+            idx = low_idx(joint)
+            if Joint.is_wheel(joint):
+               continue
+            if abs(best_wheel[joint] - lowstate.motor_state[idx].q) > np.deg2rad(5):
+                wheel_enabled = False
+
         for joint in BASE_JOINT:
             idx = low_idx(joint)
             if Joint.is_wheel(joint):
                 result.motor_cmd[idx].kp  = 0.0
                 result.motor_cmd[idx].kd  = 5.0
                 result.motor_cmd[idx].q   = 0.0
-                result.motor_cmd[idx].dq  = best_wheel[joint]
+                result.motor_cmd[idx].dq  = best_wheel[joint] if wheel_enabled else 0.0
                 result.motor_cmd[idx].tau = 0.0
             else:
                 result.motor_cmd[idx].kp  = 100.0

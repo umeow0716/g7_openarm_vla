@@ -15,12 +15,10 @@ from g7_openarm_pinnzoo import (
 )
 from g7_openarm_utils.layout import (
     Dim,
-    Joint,
     KinBody,
     BASE_ENABLED,
     LEFT_ARM_ENABLED,
     RIGHT_ARM_ENABLED,
-    BASE_JOINT,
     LEFT_ARM_JOINT,
     RIGHT_ARM_JOINT,
 )
@@ -91,7 +89,7 @@ class G7OpenArmLQR():
 
         self.nu: int = len(LEFT_ARM_JOINT) + len(RIGHT_ARM_JOINT)
         if BASE_ENABLED:
-            self.nu += len(BASE_JOINT)
+            self.nu += 3
 
         arm_r_pos = np.array(
             [0.03, 0.03, 0.05, 0.10, 0.30, 0.50, 0.80],
