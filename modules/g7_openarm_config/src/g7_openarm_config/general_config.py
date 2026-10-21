@@ -11,6 +11,7 @@ from .parsing import parse_bool
 @dataclass(frozen=True, slots=True)
 class GeneralConfig(BaseConfig):
     debugging: bool
+    head_enabled: bool
     control_mode: str
     initial_pos_raw: Sequence[float]
     initial_pos: dict[str, float]
@@ -19,6 +20,9 @@ class GeneralConfig(BaseConfig):
     def __post_init__(self) -> None:
         if type(self.debugging) is not bool:
             raise ValueError(f"general.debugging must be bool, got {self.debugging!r}")
+
+        if type(self.head_enabled) is not bool:
+            raise ValueError(f"general.head_enabled must be bool, got {self.head_enabled!r}")
 
         if not isinstance(self.control_mode, str):
             raise ValueError(f"Invalid general.control_mode: {self.control_mode!r}")
@@ -59,6 +63,10 @@ class GeneralConfig(BaseConfig):
             debugging=parse_bool(
                 section.get("debugging", False),
                 field="general.debugging",
+            ),
+            head_enabled=parse_bool(
+                section.get("head_enabled", False),
+                field="general.head_enabled",
             ),
             control_mode=section.get("control_mode", "wbc"),
             initial_pos_raw=initial_pos_raw,

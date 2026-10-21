@@ -154,11 +154,11 @@ class MujocoNode:
         with self.viewer.lock():
             left_target = self.data.body("left_target")
             right_target = self.data.body("right_target")
-            look_at_point = self.data.body("look_at_point")
+            look_at_point = self.data.body("look_at_point") if general_config.head_enabled else None
 
         left_pose = np.concatenate((left_target.xpos, left_target.xquat), dtype=np.float64)
         right_pose = np.concatenate((right_target.xpos, right_target.xquat), dtype=np.float64)
-        look_at_point = np.asarray(look_at_point.xpos, dtype=np.float64)
+        look_at_point = np.asarray(look_at_point.xpos if look_at_point is not None else [0.0, 0.0, 0.0], dtype=np.float64)
         msg = Target_default()
         msg.left_target  = array_to_pose(left_pose)
         msg.right_target = array_to_pose(right_pose)
@@ -396,19 +396,20 @@ class MujocoNode:
             conaffinity=0,
         )
 
-        look_at_point = spec.worldbody.add_body(
-            name="look_at_point",
-            mocap=True,
-            pos=point_to_array(default_pose.look_at_point),
-            quat=[ 1.0, 0.0, 0.0, 0.0 ],
-        )
-        look_at_point.add_geom(
-            type=mujoco.mjtGeom.mjGEOM_SPHERE,
-            size=[0.03],
-            rgba=[0, 1, 0, 0.3],
-            contype=0,
-            conaffinity=0,
-        )
+        if general_config.head_enabled:
+            look_at_point = spec.worldbody.add_body(
+                name="look_at_point",
+                mocap=True,
+                pos=point_to_array(default_pose.look_at_point),
+                quat=[ 1.0, 0.0, 0.0, 0.0 ],
+            )
+            look_at_point.add_geom(
+                type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                size=[0.03],
+                rgba=[0, 1, 0, 0.3],
+                contype=0,
+                conaffinity=0,
+            )
 
         model = spec.compile()
         data  = mujoco.MjData(model)
