@@ -29,6 +29,14 @@ if TYPE_CHECKING:
     from unitree_sdk2py.idl.default import HGLowState_
     from g7_openarm_idl import Odom, WBCLowCmd
 
+ARMATURE = np.tile(np.array([
+    0.0181593, 0.0181593,
+    0.0280816, 0.0280816,
+    0.0017256, 0.0017256, 0.0017256,
+]), 2)
+
+COUPLING_GATE = (0.01, 0.04)
+
 
 class Controller:
     def __init__(
@@ -91,7 +99,10 @@ class Controller:
 
         lib_x = build_lib_x(self.model, lowstate, odom)
         
-        M = mass_matrix(self.model, lib_x)
+        arm_idx = [pinnzoo_vdot_idx(joint) for joint in ARM_JOINT]
+
+        M = np.array(mass_matrix(self.model, lib_x), dtype=np.float64)
+        M[arm_idx, arm_idx] += ARMATURE
         M_diag = np.diag(M)
         Kp = self.compute_arm_kp(M_diag)
         Kd = self.compute_arm_kd(M_diag)
@@ -102,7 +113,6 @@ class Controller:
             odom.angular_vdot.x, odom.angular_vdot.y, odom.angular_vdot.z,
         )
 
-        arm_idx = [pinnzoo_vdot_idx(joint) for joint in ARM_JOINT]
         tau_bias = inverse_dynamics(self.model, lib_x, vdot)[arm_idx]
         dq_des = np.array(wbclowcmd.dq_des, dtype=np.float64)
         ref = self.reference_generator.generate(
@@ -112,6 +122,7 @@ class Controller:
         for joint in ARM_JOINT:
             vdot[pinnzoo_vdot_idx(joint)] = ref.ddq[joint]
         tau_ff = inverse_dynamics(self.model, lib_x, vdot)
+        tau_ff[arm_idx] += ARMATURE * np.array([ref.ddq[joint] for joint in ARM_JOINT])
         a_fb = np.zeros((self.model.nv,), dtype=np.float64)
         
         for joint in ARM_JOINT:
@@ -125,7 +136,16 @@ class Controller:
                 omega**2 * (ref.q[joint] - state.q) + \
                 2.0 * zeta * omega * (ref.dq[joint] - state.dq)
 
-        tau_cpl = M @ a_fb - M_diag * a_fb
+        arm_err = np.array([
+            abs(ref.q[joint] - lowstate.motor_state[low_idx(joint)].q)
+            for joint in ARM_JOINT
+        ]).reshape(2, 7).max(axis=1)
+        gate_lo, gate_hi = COUPLING_GATE
+        gate = np.clip((gate_hi - arm_err) / (gate_hi - gate_lo), 0.0, 1.0)
+        cpl_gate = np.zeros((self.model.nv,), dtype=np.float64)
+        cpl_gate[arm_idx] = np.repeat(gate, 7)
+
+        tau_cpl = cpl_gate * (M @ a_fb - M_diag * a_fb)
 
         tau_raw = np.zeros((14,), dtype=np.float64)
         for i, joint in enumerate(ARM_JOINT):

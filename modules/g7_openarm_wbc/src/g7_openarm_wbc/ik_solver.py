@@ -92,11 +92,11 @@ class G7OpenArmLQR():
             self.nu += 3
 
         arm_r_pos = np.array(
-            [0.03, 0.03, 0.05, 0.8, 0.30, 0.50, 0.80],
+            [0.03, 0.03, 0.05, 0.03, 0.30, 0.50, 0.80],
             dtype=np.float64,
         )
         arm_r_ori = np.array(
-            [0.80, 0.50, 0.30, 0.8, 0.05, 0.03, 0.03],
+            [0.80, 0.50, 0.30, 0.40, 0.05, 0.03, 0.03],
             dtype=np.float64,
         )
 
@@ -106,13 +106,26 @@ class G7OpenArmLQR():
         r_pos = np.concatenate([arm_r_pos, arm_r_pos])
         r_ori = np.concatenate([arm_r_ori, arm_r_ori])
 
+        # L/R_4_joint is constrained to [-2.443461, 0] rad in the model.
+        # Bend to a comfortable, reachable elbow posture, not the hard stop.
+        self.q_pref_left  = np.array([0.0, 0.0, 0.0, -1.40, 0.0, 0.0, 0.0], dtype=np.float64)
+        self.q_pref_right = np.array([0.0, 0.0, 0.0, -1.40, 0.0, 0.0, 0.0], dtype=np.float64)
+        self.k_posture = 2.0
+        self.max_posture_speed = 0.4
+        # Escape a fully extended elbow: the ordinary full-pose null space
+        # contains virtually NO q4 direction once the arm is off singularity.
+        self.elbow_escape_pos_weight = 20.0
+        self.elbow_escape_ori_weight = 12.0  # Jr is a quaternion-residual derivative
+        self.elbow_escape_joint_weight = 5.0
+        self.elbow_escape_regularization = 0.08
+
         if BASE_ENABLED:
             r_pos = np.concatenate([
-                np.array([1.0, 1.0, 0.3], dtype=np.float64),
+                np.array([8.0, 8.0, 2.0], dtype=np.float64),
                 r_pos,
             ])
             r_ori = np.concatenate([
-                np.array([5.0, 5.0, 0.2], dtype=np.float64),
+                np.array([10.0, 10.0, 1.0], dtype=np.float64),
                 r_ori,
             ])
 
@@ -443,6 +456,40 @@ class G7OpenArmLQR():
             blocks.extend((D @ J[:3, :], D @ (4.0 * B.T @ Jquat)))
         return np.vstack(blocks) if blocks else np.zeros((0, self.nu))
 
+    def _elbow_escape_velocity(self, Jp, Jr, q_arm, q_pref, pos_err):
+        dz = float(pos_err[2])
+        lateral = float(np.linalg.norm(pos_err[:2]))
+        q4 = float(q_arm[3])
+        if dz <= 0.02 or lateral >= 0.12 or q4 <= -1.0:
+            return np.zeros(7, dtype=np.float64), 0.0
+
+        # Smooth activation/deactivation at z-error and elbow thresholds.
+        z_gate = float(np.clip((dz - 0.02) / 0.04, 0.0, 1.0))
+        elbow_gate = float(np.clip((q4 + 1.0) / 0.15, 0.0, 1.0))
+        lateral_gate = float(np.clip((0.12 - lateral) / 0.04, 0.0, 1.0))
+        activation = z_gate * elbow_gate * lateral_gate
+        if activation <= 0.0:
+            return np.zeros(7, dtype=np.float64), 0.0
+
+        # u4 is negative when bending toward the URDF-valid q4 reference.
+        desired_u4 = float(np.clip(
+            self.k_posture * (q_pref[3] - q4),
+            -self.max_posture_speed, self.max_posture_speed,
+        ))
+        e4 = np.zeros(7, dtype=np.float64)
+        e4[3] = 1.0
+        H = (
+            self.elbow_escape_pos_weight * (Jp.T @ Jp)
+            + self.elbow_escape_ori_weight * (Jr.T @ Jr)
+            + self.elbow_escape_regularization * np.eye(7)
+            + self.elbow_escape_joint_weight * np.outer(e4, e4)
+        )
+        v = np.linalg.solve(
+            H, self.elbow_escape_joint_weight * desired_u4 * e4,
+        )
+        # Limit *combined* joint-vector norm; don't silently exceed max speed.
+        return self._limit_norm(v, self.max_posture_speed) * activation, activation
+
     def solve_once(
         self,
         lowstate: "HGLowState_",
@@ -468,9 +515,32 @@ class G7OpenArmLQR():
         u_pos = -np.linalg.solve(A_pos, 0.1 * gp)
         u_ori = -np.linalg.solve(A_ori, 0.1 * go)
         u_nom = u_pos + u_ori
+        mpc_weight = A_pos + A_ori
+        for enabled, body, arm_slice, idx, q_pref, pose, err, label in (
+            (LEFT_ARM_ENABLED, KinBody.L_TCP, self.u_left_slice,
+             self.left_arm_indices, self.q_pref_left, state.left_pose,
+             task_eval.left_pos_err, "L"),
+            (RIGHT_ARM_ENABLED, KinBody.R_TCP, self.u_right_slice,
+             self.right_arm_indices, self.q_pref_right, state.right_pose,
+             task_eval.right_pos_err, "R"),
+        ):
+            if not enabled:
+                continue
+            J = Jkin[self.kin_slice[body], :][:, arm_slice]
+            Jp = J[:3, :]
+            Jr = quat_residual_jacobian(J[3:, :], pose.quat)
+            q_arm = lib_x[idx]
+            v_escape, active = self._elbow_escape_velocity(
+                Jp, Jr, q_arm, q_pref, err,
+            )
+            u_nom[arm_slice] += v_escape
+            # During elbow escape, MPC should care more about its nominal q4
+            # request, without bypassing MPC's original limits/constraints.
+            joint_idx = arm_slice.start + 3
+            mpc_weight[joint_idx, joint_idx] += 2.0 * active
         F = self.bounded_ik_feedback(state, task_eval, Jkin, A_pos, A_ori)
         u = self.mpc.solve(
-            u_nom, F, A_pos + A_ori,
+            u_nom, F, mpc_weight,
             self.task_velocity_jacobian(state, Jkin),
         )
         if u is None:
