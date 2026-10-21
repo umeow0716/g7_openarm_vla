@@ -6,7 +6,7 @@ from typing import Any
 from g7_openarm_utils import ChannelFactoryInitialize, build_sub
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import IMUState_, LowCmd_, LowState_
 
-from g7_openarm_idl import EETarget, Odom, WBCLowCmd
+from g7_openarm_idl import Target, Odom, WBCLowCmd
 
 from .config import config
 
@@ -45,7 +45,7 @@ class HzMonitor:
 def main() -> None:
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
 
-    eetarget_monitor = HzMonitor("rt/eetarget", EETarget)
+    target_monitor = HzMonitor("rt/target", Target)
     imustate_monitor = HzMonitor("rt/imustate", IMUState_)
     lowstate_monitor = HzMonitor("rt/lowstate", LowState_)
     lowcmd_monitor = HzMonitor("rt/lowcmd", LowCmd_)
@@ -53,7 +53,7 @@ def main() -> None:
     wbclowcmd_monitor = HzMonitor("rt/wbclowcmd", WBCLowCmd)
 
     monitors = [
-        eetarget_monitor,
+        target_monitor,
         imustate_monitor,
         lowstate_monitor,
         lowcmd_monitor,

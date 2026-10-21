@@ -11,7 +11,7 @@ from g7_openarm_config import BaseConfig, DDSConfig
 class MujocoConfig(BaseConfig):
     hz: float
     imu_hz: float
-    eetarget_hz: float
+    target_hz: float
     fps: float
     dds: DDSConfig
 
@@ -19,7 +19,7 @@ class MujocoConfig(BaseConfig):
         for field, value in (
             ("mujoco.hz", self.hz),
             ("mujoco.imu_hz", self.imu_hz),
-            ("mujoco.eetarget_hz", self.eetarget_hz),
+            ("mujoco.target_hz", self.target_hz),
             ("mujoco.fps", self.fps),
         ):
             if value <= 0.0:
@@ -34,8 +34,8 @@ class MujocoConfig(BaseConfig):
         return 1.0 / self.imu_hz
 
     @property
-    def eetarget_interval(self) -> float:
-        return 1.0 / self.eetarget_hz
+    def target_interval(self) -> float:
+        return 1.0 / self.target_hz
 
     @property
     def fps_interval(self) -> float:
@@ -54,7 +54,7 @@ class MujocoConfig(BaseConfig):
         return cls(
             hz=float(section["hz"]),
             imu_hz=float(section["imu_hz"]),
-            eetarget_hz=float(section["eetarget_hz"]),
+            target_hz=float(section["target_hz"]),
             fps=float(section["fps"]),
             dds=DDSConfig.from_mapping(data),
         )

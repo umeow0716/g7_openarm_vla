@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from cyclonedds.idl import IdlStruct
 from cyclonedds.internal import SampleInfo
-from unitree_sdk2py.idl.geometry_msgs.msg.dds_ import Pose_
+from unitree_sdk2py.idl.geometry_msgs.msg.dds_ import Pose_, Point_
 
-class EETarget(IdlStruct):
+class Target(IdlStruct):
     left_target: Pose_
     right_target: Pose_
     left_gripper: float
     right_gripper: float
+    look_at_point: Point_
 
     sample_info: SampleInfo
 
@@ -18,6 +19,7 @@ class EETarget(IdlStruct):
         right_target: Pose_,
         left_gripper: float,
         right_gripper: float,
+        loot_at_point: Point_,
     ) -> None: ...
 
-def EETarget_default() -> EETarget: ...
+def Target_default() -> Target: ...

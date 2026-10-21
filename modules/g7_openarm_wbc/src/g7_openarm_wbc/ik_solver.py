@@ -31,7 +31,7 @@ from .utils import (
 from .kinematic_mpc import KinematicMPC
 
 if TYPE_CHECKING:
-    from g7_openarm_idl import EETarget, Odom
+    from g7_openarm_idl import Target, Odom
     from unitree_sdk2py.idl.default import HGLowState_
 
 
@@ -192,10 +192,10 @@ class G7OpenArmLQR():
 
     def task_state_from_target(
         self,
-        eetarget: "EETarget",
+        target: "Target",
     ):
-        left_pose  = np.array(pose_to_array(eetarget.left_target), dtype=np.float64)
-        right_pose = np.array(pose_to_array(eetarget.right_target), dtype=np.float64)
+        left_pose  = np.array(pose_to_array(target.left_target), dtype=np.float64)
+        right_pose = np.array(pose_to_array(target.right_target), dtype=np.float64)
         return TaskState(
             left_pose=PoseState(
                 pos=left_pose[:3],
@@ -494,12 +494,12 @@ class G7OpenArmLQR():
         self,
         lowstate: "HGLowState_",
         odom: "Odom",
-        eetarget: "EETarget",
+        target: "Target",
     ):
         lib_x = build_lib_x(self.model, lowstate, odom)
 
         state = self.task_state_from_x_lib(lib_x)
-        target = self.task_state_from_target(eetarget)
+        target = self.task_state_from_target(target)
         
         task_eval = self.task_evaluate(state, target)
 

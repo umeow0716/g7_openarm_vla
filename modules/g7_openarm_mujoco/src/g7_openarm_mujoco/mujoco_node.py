@@ -10,9 +10,10 @@ import numpy as np
 from contextlib import contextmanager
 from g7_openarm_config import general_config
 from g7_openarm_idl import (
-    EETarget,
+    Target,
     Odom,
     WBCLowCmd,
+    Target_default,
 )
 from g7_openarm_utils import (
     ChannelFactoryInitialize,
@@ -92,7 +93,7 @@ class MujocoNode:
         assert self.dof_index_register.is_full()
         assert self.ctrl_index_register.is_full()
 
-        self.eetarget: EETarget | None = None
+        self.target: Target | None = None
         self.imustate: HGIMUState_ | None = None
         self.lowcmd: HGLowCmd_ | None = None
         self.lowstate: HGLowState_ | None = None
@@ -109,8 +110,8 @@ class MujocoNode:
         self.quat_slice: slice | None = None
         self.init_imu()
 
-        self.eetarget_pub  = build_pub("rt/eetarget", EETarget, self.is_sim and not self.is_vr)
-        self.eetarget_sub  = build_sub("rt/eetarget", EETarget, self.eetarget_handler, self.is_vr or not self.is_sim)
+        self.target_pub  = build_pub("rt/target", Target, self.is_sim and not self.is_vr)
+        self.target_sub  = build_sub("rt/target", Target, self.target_handler, self.is_vr or not self.is_sim)
         self.imustate_pub  = build_pub("rt/imustate", HGIMUState_, self.is_sim)
         self.lowstate_pub  = build_pub("rt/lowstate", HGLowState_, self.is_sim)
         self.lowstate_sub  = build_sub("rt/lowstate", HGLowState_, self.lowstate_handler, not self.is_sim)
@@ -121,14 +122,14 @@ class MujocoNode:
         self.lowstate_out: HGLowState_ | None = HGLowState_default() if self.lowstate_pub is not None else None
         self.imustate_out: HGIMUState_ | None = HGIMUState_default() if self.imustate_pub is not None else None
 
-        self.eetarget_thread = build_thread(config.eetarget_hz, self.write_eetarget, self.is_sim and not self.is_vr)
+        self.target_thread = build_thread(config.target_hz, self.write_target, self.is_sim and not self.is_vr)
         self.sim_thread      = build_thread(config.hz, self.sim_loop)
         self.lowstate_thread = build_thread(config.hz, self.write_lowstate, self.is_sim)
         self.imustate_thread = build_thread(config.imu_hz, self.write_imustate, self.is_sim)
         self.viewer_thread   = build_thread(config.fps, self.viewer_loop)
 
-    def eetarget_handler(self, msg: EETarget):
-        self.eetarget = msg
+    def target_handler(self, msg: Target):
+        self.target = msg
 
     def lowstate_handler(self, msg: HGLowState_):
         self.lowstate = msg
@@ -142,8 +143,8 @@ class MujocoNode:
     def wbclowcmd_handler(self, msg: WBCLowCmd):
         self.wbclowcmd = msg
 
-    def write_eetarget(self):
-        if self.eetarget_pub is None:
+    def write_target(self):
+        if self.target_pub is None:
             return
 
         with self.viewer.lock():
@@ -152,8 +153,10 @@ class MujocoNode:
 
         left_pose = np.concatenate((left_target.xpos, left_target.xquat), dtype=np.float64)
         right_pose = np.concatenate((right_target.xpos, right_target.xquat), dtype=np.float64)
-        msg = EETarget(array_to_pose(left_pose), array_to_pose(right_pose), 0.0, 0.0)
-        self.eetarget_pub.Write(msg)
+        msg = Target_default()
+        msg.left_target  = array_to_pose(left_pose)
+        msg.right_target = array_to_pose(right_pose)
+        self.target_pub.Write(msg)
 
     def write_lowstate(self):
         if self.lowstate_pub is None or self.lowstate_out is None:
@@ -192,9 +195,9 @@ class MujocoNode:
 
     def sim_loop(self):
         with self.viewer.lock():
-            if self.eetarget is not None:
-                left_pose  = pose_to_array(self.eetarget.left_target)
-                right_pose = pose_to_array(self.eetarget.right_target)
+            if self.target is not None:
+                left_pose  = pose_to_array(self.target.left_target)
+                right_pose = pose_to_array(self.target.right_target)
                 self.data.mocap_pos[self.left_target_mocap_id]   = left_pose[:3]
                 self.data.mocap_quat[self.left_target_mocap_id]  = left_pose[3:]
                 self.data.mocap_pos[self.right_target_mocap_id]  = right_pose[:3]
@@ -314,7 +317,7 @@ class MujocoNode:
         if self.quat_slice is None:
             raise RuntimeError("quat not found.")
 
-    def load_hand_default_pose(self) -> EETarget:
+    def load_hand_default_pose(self) -> Target:
         """Load the default left/right TCP poses from a MuJoCo XML model."""
         with model_directory() as model_dir:
             model_path = (model_dir / "scene.xml").as_posix()
@@ -339,7 +342,11 @@ class MujocoNode:
 
         left_pose  = np.concatenate((left_hand.xpos, left_hand.xquat), dtype=np.float64)
         right_pose = np.concatenate((right_hand.xpos, right_hand.xquat), dtype=np.float64)
-        return EETarget(array_to_pose(left_pose), array_to_pose(right_pose), 0.0, 0.0)
+        
+        result = Target_default()
+        result.left_target  = array_to_pose(left_pose)
+        result.right_target = array_to_pose(right_pose)
+        return result
 
     def build_model(self) -> Tuple[mujoco.MjModel, mujoco.MjData]:
         with model_directory() as model_dir:

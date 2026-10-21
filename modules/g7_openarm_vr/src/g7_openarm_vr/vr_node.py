@@ -7,7 +7,7 @@ import numpy.typing as npt
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher
 from unitree_sdk2py.utils.hz_sample import RecurrentThread
 
-from g7_openarm_idl import EETarget, VRJoy
+from g7_openarm_idl import Target, VRJoy
 from g7_openarm_mujoco.resources import model_directory
 from g7_openarm_utils.idl import array_to_pose, pose_to_array
 from g7_openarm_utils.mujoco import load_hand_default_pose

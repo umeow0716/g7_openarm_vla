@@ -14,7 +14,7 @@ from unitree_sdk2py.core.channel import (
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
 
 from g7_openarm_config import ControlMode, general_config
-from g7_openarm_idl import EETarget, Odom
+from g7_openarm_idl import Target, Odom, Target_default
 from g7_openarm_utils.idl import array_to_pose
 
 from .camera import BlackCamera, CameraInput, RealSenseCamera
@@ -83,7 +83,7 @@ class HommiNode:
         self._projector = RobotStateProjector()
         self._camera = _make_camera(camera_kind)
 
-        self._publisher = ChannelPublisher("rt/eetarget", EETarget)
+        self._publisher = ChannelPublisher("rt/target", Target)
         self._publisher.Init()
 
         self._lowstate_subscriber = ChannelSubscriber("rt/lowstate", LowState_)
@@ -220,13 +220,13 @@ class HommiNode:
                 )
 
     @staticmethod
-    def _to_eetarget(point: TargetPoint) -> EETarget:
-        return EETarget(
-            array_to_pose(point.left_pose7),
-            array_to_pose(point.right_pose7),
-            point.left_gripper_openness,
-            point.right_gripper_openness,
-        )
+    def _to_target(point: TargetPoint) -> Target:
+        result = Target_default()
+        result.left_target   = array_to_pose(point.left_pose7)
+        result.right_target  = array_to_pose(point.right_pose7)
+        result.left_gripper  = point.left_gripper_openness
+        result.right_gripper = point.right_gripper_openness
+        return result
 
     def _publisher_loop(self) -> None:
         next_tick = time.monotonic()
@@ -235,7 +235,7 @@ class HommiNode:
             if due is not None:
                 self._last_target = due
             if self._last_target is not None:
-                self._publisher.Write(self._to_eetarget(self._last_target))
+                self._publisher.Write(self._to_target(self._last_target))
 
             next_tick += config.interval
             next_tick = self._wait_until_next_tick(next_tick)

@@ -51,7 +51,7 @@ def run_silently(target: Callable[[], None], folder_name: str) -> None:
 def run_mujoco() -> None:
     from g7_openarm_mujoco.simulation_node import main
 
-    run_silently(lambda: main(push_eetarget=False), "mujoco")
+    run_silently(lambda: main(push_target=False), "mujoco")
 
 
 def run_lowlevel() -> None:

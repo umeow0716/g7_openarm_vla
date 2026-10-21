@@ -43,7 +43,7 @@ base_lpf_cutoff_hz = 3.0
 [mujoco]
 hz = 500.0
 imu_hz = 100.0
-eetarget_hz = 50.0
+target_hz = 50.0
 fps = 60.0
 
 [monitor]
@@ -58,4 +58,4 @@ camera_timeout_ms = 1000
 latency_compensation = true
 
 [vr]
-hz = 50.0 # EETarget
+hz = 50.0 # Target
