@@ -220,7 +220,7 @@ class Controller:
         for i, joint in enumerate([ Joint.HEAD_pitch, Joint.HEAD_yaw ]):
             idx = low_idx(joint)
             result.motor_cmd[idx].kp  = 20.0
-            result.motor_cmd[idx].kd  = 0.1
+            result.motor_cmd[idx].kd  = 0.2
             result.motor_cmd[idx].q   = wbclowcmd.head[i]
             result.motor_cmd[idx].dq  = 0.0
             result.motor_cmd[idx].tau = 0.0

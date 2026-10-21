@@ -571,7 +571,7 @@ class G7OpenArmLQR():
             head_pose   = kin[self.kin_slice[KinBody.HEAD]]
             target_pos = np.array(point_to_array(target_ref.look_at_point), dtype=np.float64)
             dist = np.linalg.norm(head_pose[:3] - target_pos)
-            if dist > 0.05:
+            if dist > 0.08:
                 pitch, yaw = look_at_pitch_yaw(
                     head_pose[:3],
                     lib_x[3:7],
