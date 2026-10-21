@@ -133,7 +133,7 @@ class Dim(StrEnum):
 class KinBody(StrEnum):
     L_TCP = "L_tcp"
     R_TCP = "R_tcp"
-    HEAD  = "HEAD_color_optical_frame"
+    HEAD  = "HEAD_color_link"
 
     @classmethod
     def name_to_kin_body(cls, name: str):

@@ -23,6 +23,7 @@ from g7_openarm_utils.layout import (
     LEFT_ARM_JOINT,
     RIGHT_ARM_JOINT,
     HEAD_ENABLED,
+    low_idx,
 )
 from typing import TYPE_CHECKING
 
@@ -567,12 +568,19 @@ class G7OpenArmLQR():
             u = np.zeros((u_cache.shape[0]+2,), dtype=np.float64)
             u[:-2] = u_cache[:]
             kin = kinematics(self.model, lib_x)
-            head_pos = kin[self.kin_slice[KinBody.HEAD]]
-            print(head_pos[-4:])
-            u[-2], u[-1] = look_at_pitch_yaw(
-                head_pos[:3],
-                head_pos[3:],
-                np.array(point_to_array(target_ref.look_at_point), dtype=np.float64),
-            )
+            head_pose   = kin[self.kin_slice[KinBody.HEAD]]
+            target_pos = np.array(point_to_array(target_ref.look_at_point), dtype=np.float64)
+            dist = np.linalg.norm(head_pose[:3] - target_pos)
+            if dist > 0.05:
+                pitch, yaw = look_at_pitch_yaw(
+                    head_pose[:3],
+                    lib_x[3:7],
+                    target_pos,
+                )
+                u[-2] = -pitch
+                u[-1] = yaw
+            else:
+                u[-2] = lowstate.motor_state[low_idx(Joint.HEAD_pitch)].q
+                u[-1] = lowstate.motor_state[low_idx(Joint.HEAD_yaw)].q
 
         return u
