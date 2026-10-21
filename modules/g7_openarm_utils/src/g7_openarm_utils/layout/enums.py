@@ -50,6 +50,8 @@ class Joint(StrEnum):
     R6 = "R6"
     R7 = "R7"
     R8 = "R8"
+    HEAD_yaw = "HEAD_yaw"
+    HEAD_pitch = "HEAD_pitch"
     
     @property
     def left_arm(cls):
@@ -131,6 +133,7 @@ class Dim(StrEnum):
 class KinBody(StrEnum):
     L_TCP = "L_tcp"
     R_TCP = "R_tcp"
+    HEAD  = "HEAD_color_optical_frame"
 
     @classmethod
     def name_to_kin_body(cls, name: str):
