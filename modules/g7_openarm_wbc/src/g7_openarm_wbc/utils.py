@@ -22,3 +22,17 @@ def quat_residual_jacobian(
     norm = np.linalg.norm(state_quat)
     state = state_quat / norm
     return (Jq - np.outer(state, state @ Jq)) / norm
+
+
+def look_at_pitch_yaw(
+    head_pos: npt.NDArray[np.float64],
+    head_quat: npt.NDArray[np.float64],
+    look_at: npt.NDArray[np.float64],
+):
+    q = np.asarray(head_quat, dtype=np.float64)
+    q = q / np.linalg.norm(q)
+    u = -q[1:]
+    p = np.asarray(look_at, dtype=np.float64) - np.asarray(head_pos, dtype=np.float64)
+    t = 2.0 * np.cross(u, p)
+    x, y, z = p + q[0] * t + np.cross(u, t)
+    return float(np.arctan2(-z, np.hypot(x, y))), float(np.arctan2(y, x))

@@ -4,7 +4,7 @@ import numpy as np
 import numpy.typing as npt
 
 from dataclasses import dataclass
-from g7_openarm_idl import pose_to_array
+from g7_openarm_idl import pose_to_array, point_to_array
 from g7_openarm_pinnzoo import (
     PinnZooModel,
     build_lib_x,
@@ -16,17 +16,20 @@ from g7_openarm_pinnzoo import (
 from g7_openarm_utils.layout import (
     Dim,
     KinBody,
+    Joint,
     BASE_ENABLED,
     LEFT_ARM_ENABLED,
     RIGHT_ARM_ENABLED,
     LEFT_ARM_JOINT,
     RIGHT_ARM_JOINT,
+    HEAD_ENABLED,
 )
 from typing import TYPE_CHECKING
 
 from .utils import (
     quat_residual,
     quat_residual_jacobian,
+    look_at_pitch_yaw,
 )
 from .kinematic_mpc import KinematicMPC
 
@@ -65,9 +68,13 @@ class G7OpenArmLQR():
             end_idx = start_idx + self.model.kinematics_body_size
             self.kin_slice[kin_body] = slice(start_idx, end_idx)
 
+        assert self.kin_slice[KinBody.HEAD] is not None
         assert self.kin_slice[KinBody.L_TCP] is not None
         assert self.kin_slice[KinBody.R_TCP] is not None
 
+        self.head_indices = [
+            pinnzoo_q_idx(joint) for joint in [Joint.HEAD_pitch, Joint.HEAD_yaw]
+        ]
         self.left_arm_indices = [
             pinnzoo_q_idx(joint) for joint in LEFT_ARM_JOINT
         ]
@@ -133,9 +140,9 @@ class G7OpenArmLQR():
         self.R_pos = np.diag(r_pos)
         self.R_ori = np.diag(r_ori)
         
-        self.u_base_slice = slice(0, 3)
+        self.u_base_slice  = slice(0, 3)
         self.u_left_slice  = slice(3, 3+len(LEFT_ARM_JOINT))    if BASE_ENABLED else slice(0, len(LEFT_ARM_JOINT))
-        self.u_right_slice = slice(3+len(LEFT_ARM_JOINT), None) if BASE_ENABLED else slice(len(LEFT_ARM_JOINT), None)
+        self.u_right_slice = slice(3+len(LEFT_ARM_JOINT), 3+len(LEFT_ARM_JOINT)+len(RIGHT_ARM_JOINT)) if BASE_ENABLED else slice(len(LEFT_ARM_JOINT), len(LEFT_ARM_JOINT)+len(RIGHT_ARM_JOINT))
 
         # Velocity limits match the low-level joint order; the Cartesian limits
         # below apply separately to each enabled end effector.
@@ -554,4 +561,18 @@ class G7OpenArmLQR():
             u_cache = u
             u = np.zeros((self.nu+3,), dtype=np.float64)
             u[3:] = u_cache
+        
+        if HEAD_ENABLED:
+            u_cache = u
+            u = np.zeros((u_cache.shape[0]+2,), dtype=np.float64)
+            u[:-2] = u_cache[:]
+            kin = kinematics(self.model, lib_x)
+            head_pos = kin[self.kin_slice[KinBody.HEAD]]
+            print(head_pos[-4:])
+            u[-2], u[-1] = look_at_pitch_yaw(
+                head_pos[:3],
+                head_pos[3:],
+                np.array(point_to_array(target_ref.look_at_point), dtype=np.float64),
+            )
+
         return u

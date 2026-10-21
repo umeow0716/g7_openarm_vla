@@ -81,12 +81,13 @@ class WBCNode:
                 return
             body_cmd = vr_joy_to_body_command(self.vrjoy)
 
-        cmd = WBCLowCmd_default()
         result = self.solver.solve_once(self.lowstate, self.odom, self.target)
-        cmd.dq_des = result[3:].tolist()
-        # Select WBC or VR command before filtering the published base velocity.
+        cmd = WBCLowCmd_default()
+        cmd.dq_des = result[3:17].tolist()
         raw_base_cmd = body_cmd if body_cmd is not None else result[:3]
         cmd.mobile = self.base_lpf.update(raw_base_cmd).tolist()
+        if general_config.head_enabled:
+            cmd.head = result[-2:].tolist()
 
         self.wbclowcmd_pub.Write(cmd)
 
