@@ -82,6 +82,7 @@ class G7OpenArmLQR():
 
         self.Q_hand_pos  = 200.0
         self.Q_hand_ori  = 40.0
+        self.ori_pos_coupling = 20.0
 
         self.task_gain = 10.0  # g/H scaling: 0.1 / 0.01
         self.max_hand_pos_speed = 0.8  # m/s
@@ -511,7 +512,7 @@ class G7OpenArmLQR():
         )
         I = self.damping * np.eye(self.nu)
         A_pos = 0.01 * Hp + self.R_pos + I
-        A_ori = 0.01 * Ho + self.R_ori + I
+        A_ori = 0.01 * Ho + self.R_ori + I + self.ori_pos_coupling * Hp
         u_pos = -np.linalg.solve(A_pos, 0.1 * gp)
         u_ori = -np.linalg.solve(A_ori, 0.1 * go)
         u_nom = u_pos + u_ori
