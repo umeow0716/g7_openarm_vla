@@ -19,10 +19,10 @@ can_fd = true
 # base ids: [FL, FLW, FR, FRW, RL, RLW, RR, RRW]
 base_ids            = [ 0x01, 0x05, 0x02, 0x06, 0x03, 0x07, 0x04, 0x08 ]
 base_direction      = [ -1.0, 1.0, -1.0, -1.0, -1.0,  1.0, -1.0, -1.0 ]
-left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0,  1.0 ]
-left_arm_offset     = [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
-right_arm_direction = [ 1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0 ]
-right_arm_offset    = [ -0.052453, 0.016594, -0.048638, -0.000572, -0.047112, -0.006676, 0.022698 ]
+left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0,  1.0, 1.0 ] # index -1 -> camera pitch
+left_arm_offset     = [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ]
+right_arm_direction = [ 1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0, 1.0 ] # index -1 -> camera yaw
+right_arm_offset    = [ -0.052453, 0.016594, -0.048638, -0.000572, -0.047112, -0.006676, 0.022698, 0.0 ]
 # Calibrated physical gripper motor positions [rad].
 left_gripper_open   = -0.684
 left_gripper_close  =  0.012

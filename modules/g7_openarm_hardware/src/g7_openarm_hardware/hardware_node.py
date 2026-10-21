@@ -6,6 +6,7 @@ from g7_openarm_utils.layout.control_layout import (
     BASE_ENABLED,
     LEFT_ARM_ENABLED,
     RIGHT_ARM_ENABLED,
+    HEAD_ENABLED,
     BASE_JOINT,
     LEFT_ARM_JOINT,
     RIGHT_ARM_JOINT,
@@ -52,14 +53,16 @@ bus_config = {
             dc.MotorType.DM4340, dc.MotorType.DM4340,
             dc.MotorType.DM4310, dc.MotorType.DM4310,
             dc.MotorType.DM4310, dc.MotorType.DM4310,
+            dc.MotorType.DM4310,
         ],
-        "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
-        "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18],
+        "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09],
+        "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19],
         "control_modes": [
             dc.ControlMode.MIT, dc.ControlMode.MIT,
             dc.ControlMode.MIT, dc.ControlMode.MIT,
             dc.ControlMode.MIT, dc.ControlMode.MIT,
             dc.ControlMode.MIT, dc.ControlMode.POS_FORCE,
+            dc.ControlMode.POS_FORCE,
         ],
         "offset": config.left_arm_offset,
     },
@@ -69,14 +72,16 @@ bus_config = {
             dc.MotorType.DM4340, dc.MotorType.DM4340,
             dc.MotorType.DM4310, dc.MotorType.DM4310,
             dc.MotorType.DM4310, dc.MotorType.DM4310,
+            dc.MotorType.DM4310,
         ],
-        "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
-        "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18],
+        "send_ids": [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09],
+        "recv_ids": [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19],
         "control_modes": [
             dc.ControlMode.MIT, dc.ControlMode.MIT,
             dc.ControlMode.MIT, dc.ControlMode.MIT,
             dc.ControlMode.MIT, dc.ControlMode.MIT,
             dc.ControlMode.MIT, dc.ControlMode.POS_FORCE,
+            dc.ControlMode.POS_FORCE,
         ],
         "offset": config.right_arm_offset,
     },
@@ -95,7 +100,7 @@ def get_enable_interfaces() -> list[str]:
 
 def _read_base(device: dc.DamiaoCAN, lowstate: HGLowState_):
     dev_list = device.get_motors()
-    assert len(dev_list) == 8
+    assert len(dev_list) == 9
 
     low_list = [
         lowstate.motor_state[low_idx(joint)] for joint in BASE_JOINT
@@ -109,11 +114,11 @@ def _read_base(device: dc.DamiaoCAN, lowstate: HGLowState_):
 
 def _read_left_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
     dev_list = device.get_motors()
-    assert len(dev_list) == 8
+    assert len(dev_list) == 9
 
     low_list = [
         lowstate.motor_state[low_idx(joint)] for joint in LEFT_ARM_JOINT
-    ]
+    ] + [ lowstate.motor_state[low_idx(Joint.HEAD_pitch)] ]
     
     for i, (dev, low) in enumerate(zip(dev_list, low_list)):
         low.q  = dev.get_position() * config.left_arm_direction[i]
@@ -132,11 +137,11 @@ def _read_left_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
 
 def _read_right_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
     dev_list = device.get_motors()
-    assert len(dev_list) == 8
+    assert len(dev_list) == 9
 
     low_list = [
         lowstate.motor_state[low_idx(joint)] for joint in RIGHT_ARM_JOINT
-    ]
+    ] + [ lowstate.motor_state[low_idx(Joint.HEAD_yaw)] ]
     
     for i, (dev, low) in enumerate(zip(dev_list, low_list)):
         low.q  = dev.get_position() * config.right_arm_direction[i]
@@ -171,6 +176,16 @@ def _write_left_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
     low_list = [
         lowcmd.motor_cmd[low_idx(joint)] for joint in LEFT_ARM_JOINT
     ]
+
+    low_pitch = lowcmd.motor_cmd[low_idx(Joint.HEAD_pitch)]
+    device.posforce_control_one(8, dc.PosForceParam(
+        q=low_pitch.q * config.left_arm_direction[8],
+        dq=10.0,
+        i=0.5,
+    ))
+
+    if not LEFT_ARM_ENABLED:
+        return
     
     for i, low in enumerate(low_list):
         device.mit_control_one(i, dc.MITParam(
@@ -195,7 +210,17 @@ def _write_right_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
     low_list = [
         lowcmd.motor_cmd[low_idx(joint)] for joint in RIGHT_ARM_JOINT
     ]
-    
+
+    low_yaw = lowcmd.motor_cmd[low_idx(Joint.HEAD_yaw)]
+    device.posforce_control_one(8, dc.PosForceParam(
+        q=low_yaw.q * config.right_arm_direction[8],
+        dq=10.0,
+        i=0.5,
+    ))
+
+    if not RIGHT_ARM_ENABLED:
+        return
+
     open_q  = config.right_gripper_open
     close_q = config.right_gripper_close
 
@@ -268,7 +293,7 @@ class HardwareNode:
         if BASE_ENABLED:
             device = self.group.get_device(config.base_can)
             _read_base(device, lowstate)
-        if LEFT_ARM_ENABLED or RIGHT_ARM_ENABLED:
+        if LEFT_ARM_ENABLED or RIGHT_ARM_ENABLED or HEAD_ENABLED:
             left_device = self.group.get_device(config.left_arm_can)
             right_device = self.group.get_device(config.right_arm_can)
             _read_left_arm(left_device, lowstate)
@@ -284,11 +309,11 @@ class HardwareNode:
             device = self.group.get_device(config.base_can)
             _write_base(device, self.lowcmd)
 
-        if LEFT_ARM_ENABLED:
+        if LEFT_ARM_ENABLED or HEAD_ENABLED:
             device = self.group.get_device(config.left_arm_can)
             _write_left_arm(device, self.lowcmd)
 
-        if RIGHT_ARM_ENABLED:
+        if RIGHT_ARM_ENABLED or HEAD_ENABLED:
             device = self.group.get_device(config.right_arm_can)
             _write_right_arm(device, self.lowcmd)
 

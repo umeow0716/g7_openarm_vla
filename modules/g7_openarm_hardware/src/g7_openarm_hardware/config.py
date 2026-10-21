@@ -65,15 +65,15 @@ class HardwareConfig(BaseConfig):
             ("hardware.right_arm_direction", self.right_arm_direction),
         )
         for field, values in direction_fields:
-            _require_sequence_length(values, field=field, length=8)
+            _require_sequence_length(values, field=field, length=9)
             invalid = [value for value in values if value not in _ALLOWED_DIRECTIONS]
             if invalid:
                 raise ValueError(f"{field} values must be -1.0 or 1.0, got {invalid!r}")
 
-        _require_sequence_length(self.base_ids, field="hardware.left_arm_offset", length=7)
+        _require_sequence_length(self.base_ids, field="hardware.left_arm_offset", length=8)
         if any(type(value) not in (int, float) for value in self.left_arm_offset):
             raise ValueError(f"hardware.base_ids must contain only float: {self.left_arm_offset!r}")
-        _require_sequence_length(self.base_ids, field="hardware.right_arm_offset", length=7)
+        _require_sequence_length(self.base_ids, field="hardware.right_arm_offset", length=8)
         if any(type(value) not in (int, float) for value in self.right_arm_offset):
             raise ValueError(f"hardware.base_ids must contain only float: {self.right_arm_offset!r}")
 
