@@ -494,12 +494,12 @@ class G7OpenArmLQR():
         self,
         lowstate: "HGLowState_",
         odom: "Odom",
-        target: "Target",
+        target_ref: "Target",
     ):
         lib_x = build_lib_x(self.model, lowstate, odom)
 
         state = self.task_state_from_x_lib(lib_x)
-        target = self.task_state_from_target(target)
+        target = self.task_state_from_target(target_ref)
         
         task_eval = self.task_evaluate(state, target)
 

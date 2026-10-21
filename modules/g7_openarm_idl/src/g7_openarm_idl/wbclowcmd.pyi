@@ -9,6 +9,7 @@ from typing import Annotated, Sequence
 class WBCLowCmd(IdlStruct):
     mobile: list[float]
     dq_des: list[float]
+    head: list[float]
     left_gripper:  float
     right_gripper: float
 
@@ -18,6 +19,7 @@ class WBCLowCmd(IdlStruct):
         self,
         mobile: Annotated[Sequence[Annotated[float, "float32"]], array[float32, 3]],
         dq_des: Annotated[Sequence[Annotated[float, "float32"]], array[float32, 3]],
+        head: Annotated[Sequence[Annotated[float, "float32"]], array[float32, 2]],
         left_gripper:  Annotated[float, "float32"],
         right_gripper: Annotated[float, "float32"],
     ) -> None: ...

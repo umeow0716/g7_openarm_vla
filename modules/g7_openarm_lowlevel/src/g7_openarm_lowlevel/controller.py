@@ -217,6 +217,14 @@ class Controller:
             result.motor_cmd[idx].dq  = ref.dq[joint]
             result.motor_cmd[idx].tau = tau_ff[pinnzoo_vdot_idx(joint)] + tau_cpl[pinnzoo_vdot_idx(joint)]
 
+        for i, joint in enumerate([ Joint.HEAD_pitch, Joint.HEAD_yaw ]):
+            idx = low_idx(joint)
+            result.motor_cmd[idx].kp  = 20.0
+            result.motor_cmd[idx].kd  = 0.1
+            result.motor_cmd[idx].q   = wbclowcmd.head[i]
+            result.motor_cmd[idx].dq  = 0.0
+            result.motor_cmd[idx].tau = 0.0
+
         lli = low_idx(Joint.L8)
         rli = low_idx(Joint.R8)
         result.motor_cmd[lli].kp  = 100.0

@@ -32,6 +32,7 @@ from g7_openarm_utils.layout import (
     LEFT_ARM_JOINT,
     RIGHT_ARM_JOINT,
     ARM_JOINT,
+    KinBody,
     low_idx,
 )
 from g7_openarm_utils.layout.gripper import (
@@ -43,6 +44,8 @@ from g7_openarm_utils.layout.gripper import (
 from g7_openarm_idl import (
     pose_to_array,
     array_to_pose,
+    point_to_array,
+    array_to_point,
 )
 from importlib.resources import as_file, files
 import signal
@@ -51,6 +54,7 @@ from unitree_sdk2py.idl.default import (
     HGIMUState_,
     HGLowCmd_,
     HGLowState_,
+    Point_,
     unitree_hg_msg_dds__IMUState_ as HGIMUState_default,
     unitree_hg_msg_dds__LowState_ as HGLowState_default,
 )
@@ -150,12 +154,15 @@ class MujocoNode:
         with self.viewer.lock():
             left_target = self.data.body("left_target")
             right_target = self.data.body("right_target")
+            look_at_point = self.data.body("look_at_point")
 
         left_pose = np.concatenate((left_target.xpos, left_target.xquat), dtype=np.float64)
         right_pose = np.concatenate((right_target.xpos, right_target.xquat), dtype=np.float64)
+        look_at_point = np.asarray(look_at_point.xpos, dtype=np.float64)
         msg = Target_default()
         msg.left_target  = array_to_pose(left_pose)
         msg.right_target = array_to_pose(right_pose)
+        msg.look_at_point = array_to_point(look_at_point)
         self.target_pub.Write(msg)
 
     def write_lowstate(self):
@@ -337,15 +344,18 @@ class MujocoNode:
                 
         mujoco.mj_forward(model, data)
 
-        left_hand  = data.body("L_tcp")
-        right_hand = data.body("R_tcp")
-
+        head       = data.body(KinBody.HEAD)
+        left_hand  = data.body(KinBody.L_TCP)
+        right_hand = data.body(KinBody.R_TCP)
+        
+        head_pos   = np.asarray(head.xpos, dtype=np.float64)
         left_pose  = np.concatenate((left_hand.xpos, left_hand.xquat), dtype=np.float64)
         right_pose = np.concatenate((right_hand.xpos, right_hand.xquat), dtype=np.float64)
         
         result = Target_default()
-        result.left_target  = array_to_pose(left_pose)
-        result.right_target = array_to_pose(right_pose)
+        result.left_target   = array_to_pose(left_pose)
+        result.right_target  = array_to_pose(right_pose)
+        result.look_at_point = Point_(x=head_pos[0]+0.1, y=head_pos[1], z=head_pos[2])
         return result
 
     def build_model(self) -> Tuple[mujoco.MjModel, mujoco.MjData]:
@@ -382,6 +392,20 @@ class MujocoNode:
             type=mujoco.mjtGeom.mjGEOM_SPHERE,
             size=[0.05],
             rgba=[0, 0, 1, 0.3],
+            contype=0,
+            conaffinity=0,
+        )
+
+        look_at_point = spec.worldbody.add_body(
+            name="look_at_point",
+            mocap=True,
+            pos=point_to_array(default_pose.look_at_point),
+            quat=[ 1.0, 0.0, 0.0, 0.0 ],
+        )
+        look_at_point.add_geom(
+            type=mujoco.mjtGeom.mjGEOM_SPHERE,
+            size=[0.03],
+            rgba=[0, 1, 0, 0.3],
             contype=0,
             conaffinity=0,
         )
