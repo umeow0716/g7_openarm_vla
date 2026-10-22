@@ -177,12 +177,13 @@ def _write_left_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
         lowcmd.motor_cmd[low_idx(joint)] for joint in LEFT_ARM_JOINT
     ]
 
-    low_pitch = lowcmd.motor_cmd[low_idx(Joint.HEAD_pitch)]
-    device.posforce_control_one(8, dc.PosForceParam(
-        q=low_pitch.q * config.left_arm_direction[8],
-        dq=10.0,
-        i=0.5,
-    ))
+    if HEAD_ENABLED:
+        low_pitch = lowcmd.motor_cmd[low_idx(Joint.HEAD_pitch)]
+        device.posforce_control_one(8, dc.PosForceParam(
+            q=low_pitch.q * config.left_arm_direction[8],
+            dq=10.0,
+            i=0.5,
+        ))
 
     if not LEFT_ARM_ENABLED:
         return
@@ -211,12 +212,13 @@ def _write_right_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
         lowcmd.motor_cmd[low_idx(joint)] for joint in RIGHT_ARM_JOINT
     ]
 
-    low_yaw = lowcmd.motor_cmd[low_idx(Joint.HEAD_yaw)]
-    device.posforce_control_one(8, dc.PosForceParam(
-        q=low_yaw.q * config.right_arm_direction[8],
-        dq=10.0,
-        i=0.5,
-    ))
+    if HEAD_ENABLED:
+        low_yaw = lowcmd.motor_cmd[low_idx(Joint.HEAD_yaw)]
+        device.posforce_control_one(8, dc.PosForceParam(
+            q=low_yaw.q * config.right_arm_direction[8],
+            dq=10.0,
+            i=0.5,
+        ))
 
     if not RIGHT_ARM_ENABLED:
         return
