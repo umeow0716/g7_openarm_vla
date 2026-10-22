@@ -114,8 +114,8 @@ class MujocoNode:
         self.quat_slice: slice | None = None
         self.init_imu()
 
-        self.target_pub  = build_pub("rt/target", Target, self.is_sim and not self.is_vr)
-        self.target_sub  = build_sub("rt/target", Target, self.target_handler, self.is_vr or not self.is_sim)
+        self.target_pub  = build_pub("rt/target", Target, not self.is_vr)
+        self.target_sub  = build_sub("rt/target", Target, self.target_handler, self.is_vr)
         self.imustate_pub  = build_pub("rt/imustate", HGIMUState_, self.is_sim)
         self.lowstate_pub  = build_pub("rt/lowstate", HGLowState_, self.is_sim)
         self.lowstate_sub  = build_sub("rt/lowstate", HGLowState_, self.lowstate_handler, not self.is_sim)
@@ -126,7 +126,7 @@ class MujocoNode:
         self.lowstate_out: HGLowState_ | None = HGLowState_default() if self.lowstate_pub is not None else None
         self.imustate_out: HGIMUState_ | None = HGIMUState_default() if self.imustate_pub is not None else None
 
-        self.target_thread = build_thread(config.target_hz, self.write_target, self.is_sim and not self.is_vr)
+        self.target_thread = build_thread(config.target_hz, self.write_target, not self.is_vr)
         self.sim_thread      = build_thread(config.hz, self.sim_loop)
         self.lowstate_thread = build_thread(config.hz, self.write_lowstate, self.is_sim)
         self.imustate_thread = build_thread(config.imu_hz, self.write_imustate, self.is_sim)
@@ -210,18 +210,19 @@ class MujocoNode:
                 self.data.mocap_pos[self.right_target_mocap_id]  = right_pose[:3]
                 self.data.mocap_quat[self.right_target_mocap_id] = right_pose[3:]
 
-            if self.lowstate is not None:
-                for joint in Joint:
-                    if Joint.is_gripper(joint):
-                        qpos_idx = self.qpos_index_register.get(joint)
-                        qpos = openness_to_qpos(self.lowstate.motor_state[low_idx(joint)].q)
-                        self.data.qpos[qpos_idx] = qpos
-                        self.data.qpos[qpos_idx+1] = qpos
-                    else:
-                        self.data.qpos[self.qpos_index_register.get(joint)] = \
-                            self.lowstate.motor_state[low_idx(joint)].q
+            # if self.lowstate is not None:
+            #     for joint in Joint:
+            #         if Joint.is_gripper(joint):
+            #             qpos_idx = self.qpos_index_register.get(joint)
+            #             qpos = openness_to_qpos(self.lowstate.motor_state[low_idx(joint)].q)
+            #             self.data.qpos[qpos_idx] = qpos
+            #             self.data.qpos[qpos_idx+1] = qpos
+            #         else:
+            #             self.data.qpos[self.qpos_index_register.get(joint)] = \
+            #                 self.lowstate.motor_state[low_idx(joint)].q
 
-            if self.odom is not None and self.odom_sub is not None:
+            print(self.odom)
+            if self.odom is not None:
                 self.data.qpos[0] = self.odom.position.x
                 self.data.qpos[1] = self.odom.position.y
                 self.data.qpos[2] = self.odom.position.z
@@ -229,6 +230,7 @@ class MujocoNode:
                 self.data.qpos[4] = self.odom.quaternion.x
                 self.data.qpos[5] = self.odom.quaternion.y
                 self.data.qpos[6] = self.odom.quaternion.z
+                self.data.qvel[:6] = 0.0
 
             if self.lowcmd is not None:
                 for joint in Joint:
@@ -255,6 +257,19 @@ class MujocoNode:
                             q_err  * motor_cmd.kp + \
                             dq_err * motor_cmd.kd + \
                             motor_cmd.tau
+            elif self.lowstate is not None and self.lowstate_sub is not None:
+                for joint in Joint:
+                    # clone lowstate -> data.qpos not ctrl
+                    if not Joint.is_enabled(joint, general_config.control_mode):
+                        continue
+                    if Joint.is_gripper(joint):
+                        qpos = openness_to_qpos(self.lowstate.motor_state[low_idx(joint)].q)
+                        qvel = 0.0
+                    else:
+                        qpos = self.lowstate.motor_state[low_idx(joint)].q
+                        qvel = 0.0
+                    self.data.qpos[self.qpos_index_register.get(joint)] = qpos
+                    self.data.qvel[self.dof_index_register.get(joint)] = qvel
 
             mujoco.mj_step(self.model, self.data)
 

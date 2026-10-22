@@ -92,8 +92,9 @@ def get_enable_interfaces() -> list[str]:
     result = []
     if BASE_ENABLED:
         result.append(config.base_can)
-    if LEFT_ARM_ENABLED or RIGHT_ARM_ENABLED:
+    if LEFT_ARM_ENABLED or HEAD_ENABLED:
         result.append(config.left_arm_can)
+    if RIGHT_ARM_ENABLED or HEAD_ENABLED:
         result.append(config.right_arm_can)
     return result
 
@@ -245,12 +246,12 @@ def _write_right_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
 class HardwareNode:
     def __init__(self):
         self.can_interfaces = get_enable_interfaces()
-        for iface in self.can_interfaces:
-            print(f"Initializing CAN interface {iface}...")
-            helper = dc.CANHelper(iface)
-            helper.set_down()
-            helper.set_bitrate(1_000_000, 5_000_000, config.can_fd)
-            helper.set_up()
+        # for iface in self.can_interfaces:
+        #     print(f"Initializing CAN interface {iface}...")
+        #     helper = dc.CANHelper(iface)
+        #     helper.set_down()
+        #     helper.set_bitrate(1_000_000, 5_000_000, config.can_fd)
+        #     helper.set_up()
 
         self.group = dc.DamiaoCANGroup(self.can_interfaces, config.can_fd)
         for iface in self.can_interfaces:
@@ -266,6 +267,7 @@ class HardwareNode:
             print(f"{iface}: expected responses = {device.expected_response_count()}")
 
         self.group.enable_all()
+        time.sleep(0.1)
         for _try in range(5):
             self.group.flush_rx()
             self.group.refresh_all()
@@ -295,10 +297,11 @@ class HardwareNode:
         if BASE_ENABLED:
             device = self.group.get_device(config.base_can)
             _read_base(device, lowstate)
-        if LEFT_ARM_ENABLED or RIGHT_ARM_ENABLED or HEAD_ENABLED:
+        if LEFT_ARM_ENABLED or HEAD_ENABLED:
             left_device = self.group.get_device(config.left_arm_can)
-            right_device = self.group.get_device(config.right_arm_can)
             _read_left_arm(left_device, lowstate)
+        if RIGHT_ARM_ENABLED or HEAD_ENABLED:
+            right_device = self.group.get_device(config.right_arm_can)
             _read_right_arm(right_device, lowstate)
 
         if self.lowstate_pub is not None:
