@@ -246,12 +246,12 @@ def _write_right_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
 class HardwareNode:
     def __init__(self):
         self.can_interfaces = get_enable_interfaces()
-        # for iface in self.can_interfaces:
-        #     print(f"Initializing CAN interface {iface}...")
-        #     helper = dc.CANHelper(iface)
-        #     helper.set_down()
-        #     helper.set_bitrate(1_000_000, 5_000_000, config.can_fd)
-        #     helper.set_up()
+        for iface in self.can_interfaces:
+            print(f"Initializing CAN interface {iface}...")
+            helper = dc.CANHelper(iface)
+            helper.set_down()
+            helper.set_bitrate(1_000_000, 5_000_000, config.can_fd)
+            helper.set_up()
 
         self.group = dc.DamiaoCANGroup(self.can_interfaces, config.can_fd)
         for iface in self.can_interfaces:
