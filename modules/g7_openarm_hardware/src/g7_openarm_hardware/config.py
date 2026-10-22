@@ -65,7 +65,7 @@ class HardwareConfig(BaseConfig):
             ("hardware.right_arm_direction", self.right_arm_direction),
         )
         for field, values in direction_fields:
-            _require_sequence_length(values, field=field, length=9)
+            _require_sequence_length(values, field=field, length=8 if field == "hardware.base_direction" else 9)
             invalid = [value for value in values if value not in _ALLOWED_DIRECTIONS]
             if invalid:
                 raise ValueError(f"{field} values must be -1.0 or 1.0, got {invalid!r}")
