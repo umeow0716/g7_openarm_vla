@@ -1,7 +1,7 @@
 [general]
 debugging = true
 head_enabled = false
-control_mode = "right-arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
+control_mode = "left-arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
 initial_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3]
 initial_gripper = 1.0 # normalized openness: 0.010=closed, 1.0=open
 
@@ -13,13 +13,13 @@ interface = "lo"
 hz = 100.0
 imu_hz = 100.0
 base_can = "can3"
-left_arm_can = "can2"
-right_arm_can = "can1"
+left_arm_can = "can1"
+right_arm_can = "can2"
 can_fd = true
 # base ids: [FL, FLW, FR, FRW, RL, RLW, RR, RRW]
 base_ids            = [ 0x01, 0x05, 0x02, 0x06, 0x03, 0x07, 0x04, 0x08 ]
 base_direction      = [ -1.0,  1.0, -1.0, -1.0, -1.0,  1.0, -1.0, -1.0 ]
-left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0,  1.0, 1.0 ] # index -1 -> camera pitch
+left_arm_direction  = [ -1.0, -1.0,  1.0, -1.0,  1.0, -1.0, -1.0,  1.0, 1.0 ] # index -1 -> camera pitch 
 left_arm_offset     = [  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0, 0.0 ]
 right_arm_direction = [  1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0, 1.0 ] # index -1 -> camera yaw
 right_arm_offset    = [ -0.052453, 0.016594, -0.048638, -0.000572, -0.047112, -0.006676, 0.022698, 0.0, 0.0 ]
@@ -31,7 +31,7 @@ right_gripper_close = -2.550
 
 [lowlevel]
 hz = 100.0
-natural_frequency = [ 4.5, 4.5, 4.0, 4.0, 6.0, 6.0, 6.0 ] # Hz
+natural_frequency = [ 3.5, 3.5, 3.0, 3.0, 5.0, 5.0, 5.0 ] # Hz
 damping_ratio = [ 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8 ]
 
 [state_estimator]

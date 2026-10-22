@@ -114,11 +114,8 @@ def main() -> None:
     processes = [
         ctx.Process(target=run_mujoco, name="g7-mujoco-real"),
         ctx.Process(target=run_hardware, name="g7-hardware"),
-        ctx.Process(target=run_imu, name="g7-imu"),
-        ctx.Process(target=run_lowlevel, name="g7-lowlevel"),
         ctx.Process(target=run_state_estimator, name="g7-state-est"),
         ctx.Process(target=run_monitor, name="g7-monitor"),
-        ctx.Process(target=run_wbc, name="g7-wbc"),
     ]
 
     for process in processes:
