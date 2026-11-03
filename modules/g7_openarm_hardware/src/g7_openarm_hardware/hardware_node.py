@@ -119,7 +119,7 @@ def _read_left_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
 
     low_list = [
         lowstate.motor_state[low_idx(joint)] for joint in LEFT_ARM_JOINT
-    ] + [ lowstate.motor_state[low_idx(Joint.HEAD_pitch)] ]
+    ] + [ lowstate.motor_state[low_idx(Joint.L8)], lowstate.motor_state[low_idx(Joint.HEAD_pitch)] ]
     
     for i, (dev, low) in enumerate(zip(dev_list, low_list)):
         low.q  = dev.get_position() * config.left_arm_direction[i]
@@ -142,7 +142,7 @@ def _read_right_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
 
     low_list = [
         lowstate.motor_state[low_idx(joint)] for joint in RIGHT_ARM_JOINT
-    ] + [ lowstate.motor_state[low_idx(Joint.HEAD_yaw)] ]
+    ] + [ lowstate.motor_state[low_idx(Joint.R8)], lowstate.motor_state[low_idx(Joint.HEAD_yaw)] ]
     
     for i, (dev, low) in enumerate(zip(dev_list, low_list)):
         low.q  = dev.get_position() * config.right_arm_direction[i]
@@ -182,8 +182,8 @@ def _write_left_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
         low_pitch = lowcmd.motor_cmd[low_idx(Joint.HEAD_pitch)]
         device.posforce_control_one(8, dc.PosForceParam(
             q=low_pitch.q * config.left_arm_direction[8],
-            dq=10.0,
-            i=0.5,
+            dq=20.0,
+            i=0.8,
         ))
 
     if not LEFT_ARM_ENABLED:
@@ -217,15 +217,12 @@ def _write_right_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
         low_yaw = lowcmd.motor_cmd[low_idx(Joint.HEAD_yaw)]
         device.posforce_control_one(8, dc.PosForceParam(
             q=low_yaw.q * config.right_arm_direction[8],
-            dq=10.0,
-            i=0.5,
+            dq=20.0,
+            i=0.8,
         ))
 
     if not RIGHT_ARM_ENABLED:
         return
-
-    open_q  = config.right_gripper_open
-    close_q = config.right_gripper_close
 
     for i, low in enumerate(low_list):
         device.mit_control_one(i, dc.MITParam(
@@ -236,6 +233,8 @@ def _write_right_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
             tau=low.tau * config.right_arm_direction[i],
         ))
 
+    open_q  = config.right_gripper_open
+    close_q = config.right_gripper_close
     gripper_low = lowcmd.motor_cmd[low_idx(Joint.R8)]
     device.posforce_control_one(7, dc.PosForceParam(
         q=openness_to_motor(gripper_low.q, close_q, open_q),
