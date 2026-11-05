@@ -28,6 +28,9 @@ RIGHT_ARM_ENABLED = general_config.control_mode in (
 
 HEAD_ENABLED = general_config.head_enabled
 
+if HEAD_ENABLED:
+    assert LEFT_ARM_ENABLED and RIGHT_ARM_ENABLED, "Head control requires both arms to be enabled."
+
 BASE_JOINT = (
     Joint.AMR_FL, Joint.AMR_FLW, Joint.AMR_FR, Joint.AMR_FRW,
     Joint.AMR_RL, Joint.AMR_RLW, Joint.AMR_RR, Joint.AMR_RRW,

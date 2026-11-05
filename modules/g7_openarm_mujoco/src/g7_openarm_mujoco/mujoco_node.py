@@ -232,7 +232,7 @@ class MujocoNode:
                 self.data.qpos[6] = self.odom.quaternion.z
                 self.data.qvel[:6] = 0.0
 
-            if self.lowcmd is not None:
+            if self.lowcmd is not None and self.is_sim:
                 for joint in Joint:
                     motor_cmd = self.lowcmd.motor_cmd[low_idx(joint)]
                     if not Joint.is_enabled(joint, general_config.control_mode):
@@ -428,6 +428,8 @@ class MujocoNode:
 
         model = spec.compile()
         data  = mujoco.MjData(model)
+        data.qpos[self.qpos_index_register.get(Joint.L7)] = 0.2
+        data.qpos[self.qpos_index_register.get(Joint.R7)] = 0.2
         for joint_config, qpos in general_config.initial_pos.items():
             if self.is_vr:
                 continue
