@@ -16,9 +16,10 @@ from g7_openarm_utils.layout import HEAD_ENABLED, LEFT_ARM_ENABLED, RIGHT_ARM_EN
 from .camera import BlackCamera, CameraInput, RealSenseCamera
 from .config import config
 from .observation import Ego3dObservationBuilder, ObservationHistory, ObservationSample
+from .operator import OperatorControl, OperatorState
 from .policy import HommiPolicyRunner
-from .state import RobotStateProjector
-from .trajectory import AtomicTrajectory, TargetPoint, decode_action_chunk
+from .state import RobotSnapshot, RobotStateProjector
+from .trajectory import AtomicTrajectory, TargetPoint, decode_action_chunk, snapshot_target
 from .vcam import process_head_frame, process_wrist_frame
 
 CameraKind = Literal["simulation", "realsense"]
@@ -85,14 +86,25 @@ class HommiNode:
                 f"shape_meta horizon {self._builder.horizon} != policy "
                 f"n_obs_steps {self._policy.n_obs_steps}"
             )
+        warmup_start = time.monotonic()
+        self._policy.warmup()
+        print(f"HoMMI warm-up done in {time.monotonic() - warmup_start:.1f}s", flush=True)
         self._projector = RobotStateProjector(self._policy.gripper_ranges)
         self._history = ObservationHistory(self._builder.horizon)
         self._trajectory = AtomicTrajectory()
+        self._latest_robot: RobotSnapshot | None = None
+        # Serializes "check operator state + queue a chunk" against pause/start,
+        # so a chunk finished just as the operator pauses cannot overwrite the hold.
+        self._control_lock = threading.Lock()
         self._cameras = _make_cameras(camera_kind)
 
         self._publisher = build_pub("rt/target", Target)
         self._lowstate_sub = build_sub("rt/lowstate", HGLowState_, self._lowstate_handler)
         self._odom_sub = build_sub("rt/odom", Odom, self._odom_handler)
+
+        # Nothing is published on rt/target until the operator presses Enter in
+        # the monitor (the lowlevel/WBC keep the arms at initial_pos meanwhile).
+        self._operator = OperatorControl(self._on_operator_change)
 
         self._threads = tuple(
             threading.Thread(
@@ -113,8 +125,25 @@ class HommiNode:
             f"precision={self._policy.precision}, obs_horizon={self._builder.horizon}, "
             f"action_steps={self._policy.n_action_steps}, hz={config.hz:g}, "
             f"publish_hz={config.publish_hz:g}, "
-            f"cameras={camera_kind}"
+            f"cameras={camera_kind}; waiting for Enter in the monitor",
+            flush=True,
         )
+
+    def _on_operator_change(self, state: OperatorState) -> None:
+        with self._control_lock:
+            self._apply_operator_change(state)
+
+    def _apply_operator_change(self, state: OperatorState) -> None:
+        now = time.monotonic()
+        if state is OperatorState.PAUSED:
+            self._trajectory.freeze(now=now)
+        elif state is OperatorState.RUNNING and self._trajectory.sample(now=now) is None:
+            # First start: seed from the current pose so the first chunk blends in.
+            robot = self._latest_robot
+            if robot is not None:
+                self._trajectory.hold(
+                    snapshot_target(robot, gripper_ranges=self._policy.gripper_ranges), now=now
+                )
 
     def _lowstate_handler(self, msg: HGLowState_) -> None:
         with self._state_lock:
@@ -164,6 +193,7 @@ class HommiNode:
                     for side in ("left", "right")
                 }
                 self._sample_sequence += 1
+                self._latest_robot = robot
                 self._history.append(
                     ObservationSample(
                         sequence=self._sample_sequence,
@@ -185,6 +215,9 @@ class HommiNode:
                 return
 
             last_sequence = samples[-1].sequence
+            if self._operator.state is not OperatorState.RUNNING:
+                continue
+            generation = self._operator.generation
             obs = self._builder.build(samples)
             action_chunk = self._policy.predict(obs)
             points = decode_action_chunk(
@@ -194,10 +227,16 @@ class HommiNode:
                 interval=config.interval,
                 obs_horizon=self._builder.horizon,
             )
-            now = time.monotonic()
-            expired = self._trajectory.replace(
-                points, now=now, latency_compensation=config.latency_compensation
-            )
+            with self._control_lock:
+                if (
+                    self._operator.state is not OperatorState.RUNNING
+                    or self._operator.generation != generation
+                ):
+                    continue  # paused (or resumed) while inferring: drop the stale chunk
+                now = time.monotonic()
+                expired = self._trajectory.replace(
+                    points, now=now, latency_compensation=config.latency_compensation
+                )
             if expired == len(points):
                 # Still executed: the trajectory blends to the chunk's final step.
                 print(
@@ -219,7 +258,9 @@ class HommiNode:
         # Publish at the WBC rate, interpolating between the 20 Hz action steps.
         next_tick = time.monotonic()
         while not self._stop.is_set():
-            target = self._trajectory.sample(now=time.monotonic())
+            target = None
+            if self._operator.state is not OperatorState.WAITING:
+                target = self._trajectory.sample(now=time.monotonic())
             if target is not None:
                 self._publisher.Write(self._to_target(target))
 
@@ -234,6 +275,7 @@ class HommiNode:
 
     def close(self) -> None:
         self._stop.set()
+        self._operator.close()
         self._history.wake()
         self._trajectory.clear()
         for thread in self._threads:

@@ -3,6 +3,7 @@ from .odom import Odom, Odom_default
 from .utils import array_to_pose, pose_to_array, array_to_point, point_to_array
 from .vr_joy import VRJoy, VRJoy_default
 from .wbclowcmd import WBCLowCmd, WBCLowCmd_default
+from .ui import UIRequest, UIRequest_default, UIResponse, UIResponse_default
 
 __all__ = [
     "Target",
@@ -13,6 +14,10 @@ __all__ = [
     "VRJoy_default",
     "WBCLowCmd",
     "WBCLowCmd_default",
+    "UIRequest",
+    "UIRequest_default",
+    "UIResponse",
+    "UIResponse_default",
     "array_to_pose",
     "pose_to_array",
     "array_to_point",

@@ -38,6 +38,24 @@ class TargetPoint:
     look_at_point: tuple[float, float, float]
 
 
+def snapshot_target(
+    robot: RobotSnapshot,
+    *,
+    gripper_ranges: dict[str, GripperWidthRange],
+    look_ahead: float = 0.5,
+) -> TargetPoint:
+    """Target that keeps the robot where it is (seed for the first chunk)."""
+    look_at = robot.head[:3, 3] + look_ahead * robot.head[:3, 2]
+    return TargetPoint(
+        execute_at=robot.timestamp,
+        left_pose7=tuple(float(x) for x in matrix_to_pose7_wxyz(robot.left_tcp)),
+        right_pose7=tuple(float(x) for x in matrix_to_pose7_wxyz(robot.right_tcp)),
+        left_gripper_openness=gripper_ranges["left"].to_openness(robot.left_gripper_width),
+        right_gripper_openness=gripper_ranges["right"].to_openness(robot.right_gripper_width),
+        look_at_point=(float(look_at[0]), float(look_at[1]), float(look_at[2])),
+    )
+
+
 def decode_action_chunk(
     action_chunk: npt.ArrayLike,
     *,
@@ -200,6 +218,17 @@ class AtomicTrajectory:
         """Return the interpolated target at ``now`` (``None`` before any chunk)."""
         with self._lock:
             return self._sample_locked(now)
+
+    def hold(self, point: TargetPoint, *, now: float) -> None:
+        """Replace the trajectory with a single held target."""
+        with self._lock:
+            self._knots = [replace(point, execute_at=now)]
+
+    def freeze(self, *, now: float) -> None:
+        """Hold the currently commanded target (no-op before any chunk)."""
+        with self._lock:
+            current = self._sample_locked(now)
+            self._knots = [current] if current is not None else []
 
     def clear(self) -> None:
         with self._lock:

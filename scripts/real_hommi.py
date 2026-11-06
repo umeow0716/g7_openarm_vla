@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import os
 import signal
+import subprocess
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -128,6 +129,18 @@ def stop_processes(
         process.join()
 
 
+def ensure_sudo() -> None:
+    """Ask for the sudo password once, before the monitor takes over the terminal.
+
+    The hardware node's CANHelper configures the CAN interfaces through sudo;
+    sudo caches the credential per terminal, so the spawned node reuses it.
+    """
+    if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0:
+        return
+    print("CAN interface setup needs sudo:")
+    subprocess.run(["sudo", "-v"], check=True)
+
+
 def main() -> None:
     if general_config.control_mode == 'base-only':
         raise RuntimeError(
@@ -135,6 +148,7 @@ def main() -> None:
             "use scripts/sim_vr.py or scripts/real_vr.py"
         )
 
+    ensure_sudo()
     ctx = mp.get_context("spawn")
 
     processes = [

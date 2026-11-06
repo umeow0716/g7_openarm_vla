@@ -156,6 +156,28 @@ class HommiPolicyRunner:
         else:
             raise ValueError(f"unsupported training.mixed_precision {self.precision!r}")
 
+    def dummy_obs(self) -> dict[str, torch.Tensor]:
+        """All-zero observation batch with the policy's input keys and shapes."""
+        obs_meta = self.shape_meta["obs"]
+        horizon = self.n_obs_steps
+        obs: dict[str, torch.Tensor] = {}
+        for key, attr in obs_meta.items():
+            needed = not attr.get("ignore_by_policy", False) or key == "camera_head_main_rgb"
+            if needed:
+                obs[key] = torch.zeros((1, horizon, *attr["shape"]), device=self.device)
+            if attr.get("type") == "pointmap":
+                size = tuple(attr["shape"][1:])
+                obs[f"{key}_mask"] = torch.ones((1, horizon, 1, *size), device=self.device)
+        return obs
+
+    def warmup(self, iterations: int = 2) -> None:
+        """Run dummy inferences so the first real chunk is not slowed by CUDA warm-up."""
+        obs = self.dummy_obs()
+        for _ in range(iterations):
+            self.predict(obs)
+        if self.device.type == "cuda":
+            torch.cuda.synchronize(self.device)
+
     def predict(self, obs: dict[str, torch.Tensor]) -> FloatArray:
         with torch.inference_mode(), self._autocast:
             prediction = self.policy.predict_action(obs)
