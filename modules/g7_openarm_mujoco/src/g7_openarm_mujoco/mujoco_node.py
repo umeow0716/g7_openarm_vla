@@ -108,14 +108,21 @@ class MujocoNode:
         self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
         self.left_target_mocap_id  = self.model.body_mocapid[self.model.body("left_target").id]
         self.right_target_mocap_id = self.model.body_mocapid[self.model.body("right_target").id]
+        self.look_at_mocap_id = (
+            self.model.body_mocapid[self.model.body("look_at_point").id]
+            if general_config.head_enabled
+            else None
+        )
 
         self.acc_slice:  slice | None = None
         self.gyro_slice: slice | None = None
         self.quat_slice: slice | None = None
         self.init_imu()
 
-        self.target_pub  = build_pub("rt/target", Target, not self.is_vr)
-        self.target_sub  = build_sub("rt/target", Target, self.target_handler, self.is_vr)
+        # VR and HoMMI publish rt/target themselves; MuJoCo then only displays it.
+        external_target = self.is_vr or self.is_hommi
+        self.target_pub  = build_pub("rt/target", Target, not external_target)
+        self.target_sub  = build_sub("rt/target", Target, self.target_handler, external_target)
         self.imustate_pub  = build_pub("rt/imustate", HGIMUState_, self.is_sim)
         self.lowstate_pub  = build_pub("rt/lowstate", HGLowState_, self.is_sim)
         self.lowstate_sub  = build_sub("rt/lowstate", HGLowState_, self.lowstate_handler, not self.is_sim)
@@ -126,7 +133,7 @@ class MujocoNode:
         self.lowstate_out: HGLowState_ | None = HGLowState_default() if self.lowstate_pub is not None else None
         self.imustate_out: HGIMUState_ | None = HGIMUState_default() if self.imustate_pub is not None else None
 
-        self.target_thread = build_thread(config.target_hz, self.write_target, not self.is_vr)
+        self.target_thread = build_thread(config.target_hz, self.write_target, not external_target)
         self.sim_thread      = build_thread(config.hz, self.sim_loop)
         self.lowstate_thread = build_thread(config.hz, self.write_lowstate, self.is_sim)
         self.imustate_thread = build_thread(config.imu_hz, self.write_imustate, self.is_sim)
@@ -209,6 +216,10 @@ class MujocoNode:
                 self.data.mocap_quat[self.left_target_mocap_id]  = left_pose[3:]
                 self.data.mocap_pos[self.right_target_mocap_id]  = right_pose[:3]
                 self.data.mocap_quat[self.right_target_mocap_id] = right_pose[3:]
+                if self.look_at_mocap_id is not None:
+                    self.data.mocap_pos[self.look_at_mocap_id] = point_to_array(
+                        self.target.look_at_point
+                    )
 
             # if self.lowstate is not None:
             #     for joint in Joint:

@@ -7,7 +7,7 @@ from datetime import datetime
 from multiprocessing.context import SpawnProcess
 from pathlib import Path
 
-from g7_openarm_config import ControlMode, general_config
+from g7_openarm_config import general_config
 
 LOG_ROOT = Path("logs")
 
@@ -49,9 +49,9 @@ def run_silently(target: Callable[[], None], folder_name: str) -> None:
 
 
 def run_mujoco() -> None:
-    from g7_openarm_mujoco.real_node import main
+    from g7_openarm_mujoco.mujoco_node import main
 
-    run_silently(lambda: main(False), "mujoco")
+    run_silently(lambda : main(is_sim=False, is_vr=False, is_hommi=True), "mujoco")
 
 
 def run_hardware() -> None:
@@ -61,12 +61,11 @@ def run_hardware() -> None:
 
 
 def run_imu() -> None:
-    if general_config.base_actuation_enabled:
-        from g7_openarm_hardware.imu_node import main
+    from g7_openarm_hardware.imu_node import main
+    if general_config.control_mode not in ["arm-only", "right-arm-only", "left-arm-only"]:
+        run_silently(lambda : main(virtual=False), "imu")
     else:
-        from g7_openarm_hardware.virtual_imu_node import main
-
-    run_silently(main, "imu")
+        run_silently(lambda : main(virtual=True), "imu")
 
 
 def run_lowlevel() -> None:
@@ -87,18 +86,18 @@ def run_wbc() -> None:
     run_silently(main, "wbc")
 
 
-def run_hommi() -> None:
-    from g7_openarm_hommi.hommi_node import main
-
-    run_silently(lambda: main("realsense"), "hommi")
-
-
 def run_monitor() -> None:
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     from g7_openarm_monitor.monitor_node import main
 
     main()
+
+
+def run_hommi() -> None:
+    from g7_openarm_hommi.hommi_node import main
+
+    run_silently(lambda: main("realsense"), "hommi")
 
 
 def stop_processes(
@@ -130,7 +129,7 @@ def stop_processes(
 
 
 def main() -> None:
-    if general_config.control_mode is ControlMode.BASE_ONLY:
+    if general_config.control_mode == 'base-only':
         raise RuntimeError(
             "control_mode='base-only' requires a VR script; "
             "use scripts/sim_vr.py or scripts/real_vr.py"
