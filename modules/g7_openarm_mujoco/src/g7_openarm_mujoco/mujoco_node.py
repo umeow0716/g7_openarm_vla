@@ -439,20 +439,11 @@ class MujocoNode:
 
         model = spec.compile()
         data  = mujoco.MjData(model)
+        # Boot pose like the real robot (arms down, J7 = 0.2); the lowlevel then
+        # drives the arms to general.initial_pos before unlocking the WBC.
         data.qpos[self.qpos_index_register.get(Joint.L7)] = 0.2
         data.qpos[self.qpos_index_register.get(Joint.R7)] = 0.2
-        for joint_config, qpos in general_config.initial_pos.items():
-            if self.is_vr:
-                continue
-            joint = Joint.name_to_joint(joint_config)
-            if joint is Joint.R8 or Joint is Joint.L8:
-                continue
-            if not RIGHT_ARM_ENABLED and joint in RIGHT_ARM_JOINT:
-                continue
-            if not LEFT_ARM_ENABLED  and joint in LEFT_ARM_JOINT:
-                continue
-            data.qpos[self.qpos_index_register.get(joint)] = qpos
-                    
+
         return model, data
 
 def main(is_sim=True, is_vr=False, is_hommi=False):

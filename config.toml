@@ -2,7 +2,7 @@
 debugging = true
 head_enabled = true
 control_mode = "arm-only" # wbc, arm-only, base-only, left/right-arm, left/right-arm-only
-initial_pos = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3]
+initial_pos = [-0.301, 0.0, 0.0, -2.268, 0.0, 0.0, -0.931] # TCP ~0.31 m ahead, 0.75 m high, pitched 30 deg down (J4 keeps 10 deg margin)
 initial_gripper = 1.0 # normalized openness: 0.010=closed, 1.0=open
 
 [dds]
