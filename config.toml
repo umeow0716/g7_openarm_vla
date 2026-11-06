@@ -51,11 +51,14 @@ fps = 60.0
 hz = 1.0
 
 [hommi]
-hz = 20.0 # HoMMI dataset/control frequency
-arm = "right" # training dataset arm_order; current model is single-arm
+hz = 20.0 # HoMMI dataset/control frequency (60 Hz data, down_sample_steps=3)
 device = "cuda:0"
 camera_fps = 30
 camera_timeout_ms = 1000
+# D435i serial numbers (`rs-enumerate-devices -s`); empty = not configured (required on the real robot).
+head_camera_serial = ""
+left_wrist_camera_serial = ""
+right_wrist_camera_serial = ""
 latency_compensation = true
 
 [vr]

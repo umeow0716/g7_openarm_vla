@@ -9,8 +9,12 @@ dependencies = [
     "g7-openarm-idl",
     "g7-openarm-pinnzoo",
     "g7-openarm-utils",
-    "hommi-train",
+    "diffusers",
+    "hommi-diffusion-policy",
+    "numpy",
+    "opencv-python",
     "pyrealsense2",
+    "torch",
     "unitree-sdk2py",
 ]
 

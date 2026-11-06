@@ -9,20 +9,26 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 import torch
-import torch.nn.functional as F
-from hommi_train.dataset import relative_pose9
 
-from .camera import RGBFrame
+from .geometry import relative_pose9
 from .state import RobotSnapshot
+from .vcam import HeadObservation
 
 FloatArray = npt.NDArray[np.float32]
+
+SIDES = ("left", "right")
+HEAD_RGB_KEY = "camera_head_main_rgb"
+HEAD_POINTMAP_KEY = "camera_head_pointmap"
+HEAD_MASK_KEY = "camera_head_pointmap_mask"
+WRIST_RGB_KEYS = {"left": "camera_left_main_rgb", "right": "camera_right_main_rgb"}
 
 
 @dataclass(frozen=True, slots=True)
 class ObservationSample:
     sequence: int
     timestamp: float
-    rgb: RGBFrame
+    head: HeadObservation
+    wrist_rgb: Mapping[str, npt.NDArray[np.uint8]]  # side -> [S, S, 3]
     robot: RobotSnapshot
 
 
@@ -59,152 +65,134 @@ class ObservationHistory:
             self._condition.notify_all()
 
 
-def _preprocess_rgb_uint8(
-    frames: torch.Tensor,
+def _transform_points(transform: npt.ArrayLike, points: FloatArray) -> FloatArray:
+    """Apply a 4x4 transform to ``[..., 3]`` points."""
+    t = np.asarray(transform, dtype=np.float32)
+    return (points @ t[:3, :3].T + t[:3, 3]).astype(np.float32, copy=False)
+
+
+def pointmap_mask(
+    pointmap: FloatArray,
+    head: FloatArray,
+    tcps: Sequence[FloatArray],
     *,
-    image_size: int,
-) -> torch.Tensor:
-    """Match hommi_train's deterministic black-pad-to-square + area resize."""
-    if frames.ndim != 4 or frames.shape[1] != 3:
-        raise ValueError(f"expected [N,3,H,W], got {tuple(frames.shape)}")
-    if image_size <= 0:
-        raise ValueError("image_size must be positive")
+    depth_range: tuple[float, float],
+    gripper_length: float,
+) -> npt.NDArray[np.bool_]:
+    """HoMMI ``crop_pointcloud``: valid depth range and not behind either gripper.
 
-    height, width = int(frames.shape[-2]), int(frames.shape[-1])
-    side = max(height, width)
-    pad_height = side - height
-    pad_width = side - width
-    top = pad_height // 2
-    bottom = pad_height - top
-    left = pad_width // 2
-    right = pad_width - left
-
-    x = F.pad(frames, (left, right, top, bottom), mode="constant", value=0)
-    if side != image_size:
-        x = F.interpolate(
-            x.to(dtype=torch.float32),
-            size=(image_size, image_size),
-            mode="area",
-        )
-        x = x.round_().clamp_(0, 255).to(dtype=torch.uint8)
-    elif x.dtype != torch.uint8:
-        x = x.round().clamp(0, 255).to(dtype=torch.uint8)
-    return x.contiguous()
+    ``pointmap`` is ``[H, W, 3]`` in the head optical frame; ``head`` and ``tcps``
+    are world poses at the same instant.
+    """
+    depth = pointmap[..., 2]
+    mask = (depth > depth_range[0]) & (depth < depth_range[1])
+    for tcp in tcps:
+        head_in_gripper = np.linalg.inv(tcp.astype(np.float64)) @ head.astype(np.float64)
+        z = _transform_points(head_in_gripper, pointmap)[..., 2]
+        mask &= z > -gripper_length
+    return mask
 
 
-class HommiObservationBuilder:
-    """Build the canonical single-arm HoMMI [B,T,...] observation dictionary."""
+class Ego3dObservationBuilder:
+    """Build HoMMI ``ego3d_lookat_policy`` observations (``reference_frame='left'``).
 
-    REQUIRED_LOW_DIM = (
-        "robot0_eef_pos",
-        "robot0_eef_rot_axis_angle",
-        "robot0_gripper_width",
-    )
+    Mirrors HoMMI's ``UmiTaskDataset`` / ``policy_server.get_real_umi_obs_dict``:
+    every pose, the head pointmap and its mask are expressed relative to the left
+    TCP at the newest observation step.
+    """
+
+    REFERENCE_SIDE = "left"
+    # HoMMI policy_server default for crop_pointcloud (dataset gripper_length).
+    GRIPPER_LENGTH = 0.13
 
     def __init__(
         self,
         shape_meta: Mapping[str, Any],
         *,
-        arm: str,
+        depth_range: tuple[float, float],
         device: torch.device,
     ) -> None:
-        self._shape_meta = shape_meta
-        self._arm = arm
-        self._device = device
-
         obs_meta = shape_meta.get("obs")
         if not isinstance(obs_meta, Mapping):
             raise ValueError("model shape_meta is missing obs metadata")
-
-        active = {
-            key: value
-            for key, value in obs_meta.items()
-            if not value.get("ignore_by_policy", False)
+        required = {
+            HEAD_RGB_KEY,
+            HEAD_POINTMAP_KEY,
+            *WRIST_RGB_KEYS.values(),
+            *(
+                f"gripper_{s}_{k}"
+                for s in SIDES
+                for k in ("eef_pos", "eef_rot_axis_angle", "gripper_width")
+            ),
         }
-        rgb_keys = [
-            key
-            for key, value in active.items()
-            if value.get("type", "low_dim") == "rgb"
-        ]
-        if len(rgb_keys) != 1:
-            raise ValueError(
-                "g7_openarm_hommi currently supports the canonical single-camera "
-                f"single-arm model, got RGB keys {rgb_keys}"
-            )
-        self.rgb_key = rgb_keys[0]
+        missing = sorted(required - set(obs_meta))
+        if missing:
+            raise ValueError(f"model is not an ego3d policy; missing obs keys {missing}")
 
-        for key in self.REQUIRED_LOW_DIM:
-            if key not in active:
-                raise ValueError(f"model is missing required observation key {key!r}")
-
-        horizons = {int(value.get("horizon", 1)) for value in active.values()}
+        horizons = {int(obs_meta[k].get("horizon", 1)) for k in required}
         if len(horizons) != 1:
-            raise ValueError(f"all active observations must share one horizon, got {horizons}")
+            raise ValueError(f"all observations must share one horizon, got {horizons}")
         self.horizon = horizons.pop()
-        if self.horizon != 2:
-            raise ValueError(
-                f"this deployment expects HoMMI obs horizon 2, model requires {self.horizon}"
-            )
 
-        rgb_shape = tuple(int(x) for x in active[self.rgb_key]["shape"])
-        if len(rgb_shape) != 3 or rgb_shape[0] != 3 or rgb_shape[1] != rgb_shape[2]:
-            raise ValueError(
-                f"RGB model input must be square [3,H,W], got {rgb_shape}"
-            )
-        self.image_size = rgb_shape[1]
+        self.head_size = int(obs_meta[HEAD_RGB_KEY]["shape"][1])
+        if tuple(obs_meta[HEAD_POINTMAP_KEY]["shape"]) != (3, self.head_size, self.head_size):
+            raise ValueError("head pointmap and head RGB must share one square resolution")
+        wrist_sizes = {int(obs_meta[k]["shape"][1]) for k in WRIST_RGB_KEYS.values()}
+        if len(wrist_sizes) != 1:
+            raise ValueError("left/right wrist RGB must share one resolution")
+        self.wrist_size = wrist_sizes.pop()
 
-        action_meta = shape_meta.get("action")
-        if not isinstance(action_meta, Mapping):
-            raise ValueError("model shape_meta is missing action metadata")
-        action_shape = tuple(int(x) for x in action_meta["shape"])
-        if action_shape != (10,):
-            raise ValueError(
-                "g7_openarm_hommi currently expects the user's single-arm 10-D "
-                f"model action, got {action_shape}"
-            )
+        self._depth_range = (float(depth_range[0]), float(depth_range[1]))
+        self._device = device
 
-    def build(
-        self,
-        samples: Sequence[ObservationSample],
-    ) -> dict[str, torch.Tensor]:
+    def build_numpy(self, samples: Sequence[ObservationSample]) -> dict[str, np.ndarray]:
         if len(samples) != self.horizon:
-            raise ValueError(
-                f"expected {self.horizon} observation samples, got {len(samples)}"
+            raise ValueError(f"expected {self.horizon} observation samples, got {len(samples)}")
+
+        base = samples[-1].robot.tcp(self.REFERENCE_SIDE).astype(np.float64)
+        base_inv = np.linalg.inv(base)
+
+        out: dict[str, np.ndarray] = {}
+        for side in SIDES:
+            tcps = np.stack([s.robot.tcp(side) for s in samples], axis=0)
+            pose9 = relative_pose9(base, tcps)
+            out[f"gripper_{side}_eef_pos"] = pose9[:, :3]
+            out[f"gripper_{side}_eef_rot_axis_angle"] = pose9[:, 3:9]
+            out[f"gripper_{side}_gripper_width"] = np.asarray(
+                [[s.robot.gripper_width(side)] for s in samples], dtype=np.float32
+            )
+            out[WRIST_RGB_KEYS[side]] = _to_chw_float(
+                np.stack([s.wrist_rgb[side] for s in samples], axis=0)
             )
 
-        latest_matrix = samples[-1].robot.matrix(self._arm)
-        world_history = np.stack(
-            [sample.robot.matrix(self._arm) for sample in samples],
-            axis=0,
-        )
-        pose9 = relative_pose9(latest_matrix, world_history)
-        gripper = np.asarray(
-            [
-                [sample.robot.gripper_openness(self._arm)]
-                for sample in samples
-            ],
-            dtype=np.float32,
-        )
+        points, masks = [], []
+        for s in samples:
+            robot = s.robot
+            mask = pointmap_mask(
+                s.head.pointmap,
+                robot.head,
+                (robot.left_tcp, robot.right_tcp),
+                depth_range=self._depth_range,
+                gripper_length=self.GRIPPER_LENGTH,
+            )
+            head_in_base = base_inv @ robot.head.astype(np.float64)
+            points.append(_transform_points(head_in_base, s.head.pointmap))
+            masks.append(mask)
+        out[HEAD_POINTMAP_KEY] = np.stack(points, axis=0).transpose(0, 3, 1, 2)
+        out[HEAD_MASK_KEY] = np.stack(masks, axis=0)[:, None].astype(np.float32)
+        out[HEAD_RGB_KEY] = _to_chw_float(np.stack([s.head.rgb for s in samples], axis=0))
+        return out
 
-        rgb_np = np.stack([sample.rgb for sample in samples], axis=0)
-        rgb = torch.from_numpy(rgb_np).permute(0, 3, 1, 2)
-        rgb = _preprocess_rgb_uint8(rgb, image_size=self.image_size)
-        rgb = rgb.to(dtype=torch.float32).div_(255.0)
-
-        tensors = {
-            self.rgb_key: rgb,
-            "robot0_eef_pos": torch.from_numpy(
-                pose9[:, :3].astype(np.float32, copy=False)
-            ),
-            "robot0_eef_rot_axis_angle": torch.from_numpy(
-                pose9[:, 3:9].astype(np.float32, copy=False)
-            ),
-            "robot0_gripper_width": torch.from_numpy(gripper),
-        }
+    def build(self, samples: Sequence[ObservationSample]) -> dict[str, torch.Tensor]:
         return {
-            key: value.unsqueeze(0).to(
-                device=self._device,
-                non_blocking=True,
-            )
-            for key, value in tensors.items()
+            key: torch.from_numpy(np.ascontiguousarray(value))
+            .unsqueeze(0)
+            .to(device=self._device, non_blocking=True)
+            for key, value in self.build_numpy(samples).items()
         }
+
+
+def _to_chw_float(images: npt.NDArray[np.uint8]) -> FloatArray:
+    if images.ndim != 4 or images.shape[-1] != 3 or images.dtype != np.uint8:
+        raise ValueError(f"expected uint8 [T,H,W,3], got {images.shape} {images.dtype}")
+    return images.transpose(0, 3, 1, 2).astype(np.float32) / 255.0

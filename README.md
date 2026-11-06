@@ -20,17 +20,18 @@ uv run scripts/run_sim.py
 
 ## HoMMI deployment
 
-The integrated deployment module is `modules/g7_openarm_hommi`. Put the trained
-artifacts under `modules/g7_openarm_hommi/model/` and use:
+The integrated deployment module is `modules/g7_openarm_hommi` (HoMMI
+`ego3d_lookat_policy`: bimanual + head look-at). Convert the training checkpoint
+once, then launch:
 
 ```bash
+uv run python scripts/convert_hommi_ckpt.py ~/Downloads/latest.ckpt
 uv run python scripts/sim_hommi.py
 uv run python scripts/real_hommi.py
 ```
 
-The simulation launcher uses a 1920x1080 black RGB camera; the real launcher uses
-a 1920x1080 `pyrealsense2` RGB stream. `[hommi].arm` must match the training
-dataset's single-arm `arm_order`.
+The real launcher needs the three D435i serials in `[hommi]` of `config.toml`.
+See `modules/g7_openarm_hommi/README.md` for camera, frame and action details.
 
 ## Gripper coordinate convention
 

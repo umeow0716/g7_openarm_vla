@@ -4,103 +4,92 @@ from dataclasses import dataclass
 
 import numpy as np
 import numpy.typing as npt
-from hommi_train.dataset import pose7_wxyz_to_matrix
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+from unitree_sdk2py.idl.default import HGLowState_
 
 from g7_openarm_idl import Odom
-from g7_openarm_pinnzoo import PinnZooModel, kinematics
-from g7_openarm_utils import (
-    LEFT_GRIPPER_MOTOR_NAME,
-    RIGHT_GRIPPER_MOTOR_NAME,
-    motor_index,
-)
+from g7_openarm_pinnzoo import PinnZooModel, build_lib_x, kinematics
+from g7_openarm_utils.layout import Joint, KinBody, low_idx
+
+from .geometry import pose7_wxyz_to_matrix, quaternion_wxyz_to_matrix
+from .gripper import GripperWidthRange
 
 FloatArray = npt.NDArray[np.float32]
+
+# Fixed HEAD_color_link -> HEAD_color_optical_frame rotation from the MJCF/URDF
+# (quat wxyz = -0.5 0.5 -0.5 0.5): z forward, x right, y down. This is the frame
+# HoMMI's head pose/pointmap use (iPhone ARKit camera pose * diag(1, -1, -1)).
+COLOR_LINK_TO_OPTICAL = np.eye(4, dtype=np.float32)
+COLOR_LINK_TO_OPTICAL[:3, :3] = quaternion_wxyz_to_matrix([-0.5, 0.5, -0.5, 0.5])
 
 
 @dataclass(frozen=True, slots=True)
 class RobotSnapshot:
+    """Robot state at one observation instant, in the world (odom) frame.
+
+    ``left_tcp`` / ``right_tcp`` are the FK ``*_tcp`` frames, which must follow
+    HoMMI's TCP convention (origin at the fingertip centre, +z along the approach
+    direction, +y pointing away from the wrist camera; verify with
+    ``scripts/check_hommi_frames.py``). ``head`` is the head color optical frame
+    and gripper widths are in meters.
+    """
+
     timestamp: float
-    left_pose7: FloatArray
-    right_pose7: FloatArray
-    left_matrix: FloatArray
-    right_matrix: FloatArray
-    left_gripper_openness: float
-    right_gripper_openness: float
+    left_tcp: FloatArray
+    right_tcp: FloatArray
+    head: FloatArray
+    left_gripper_width: float
+    right_gripper_width: float
 
-    def pose7(self, side: str) -> FloatArray:
+    def tcp(self, side: str) -> FloatArray:
         if side == "left":
-            return self.left_pose7
+            return self.left_tcp
         if side == "right":
-            return self.right_pose7
+            return self.right_tcp
         raise ValueError(f"unknown arm side {side!r}")
 
-    def matrix(self, side: str) -> FloatArray:
+    def gripper_width(self, side: str) -> float:
         if side == "left":
-            return self.left_matrix
+            return self.left_gripper_width
         if side == "right":
-            return self.right_matrix
-        raise ValueError(f"unknown arm side {side!r}")
-
-    def gripper_openness(self, side: str) -> float:
-        if side == "left":
-            return self.left_gripper_openness
-        if side == "right":
-            return self.right_gripper_openness
+            return self.right_gripper_width
         raise ValueError(f"unknown arm side {side!r}")
 
 
 class RobotStateProjector:
     """Convert the latest lowstate/odom pair to HoMMI observation state via FK."""
 
-    def __init__(self) -> None:
+    def __init__(self, gripper_ranges: dict[str, GripperWidthRange]) -> None:
+        self._gripper = gripper_ranges
         self._model = PinnZooModel()
+        size = self._model.kinematics_body_size
+        self._kin_slice = {
+            KinBody.name_to_kin_body(name): slice(i * size, i * size + 7)
+            for i, name in enumerate(self._model.kinematics_bodies)
+        }
 
-    def snapshot(
-        self,
-        lowstate: LowState_,
-        odom: Odom,
-        *,
-        timestamp: float,
-    ) -> RobotSnapshot:
-        x_lib = self._model.build_x_lib(lowstate, odom)
-        kin = np.asarray(kinematics(self._model, x_lib), dtype=np.float64)
+    def _pose(self, kin: npt.NDArray[np.float64], body: KinBody) -> FloatArray:
+        # Kinematics bodies are [x, y, z, qw, qx, qy, qz, ...] (as used by the WBC).
+        pose7 = kin[self._kin_slice[body]].astype(np.float32)
+        return pose7_wxyz_to_matrix(pose7).astype(np.float32, copy=False)
+
+    def snapshot(self, lowstate: HGLowState_, odom: Odom, *, timestamp: float) -> RobotSnapshot:
+        kin = np.asarray(
+            kinematics(self._model, build_lib_x(self._model, lowstate, odom)), dtype=np.float64
+        )
         if kin.shape != (self._model.kinematics_size,):
             raise RuntimeError(
                 f"PinnZoo kinematics returned shape {kin.shape}, "
                 f"expected ({self._model.kinematics_size},)"
             )
 
-        left_pose7 = kin[self._model.kinematics_pose_slice("L_tcp")].astype(
-            np.float32, copy=True
-        )
-        right_pose7 = kin[self._model.kinematics_pose_slice("R_tcp")].astype(
-            np.float32, copy=True
-        )
-        left_matrix = pose7_wxyz_to_matrix(left_pose7).astype(np.float32, copy=False)
-        right_matrix = pose7_wxyz_to_matrix(right_pose7).astype(np.float32, copy=False)
-
-        left_open = float(
-            np.clip(
-                lowstate.motor_state[motor_index(LEFT_GRIPPER_MOTOR_NAME)].q,
-                0.0,
-                1.0,
-            )
-        )
-        right_open = float(
-            np.clip(
-                lowstate.motor_state[motor_index(RIGHT_GRIPPER_MOTOR_NAME)].q,
-                0.0,
-                1.0,
-            )
-        )
-
+        # Gripper motor state q is normalized openness (0=closed, 1=open).
+        left_open = lowstate.motor_state[low_idx(Joint.L8)].q
+        right_open = lowstate.motor_state[low_idx(Joint.R8)].q
         return RobotSnapshot(
             timestamp=float(timestamp),
-            left_pose7=left_pose7,
-            right_pose7=right_pose7,
-            left_matrix=left_matrix,
-            right_matrix=right_matrix,
-            left_gripper_openness=left_open,
-            right_gripper_openness=right_open,
+            left_tcp=self._pose(kin, KinBody.L_TCP),
+            right_tcp=self._pose(kin, KinBody.R_TCP),
+            head=self._pose(kin, KinBody.HEAD) @ COLOR_LINK_TO_OPTICAL,
+            left_gripper_width=self._gripper["left"].to_width(left_open),
+            right_gripper_width=self._gripper["right"].to_width(right_open),
         )

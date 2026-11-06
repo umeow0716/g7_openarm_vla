@@ -23,7 +23,6 @@ members = [
 ]
 
 [tool.uv.sources]
-hommi-train = { git = "https://github.com/umeow0716/hommi_train.git" }
 hommi-dataset = { git = "https://github.com/umeow0716/hommi_dataset.git" }
 hommi-diffusion-policy = { git = "https://github.com/umeow0716/hommi_diffusion_policy.git" }
 
