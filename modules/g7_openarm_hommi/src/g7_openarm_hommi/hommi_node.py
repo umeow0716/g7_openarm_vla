@@ -15,12 +15,17 @@ from g7_openarm_utils.layout import HEAD_ENABLED, LEFT_ARM_ENABLED, RIGHT_ARM_EN
 
 from .camera import BlackCamera, CameraInput, RealSenseCamera
 from .config import config
-from .observation import Ego3dObservationBuilder, ObservationHistory, ObservationSample
+from .observation import (
+    Ego3dObservationBuilder,
+    ObservationHistory,
+    ObservationSample,
+)
 from .operator import OperatorControl, OperatorState
 from .policy import HommiPolicyRunner
 from .state import RobotSnapshot, RobotStateProjector
 from .trajectory import AtomicTrajectory, TargetPoint, decode_action_chunk, snapshot_target
 from .vcam import process_head_frame, process_wrist_frame
+from .viewer import ObservationWindow, compose, display_available
 
 CameraKind = Literal["simulation", "realsense"]
 
@@ -78,7 +83,7 @@ class HommiNode:
         self._policy = HommiPolicyRunner(device=config.device)
         self._builder = Ego3dObservationBuilder(
             self._policy.shape_meta,
-            depth_range=self._policy.depth_range,  # type: ignore[arg-type]
+            crop=self._policy.crop,
             device=self._policy.device,
         )
         if self._builder.horizon != self._policy.n_obs_steps:
@@ -267,6 +272,24 @@ class HommiNode:
             next_tick += config.publish_interval
             next_tick = self._wait_until_next_tick(next_tick)
 
+    def observation_canvas(self):
+        """Operator view of the newest observation (None before the first sample)."""
+        sample = self._history.latest()
+        if sample is None:
+            return None
+        robot = sample.robot
+        mask = self._policy.crop.mask(
+            sample.head.pointmap, robot.head, (robot.left_tcp, robot.right_tcp)
+        )
+        return compose(
+            sample.head.pointmap,
+            mask,
+            sample.wrist_rgb["left"],
+            sample.wrist_rgb["right"],
+            crop_ratio=self._policy.policy.obs_encoder.config.eval_crop_ratio,
+            status=self._operator.state.value,
+        )
+
     def raise_if_failed(self) -> None:
         with self._error_lock:
             error = self._fatal_error
@@ -295,13 +318,22 @@ def run(camera_kind: CameraKind) -> None:
 
     signal.signal(signal.SIGTERM, request_stop)
 
+    # The observation window is driven from this (main) thread: Qt requires it.
+    window = ObservationWindow() if display_available() else None
+    if window is None:
+        print("HoMMI: no display, observation window disabled", flush=True)
     try:
         while not stop_requested.is_set():
             node.raise_if_failed()
-            time.sleep(0.2)
+            if window is not None:
+                window.show(node.observation_canvas(), wait_ms=66)
+            else:
+                time.sleep(0.2)
     except KeyboardInterrupt:
         pass
     finally:
+        if window is not None:
+            window.close()
         node.close()
 
 

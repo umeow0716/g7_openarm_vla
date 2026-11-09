@@ -4,9 +4,9 @@ import pytest
 from scipy.spatial.transform import Rotation
 
 from g7_openarm_hommi.camera import PinholeIntrinsics
+from g7_openarm_hommi.crop import pointmap_mask
 from g7_openarm_hommi.geometry import matrix_to_rotation_6d_umi
 from g7_openarm_hommi.gripper import GripperWidthRange
-from g7_openarm_hommi.observation import pointmap_mask
 from g7_openarm_hommi.state import COLOR_LINK_TO_OPTICAL, RobotSnapshot
 from g7_openarm_hommi.trajectory import ARM_SLICES, LOOKAT, decode_action_chunk
 from g7_openarm_hommi.vcam import (
@@ -249,3 +249,32 @@ def test_without_latency_compensation_chunk_restarts_now():
     assert traj.replace(_chunk(10.0), now=12.0, latency_compensation=False) == 0
     assert traj.sample(now=12.05).left_pose7[0] == pytest.approx(0.0)
     assert traj.sample(now=12.10).left_pose7[0] == pytest.approx(1.0)
+
+
+def test_point_cloud_crop_follows_checkpoint_settings():
+    from g7_openarm_hommi.crop import PointCloudCrop
+
+    head = np.eye(4, dtype=np.float32)
+    pts = np.zeros((1, 3, 3), dtype=np.float32)
+    pts[0, :, 2] = [0.05, 1.0, 0.3]
+    tcp = pose([0, 0, 0], [0.0, 0.0, 0.5])  # point 2 is 0.2 m behind this TCP
+    crop = PointCloudCrop(enabled=True, depth_range=(0.1, 4.0), gripper_length=0.13)
+    assert crop.mask(pts, head, (tcp,)).tolist() == [[False, True, False]]
+    longer = PointCloudCrop(enabled=True, depth_range=(0.1, 4.0), gripper_length=0.25)
+    assert longer.mask(pts, head, (tcp,)).tolist() == [[False, True, True]]
+    assert PointCloudCrop(enabled=False).mask(pts, head, (tcp,)).all()
+
+
+def test_runner_reads_crop_from_checkpoint_config():
+    """The ego3d checkpoint enables cropping with depth 0.1-4.0 m and the 0.13 m default."""
+    import torch
+
+    from g7_openarm_hommi.policy import DEFAULT_ARTIFACT_NAME, module_model_dir
+
+    path = module_model_dir() / DEFAULT_ARTIFACT_NAME
+    if not path.is_file():
+        pytest.skip("ego3d artifact not converted")
+    cfg = torch.load(path, map_location="cpu", weights_only=True)["cfg"]["task"]["dataset"]
+    assert cfg["crop_pointcloud"] is True
+    assert list(cfg["depth_range"]) == [0.1, 4.0]
+    assert "gripper_length" not in cfg  # -> HoMMI default 0.13

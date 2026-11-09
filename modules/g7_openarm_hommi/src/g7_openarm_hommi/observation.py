@@ -10,6 +10,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 
+from .crop import PointCloudCrop, transform_points
 from .geometry import relative_pose9
 from .state import RobotSnapshot
 from .vcam import HeadObservation
@@ -60,37 +61,13 @@ class ObservationHistory:
                 self._condition.wait(timeout=0.1)
         return None
 
+    def latest(self) -> ObservationSample | None:
+        with self._condition:
+            return self._samples[-1] if self._samples else None
+
     def wake(self) -> None:
         with self._condition:
             self._condition.notify_all()
-
-
-def _transform_points(transform: npt.ArrayLike, points: FloatArray) -> FloatArray:
-    """Apply a 4x4 transform to ``[..., 3]`` points."""
-    t = np.asarray(transform, dtype=np.float32)
-    return (points @ t[:3, :3].T + t[:3, 3]).astype(np.float32, copy=False)
-
-
-def pointmap_mask(
-    pointmap: FloatArray,
-    head: FloatArray,
-    tcps: Sequence[FloatArray],
-    *,
-    depth_range: tuple[float, float],
-    gripper_length: float,
-) -> npt.NDArray[np.bool_]:
-    """HoMMI ``crop_pointcloud``: valid depth range and not behind either gripper.
-
-    ``pointmap`` is ``[H, W, 3]`` in the head optical frame; ``head`` and ``tcps``
-    are world poses at the same instant.
-    """
-    depth = pointmap[..., 2]
-    mask = (depth > depth_range[0]) & (depth < depth_range[1])
-    for tcp in tcps:
-        head_in_gripper = np.linalg.inv(tcp.astype(np.float64)) @ head.astype(np.float64)
-        z = _transform_points(head_in_gripper, pointmap)[..., 2]
-        mask &= z > -gripper_length
-    return mask
 
 
 class Ego3dObservationBuilder:
@@ -102,14 +79,12 @@ class Ego3dObservationBuilder:
     """
 
     REFERENCE_SIDE = "left"
-    # HoMMI policy_server default for crop_pointcloud (dataset gripper_length).
-    GRIPPER_LENGTH = 0.13
 
     def __init__(
         self,
         shape_meta: Mapping[str, Any],
         *,
-        depth_range: tuple[float, float],
+        crop: PointCloudCrop,
         device: torch.device,
     ) -> None:
         obs_meta = shape_meta.get("obs")
@@ -142,7 +117,7 @@ class Ego3dObservationBuilder:
             raise ValueError("left/right wrist RGB must share one resolution")
         self.wrist_size = wrist_sizes.pop()
 
-        self._depth_range = (float(depth_range[0]), float(depth_range[1]))
+        self.crop = crop
         self._device = device
 
     def build_numpy(self, samples: Sequence[ObservationSample]) -> dict[str, np.ndarray]:
@@ -168,15 +143,9 @@ class Ego3dObservationBuilder:
         points, masks = [], []
         for s in samples:
             robot = s.robot
-            mask = pointmap_mask(
-                s.head.pointmap,
-                robot.head,
-                (robot.left_tcp, robot.right_tcp),
-                depth_range=self._depth_range,
-                gripper_length=self.GRIPPER_LENGTH,
-            )
+            mask = self.crop.mask(s.head.pointmap, robot.head, (robot.left_tcp, robot.right_tcp))
             head_in_base = base_inv @ robot.head.astype(np.float64)
-            points.append(_transform_points(head_in_base, s.head.pointmap))
+            points.append(transform_points(head_in_base, s.head.pointmap))
             masks.append(mask)
         out[HEAD_POINTMAP_KEY] = np.stack(points, axis=0).transpose(0, 3, 1, 2)
         out[HEAD_MASK_KEY] = np.stack(masks, axis=0)[:, None].astype(np.float32)

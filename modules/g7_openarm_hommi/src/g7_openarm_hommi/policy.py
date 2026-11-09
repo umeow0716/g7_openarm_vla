@@ -15,6 +15,7 @@ from hommi_diffusion_policy import (
 )
 
 from .checkpoint import ARTIFACT_FORMAT
+from .crop import PointCloudCrop
 from .gripper import GripperWidthRange
 
 FloatArray = npt.NDArray[np.float32]
@@ -141,7 +142,13 @@ class HommiPolicyRunner:
             )
             for side in ("left", "right")
         }
-        self.depth_range = tuple(float(x) for x in dataset_cfg.get("depth_range", (0.1, 4.0)))
+        # HoMMI UmiTaskDataset defaults: crop_pointcloud=False, gripper_length=0.13.
+        depth_range = dataset_cfg.get("depth_range", (0.1, 0.8))
+        self.crop = PointCloudCrop(
+            enabled=bool(dataset_cfg.get("crop_pointcloud", False)),
+            depth_range=(float(depth_range[0]), float(depth_range[1])),
+            gripper_length=float(dataset_cfg.get("gripper_length", 0.13) or 0.13),
+        )
 
         # Run inference with the precision the policy was trained with
         # (accelerate's training.mixed_precision: "no" | "bf16" | "fp16").
