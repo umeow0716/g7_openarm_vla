@@ -98,6 +98,11 @@ class TerminalKeys:
     def __init__(self) -> None:
         self._fd: int | None = None
         self._saved: list[Any] | None = None
+        if not sys.stdout.isatty():
+            # Only take keys from a terminal that is actually showing the
+            # monitor; a launcher started in the background (output redirected)
+            # must not grab the keyboard of whatever terminal it inherited.
+            return
         try:
             self._fd = os.open("/dev/tty", os.O_RDONLY | os.O_NONBLOCK)
             self._saved = termios.tcgetattr(self._fd)

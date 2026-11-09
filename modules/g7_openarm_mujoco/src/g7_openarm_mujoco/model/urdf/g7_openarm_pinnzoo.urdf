@@ -773,7 +773,7 @@
   </joint>
   <link name="R_tcp" />
   <joint name="R_tcp_joint" type="fixed">
-    <origin xyz="-0.00103 0.03132 -0.20576" rpy="3.141592653589793 0 1.570796326794897" />
+    <origin xyz="-0.00103 0.03132 -0.20576" rpy="3.141592653589793 0 -1.570796326794897" />
     <parent link="R_link7" />
     <child link="R_tcp" />
   </joint>
