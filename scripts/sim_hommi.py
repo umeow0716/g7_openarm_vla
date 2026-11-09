@@ -134,6 +134,14 @@ def parse_args() -> argparse.Namespace:
         default="0",
         help="demonstration index (sorted by time) or a unique title substring",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("policy", "trajectory"),
+        default="policy",
+        help="policy: the recording replaces the cameras and the robot follows the "
+        "policy; trajectory: no inference, the robot follows the demonstrated "
+        "end-effector trajectory (the observation window still shows the recording)",
+    )
     parser.add_argument("--loop", action="store_true", help="restart the recording at the end")
     return parser.parse_args()
 
@@ -149,9 +157,10 @@ def main() -> None:
         replay = ReplayOptions(
             root=str(args.dataset.expanduser().resolve()),
             episode=args.episode,
+            mode=args.mode,
             loop=args.loop,
         )
-        print(f"Dataset cameras: {replay.root} (episode {replay.episode})")
+        print(f"Dataset replay: {replay.root} (episode {replay.episode}, mode {replay.mode})")
 
     if general_config.control_mode is ControlMode.BASE_ONLY:
         raise RuntimeError(

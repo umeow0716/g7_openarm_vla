@@ -30,6 +30,10 @@ from .viewer import ObservationWindow, compose, display_available
 
 CameraKind = Literal["simulation", "realsense"]
 
+# Trajectory replay: time to move from the current pose to the first replayed
+# frame (at the start and when --loop wraps), so the arms never jump.
+REPLAY_RAMP_S = 1.5
+
 
 def _validate_control_mode() -> None:
     if not (LEFT_ARM_ENABLED and RIGHT_ARM_ENABLED):
@@ -104,6 +108,8 @@ class HommiNode:
         self._control_lock = threading.Lock()
         # Dataset replay replaces the cameras only; robot state still comes from FK.
         self._replay = None if replay is None else self._make_replay(replay)
+        self._replay_anchored = False
+        self._replay_ramp_until = 0.0
         self._cameras = {} if self._replay is not None else _make_cameras(camera_kind)
 
         self._publisher = build_pub("rt/target", Target)
@@ -133,7 +139,8 @@ class HommiNode:
             f"precision={self._policy.precision}, obs_horizon={self._builder.horizon}, "
             f"action_steps={self._policy.n_action_steps}, hz={config.hz:g}, "
             f"publish_hz={config.publish_hz:g}, "
-            f"cameras={'dataset' if replay else camera_kind}; waiting for Enter in the monitor",
+            f"cameras={f'dataset ({replay.mode} replay)' if replay else camera_kind}; "
+            "waiting for Enter in the monitor",
             flush=True,
         )
 
@@ -212,10 +219,7 @@ class HommiNode:
                 timestamp = time.monotonic()
                 robot = self._projector.snapshot(*state, timestamp=timestamp)
                 if self._replay is not None:
-                    # One recorded step per observation tick, only while running;
-                    # before the start and while paused the current frame is held.
-                    if self._operator.state is OperatorState.RUNNING:
-                        self._replay.advance()
+                    self._replay_step(robot, timestamp)
                     head, wrist = self._replay.frame()
                 else:
                     head = process_head_frame(frames["head"], output_size=self._builder.head_size)
@@ -240,6 +244,46 @@ class HommiNode:
             next_tick += config.interval
             next_tick = self._wait_until_next_tick(next_tick)
 
+    def _replay_step(self, robot: RobotSnapshot, now: float) -> None:
+        """Advance the recording one step per tick while running.
+
+        Before the start and while paused the current frame is held. In
+        ``trajectory`` mode this also commands the demonstrated targets.
+        """
+        replay = self._replay
+        assert replay is not None
+        if replay.options.mode == "policy":
+            if self._operator.state is OperatorState.RUNNING:
+                replay.advance()
+            return
+        with self._control_lock:
+            if self._operator.state is not OperatorState.RUNNING:
+                return
+            ranges = self._policy.gripper_ranges
+            if not self._replay_anchored:
+                replay.anchor(robot.left_tcp)
+                self._replay_anchored = True
+                self._ramp_to_current(now)
+                return
+            if now < self._replay_ramp_until:
+                return  # still moving to the first frame
+            if replay.advance():
+                self._ramp_to_current(now)  # --loop wrapped: move back to the start
+                return
+            points = [
+                replay.target(k, execute_at=now + (k + 1) * config.interval, gripper_ranges=ranges)
+                for k in range(self._policy.n_action_steps)
+            ]
+            self._trajectory.replace(points, now=now, latency_compensation=True)
+
+    def _ramp_to_current(self, now: float) -> None:
+        assert self._replay is not None
+        self._replay_ramp_until = now + REPLAY_RAMP_S
+        first = self._replay.target(
+            0, execute_at=self._replay_ramp_until, gripper_ranges=self._policy.gripper_ranges
+        )
+        self._trajectory.replace([first], now=now, latency_compensation=True)
+
     def _inference_loop(self) -> None:
         last_sequence = -1
         while not self._stop.is_set():
@@ -250,6 +294,8 @@ class HommiNode:
             last_sequence = samples[-1].sequence
             if self._operator.state is not OperatorState.RUNNING:
                 continue
+            if self._replay is not None and self._replay.options.mode == "trajectory":
+                continue  # the observation loop commands the recorded trajectory
             generation = self._operator.generation
             obs = self._builder.build(samples)
             action_chunk = self._policy.predict(obs)
