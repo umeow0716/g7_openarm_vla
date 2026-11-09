@@ -22,6 +22,14 @@ from .config import config
 from .ik_solver import G7OpenArmLQR
 
 
+def gripper_openness(value: float) -> float:
+    """Target gripper is normalized openness (0=closed, 1=open), passed to the motor q."""
+    value = float(value)
+    if not np.isfinite(value):
+        return float(general_config.initial_gripper)
+    return float(np.clip(value, 0.0, 1.0))
+
+
 def vr_joy_to_body_command(joy: VRJoy):
     axes = np.clip(
         np.array([joy.ly * 0.5, -joy.lx * 0.5, -joy.rx * 0.5], dtype=np.float64),
@@ -88,6 +96,8 @@ class WBCNode:
         cmd.mobile = self.base_lpf.update(raw_base_cmd).tolist()
         if general_config.head_enabled:
             cmd.head = result[-2:].tolist()
+        cmd.left_gripper = gripper_openness(self.target.left_gripper)
+        cmd.right_gripper = gripper_openness(self.target.right_gripper)
 
         self.wbclowcmd_pub.Write(cmd)
 
