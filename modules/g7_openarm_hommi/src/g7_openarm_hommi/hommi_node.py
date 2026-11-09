@@ -22,6 +22,7 @@ from .observation import (
 )
 from .operator import OperatorControl, OperatorState
 from .policy import HommiPolicyRunner
+from .replay import DatasetReplay, ReplayOptions
 from .state import RobotSnapshot, RobotStateProjector
 from .trajectory import AtomicTrajectory, TargetPoint, decode_action_chunk, snapshot_target
 from .vcam import process_head_frame, process_wrist_frame
@@ -69,7 +70,7 @@ def _make_cameras(kind: CameraKind) -> dict[str, CameraInput]:
 
 
 class HommiNode:
-    def __init__(self, *, camera_kind: CameraKind) -> None:
+    def __init__(self, *, camera_kind: CameraKind, replay: ReplayOptions | None = None) -> None:
         _validate_control_mode()
 
         self._stop = threading.Event()
@@ -101,7 +102,9 @@ class HommiNode:
         # Serializes "check operator state + queue a chunk" against pause/start,
         # so a chunk finished just as the operator pauses cannot overwrite the hold.
         self._control_lock = threading.Lock()
-        self._cameras = _make_cameras(camera_kind)
+        # Dataset replay replaces the cameras only; robot state still comes from FK.
+        self._replay = None if replay is None else self._make_replay(replay)
+        self._cameras = {} if self._replay is not None else _make_cameras(camera_kind)
 
         self._publisher = build_pub("rt/target", Target)
         self._lowstate_sub = build_sub("rt/lowstate", HGLowState_, self._lowstate_handler)
@@ -130,8 +133,24 @@ class HommiNode:
             f"precision={self._policy.precision}, obs_horizon={self._builder.horizon}, "
             f"action_steps={self._policy.n_action_steps}, hz={config.hz:g}, "
             f"publish_hz={config.publish_hz:g}, "
-            f"cameras={camera_kind}; waiting for Enter in the monitor",
+            f"cameras={'dataset' if replay else camera_kind}; waiting for Enter in the monitor",
             flush=True,
+        )
+
+    def _make_replay(self, options: ReplayOptions) -> DatasetReplay:
+        meta = self._policy.shape_meta
+        step = int(meta["obs"]["camera_head_pointmap"]["down_sample_steps"])
+        if abs(config.hz * step - 60.0) > 1e-6:
+            print(
+                f"HoMMI replay: hommi.hz={config.hz:g} plays the 60 Hz recording at "
+                f"{config.hz * step / 60.0:.2f}x speed",
+                flush=True,
+            )
+        return DatasetReplay(
+            options,
+            head_size=self._builder.head_size,
+            wrist_size=self._builder.wrist_size,
+            step=step,
         )
 
     def _on_operator_change(self, state: OperatorState) -> None:
@@ -192,11 +211,20 @@ class HommiNode:
                 assert state is not None
                 timestamp = time.monotonic()
                 robot = self._projector.snapshot(*state, timestamp=timestamp)
-                head = process_head_frame(frames["head"], output_size=self._builder.head_size)
-                wrist = {
-                    side: process_wrist_frame(frames[side], output_size=self._builder.wrist_size)
-                    for side in ("left", "right")
-                }
+                if self._replay is not None:
+                    # One recorded step per observation tick, only while running;
+                    # before the start and while paused the current frame is held.
+                    if self._operator.state is OperatorState.RUNNING:
+                        self._replay.advance()
+                    head, wrist = self._replay.frame()
+                else:
+                    head = process_head_frame(frames["head"], output_size=self._builder.head_size)
+                    wrist = {
+                        side: process_wrist_frame(
+                            frames[side], output_size=self._builder.wrist_size
+                        )
+                        for side in ("left", "right")
+                    }
                 self._sample_sequence += 1
                 self._latest_robot = robot
                 self._history.append(
@@ -287,7 +315,8 @@ class HommiNode:
             sample.wrist_rgb["left"],
             sample.wrist_rgb["right"],
             crop_ratio=self._policy.policy.obs_encoder.config.eval_crop_ratio,
-            status=self._operator.state.value,
+            status=self._operator.state.value
+            + ("" if self._replay is None else f" | {self._replay.status()}"),
         )
 
     def raise_if_failed(self) -> None:
@@ -307,9 +336,9 @@ class HommiNode:
             camera.close()
 
 
-def run(camera_kind: CameraKind) -> None:
+def run(camera_kind: CameraKind, replay: ReplayOptions | None = None) -> None:
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
-    node = HommiNode(camera_kind=camera_kind)
+    node = HommiNode(camera_kind=camera_kind, replay=replay)
 
     stop_requested = threading.Event()
 
@@ -337,10 +366,10 @@ def run(camera_kind: CameraKind) -> None:
         node.close()
 
 
-def main(camera_kind: CameraKind | None = None) -> None:
+def main(camera_kind: CameraKind | None = None, replay: ReplayOptions | None = None) -> None:
     # Standalone CLI defaults to the real cameras. Simulation launchers pass the
-    # explicit black-camera mode.
-    run("realsense" if camera_kind is None else camera_kind)
+    # explicit black-camera mode, or ``replay`` to use a recorded dataset as cameras.
+    run("realsense" if camera_kind is None else camera_kind, replay)
 
 
 if __name__ == "__main__":

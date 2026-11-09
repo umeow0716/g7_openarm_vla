@@ -1,3 +1,4 @@
+import argparse
 import multiprocessing as mp
 import os
 import signal
@@ -9,6 +10,11 @@ from g7_openarm_config import general_config
 from g7_openarm_utils.layout import ControlMode
 from multiprocessing.context import SpawnProcess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Imported lazily: spawn re-imports this module in every child process.
+    from g7_openarm_hommi.replay import ReplayOptions
 
 LOG_ROOT = Path("logs")
 
@@ -81,10 +87,10 @@ def run_monitor() -> None:
     main()
 
 
-def run_hommi() -> None:
+def run_hommi(replay: "ReplayOptions | None" = None) -> None:
     from g7_openarm_hommi.hommi_node import main
 
-    run_silently(lambda: main("simulation"), "hommi")
+    run_silently(lambda: main("simulation", replay), "hommi")
 
 
 def stop_processes(
@@ -115,7 +121,38 @@ def stop_processes(
         process.join()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="HoMMI ego3d policy in MuJoCo.")
+    parser.add_argument(
+        "--dataset",
+        type=Path,
+        help="iPhUMI export used as the cameras (head pointmap + wrist RGB) instead "
+        "of the black sim cameras; robot state still comes from the simulation",
+    )
+    parser.add_argument(
+        "--episode",
+        default="0",
+        help="demonstration index (sorted by time) or a unique title substring",
+    )
+    parser.add_argument("--loop", action="store_true", help="restart the recording at the end")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    replay = None
+    if args.dataset is not None:
+        from g7_openarm_hommi.replay import ReplayOptions
+
+        if not args.dataset.is_dir():
+            raise SystemExit(f"--dataset {args.dataset} is not a directory")
+        replay = ReplayOptions(
+            root=str(args.dataset.expanduser().resolve()),
+            episode=args.episode,
+            loop=args.loop,
+        )
+        print(f"Dataset cameras: {replay.root} (episode {replay.episode})")
+
     if general_config.control_mode is ControlMode.BASE_ONLY:
         raise RuntimeError(
             "control_mode='base-only' requires a VR script; "
@@ -130,7 +167,7 @@ def main() -> None:
         ctx.Process(target=run_state_estimator, name="g7-state-est"),
         ctx.Process(target=run_monitor, name="g7-monitor"),
         ctx.Process(target=run_wbc, name="g7-wbc"),
-        ctx.Process(target=run_hommi, name="g7-hommi"),
+        ctx.Process(target=run_hommi, args=(replay,), name="g7-hommi"),
     ]
 
     for process in processes:
