@@ -23,10 +23,17 @@ from .observation import (
 from .operator import OperatorControl, OperatorState
 from .policy import HommiPolicyRunner
 from .replay import DatasetReplay, ReplayOptions
-from .state import RobotSnapshot, RobotStateProjector
+from .state import (
+    COLOR_LINK_TO_OPTICAL,
+    RobotSnapshot,
+    RobotStateProjector,
+    StateHistory,
+    head_extrinsic,
+)
 from .trajectory import AtomicTrajectory, TargetPoint, decode_action_chunk, snapshot_target
 from .vcam import process_head_frame, process_wrist_frame
 from .viewer import ObservationWindow, compose, display_available
+from .zed_camera import ZedStereoCamera
 
 CameraKind = Literal["simulation", "realsense"]
 
@@ -58,6 +65,15 @@ def _make_cameras(kind: CameraKind) -> dict[str, CameraInput]:
     serials = config.camera_serials()
     cameras: dict[str, CameraInput] = {}
     try:
+        if config.head_camera == "zed2":
+            cameras["head"] = ZedStereoCamera(
+                video_device=(
+                    int(config.zed_device) if config.zed_device.isdigit() else config.zed_device
+                ),
+                calibration=config.zed_calibration,
+                timeout_ms=config.camera_timeout_ms,
+                cuda_device=config.device,
+            )
         for name, serial in serials.items():
             cameras[name] = RealSenseCamera(
                 serial,
@@ -80,9 +96,7 @@ class HommiNode:
         self._stop = threading.Event()
         self._error_lock = threading.Lock()
         self._fatal_error: BaseException | None = None
-        self._state_lock = threading.Lock()
-        self._lowstate: HGLowState_ | None = None
-        self._odom: Odom | None = None
+        self._states = StateHistory()
         self._sample_sequence = 0
 
         self._policy = HommiPolicyRunner(
@@ -101,7 +115,10 @@ class HommiNode:
         warmup_start = time.monotonic()
         self._policy.warmup()
         print(f"HoMMI warm-up done in {time.monotonic() - warmup_start:.1f}s", flush=True)
-        self._projector = RobotStateProjector(self._policy.gripper_ranges)
+        self._projector = RobotStateProjector(
+            self._policy.gripper_ranges,
+            COLOR_LINK_TO_OPTICAL if replay is not None else head_extrinsic(config),
+        )
         self._history = ObservationHistory(self._builder.horizon)
         self._trajectory = AtomicTrajectory()
         self._latest_robot: RobotSnapshot | None = None
@@ -179,18 +196,10 @@ class HommiNode:
                 )
 
     def _lowstate_handler(self, msg: HGLowState_) -> None:
-        with self._state_lock:
-            self._lowstate = msg
+        self._states.add_lowstate(time.monotonic(), msg)
 
     def _odom_handler(self, msg: Odom) -> None:
-        with self._state_lock:
-            self._odom = msg
-
-    def _latest_state(self) -> tuple[HGLowState_, Odom] | None:
-        with self._state_lock:
-            if self._lowstate is None or self._odom is None:
-                return None
-            return self._lowstate, self._odom
+        self._states.add_odom(time.monotonic(), msg)
 
     def _thread_guard(self, target: Callable[[], None]) -> None:
         try:
@@ -212,19 +221,26 @@ class HommiNode:
     def _observation_loop(self) -> None:
         next_tick = time.monotonic()
         while not self._stop.is_set():
-            if self._latest_state() is not None:
+            if self._states.latest() is not None:
                 # Grab the newest frame of every camera first, then pair them with
-                # the newest robot state/FK available right after.
+                # the newest robot state/FK; the head pointmap uses the state at its
+                # capture time instead.
                 frames = {name: camera.latest() for name, camera in self._cameras.items()}
-                state = self._latest_state()
+                state = self._states.latest()
                 assert state is not None
                 timestamp = time.monotonic()
                 robot = self._projector.snapshot(*state, timestamp=timestamp)
+                head_robot = robot
                 if self._replay is not None:
                     self._replay_step(robot, timestamp)
                     head, wrist = self._replay.frame()
                 else:
-                    head = process_head_frame(frames["head"], output_size=self._builder.head_size)
+                    head_frame = frames["head"]
+                    head_state = self._states.at(head_frame.timestamp) or state
+                    head_robot = self._projector.snapshot(
+                        *head_state, timestamp=head_frame.timestamp
+                    )
+                    head = process_head_frame(head_frame, output_size=self._builder.head_size)
                     wrist = {
                         side: process_wrist_frame(
                             frames[side], output_size=self._builder.wrist_size
@@ -240,6 +256,7 @@ class HommiNode:
                         head=head,
                         wrist_rgb=wrist,
                         robot=robot,
+                        head_robot=head_robot,
                     )
                 )
 
@@ -353,7 +370,7 @@ class HommiNode:
         sample = self._history.latest()
         if sample is None:
             return None
-        robot = sample.robot
+        robot = sample.head_state
         mask = self._policy.crop.mask(
             sample.head.pointmap, robot.head, (robot.left_tcp, robot.right_tcp)
         )

@@ -25,6 +25,9 @@ class HommiConfig(BaseConfig):
     right_wrist_camera_serial: str
     latency_compensation: bool
     inference_precision: str  # "fp32" (as trained) or "fp16" (faster on the GPU)
+    head_camera: str  # "realsense" or "zed2"
+    zed_device: str  # V4L2 index or device path
+    zed_calibration: str  # Stereolabs factory .conf for this serial
     publish_hz: float  # rt/target rate; follows [wbc].hz
     dds: DDSConfig
 
@@ -41,6 +44,12 @@ class HommiConfig(BaseConfig):
             raise ValueError(
                 f"hommi.camera_timeout_ms must be positive, got {self.camera_timeout_ms}"
             )
+        if self.head_camera not in ("realsense", "zed2"):
+            raise ValueError(
+                f"hommi.head_camera must be 'realsense' or 'zed2', got {self.head_camera!r}"
+            )
+        if self.head_camera == "zed2" and not self.zed_calibration:
+            raise ValueError("hommi.zed_calibration must be set when hommi.head_camera = 'zed2'")
         if self.inference_precision not in ("fp32", "fp16"):
             raise ValueError(
                 "hommi.inference_precision must be 'fp32' or 'fp16', "
@@ -62,6 +71,8 @@ class HommiConfig(BaseConfig):
             "left": self.left_wrist_camera_serial,
             "right": self.right_wrist_camera_serial,
         }
+        if self.head_camera == "zed2":
+            del serials["head"]
         for name, serial in serials.items():
             if not serial:
                 key = "head_camera_serial" if name == "head" else f"{name}_wrist_camera_serial"
@@ -89,6 +100,9 @@ class HommiConfig(BaseConfig):
             right_wrist_camera_serial=str(section.get("right_wrist_camera_serial", "")),
             latency_compensation=_bool(section, "latency_compensation", True),
             inference_precision=str(section.get("inference_precision", "fp16")),
+            head_camera=str(section.get("head_camera", "realsense")),
+            zed_device=str(section.get("zed_device", "0")),
+            zed_calibration=str(section.get("zed_calibration", "")),
             publish_hz=float((data.get("wbc") or {}).get("hz", 100.0)),
             dds=DDSConfig.from_mapping(data),
         )

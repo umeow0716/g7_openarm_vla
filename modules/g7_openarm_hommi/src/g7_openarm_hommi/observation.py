@@ -31,6 +31,11 @@ class ObservationSample:
     head: HeadObservation
     wrist_rgb: Mapping[str, npt.NDArray[np.uint8]]  # side -> [S, S, 3]
     robot: RobotSnapshot
+    head_robot: RobotSnapshot | None = None
+
+    @property
+    def head_state(self) -> RobotSnapshot:
+        return self.robot if self.head_robot is None else self.head_robot
 
 
 class ObservationHistory:
@@ -142,7 +147,7 @@ class Ego3dObservationBuilder:
 
         points, masks = [], []
         for s in samples:
-            robot = s.robot
+            robot = s.head_state
             mask = self.crop.mask(s.head.pointmap, robot.head, (robot.left_tcp, robot.right_tcp))
             head_in_base = base_inv @ robot.head.astype(np.float64)
             points.append(transform_points(head_in_base, s.head.pointmap))

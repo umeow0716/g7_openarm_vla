@@ -108,7 +108,7 @@ def splat_depth_to_virtual(
     depth_to_color: npt.ArrayLike,
     *,
     target: PinholeIntrinsics = IPHONE_DEPTH,
-    stride: int = 2,
+    stride: int | None = None,
 ) -> FloatArray:
     """Reproject metric depth into the color optical frame of a virtual camera.
 
@@ -120,6 +120,9 @@ def splat_depth_to_virtual(
             f"depth shape {depth.shape} does not match intrinsics "
             f"{depth_intrinsics.height}x{depth_intrinsics.width}"
         )
+    if stride is None:
+        ratio = min(depth_intrinsics.fx / target.fx, depth_intrinsics.fy / target.fy)
+        stride = max(1, int(ratio))
     sub = depth[::stride, ::stride]
     vs, us = np.nonzero(sub > 0.0)
     z = sub[vs, us].astype(np.float64)

@@ -1,5 +1,6 @@
 from .camera import BlackCamera, CameraFrame, CameraInput, PinholeIntrinsics, RealSenseCamera
 from .config import HommiConfig, config
+from .zed_camera import ZedStereoCamera
 
 __all__ = [
     "BlackCamera",
@@ -8,5 +9,6 @@ __all__ = [
     "HommiConfig",
     "PinholeIntrinsics",
     "RealSenseCamera",
+    "ZedStereoCamera",
     "config",
 ]

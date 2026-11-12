@@ -228,6 +228,7 @@ modules/g7_openarm_hommi/model/model.trt.ep
 modules/g7_openarm_hommi/model/model.trt.ep.json
 modules/g7_openarm_hommi/model/ego3d_policy.pt
 modules/g7_openarm_hommi/model/*.tmp
+modules/g7_openarm_hommi/model/ffs/
 
 # Runtime logs
 logs/

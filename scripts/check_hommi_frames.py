@@ -30,7 +30,7 @@ from unitree_sdk2py.idl.default import HGLowState_
 from g7_openarm_hommi.config import config
 from g7_openarm_hommi.geometry import quaternion_wxyz_to_matrix
 from g7_openarm_hommi.gripper import GripperWidthRange
-from g7_openarm_hommi.state import RobotStateProjector
+from g7_openarm_hommi.state import RobotStateProjector, head_extrinsic
 from g7_openarm_idl import Odom
 from g7_openarm_utils import ChannelFactoryInitialize, build_sub
 
@@ -72,7 +72,7 @@ def main() -> None:
         build_sub("rt/odom", Odom, keep("odom")),
     )
     unit = GripperWidthRange(0.0, 1.0)
-    projector = RobotStateProjector({"left": unit, "right": unit})
+    projector = RobotStateProjector({"left": unit, "right": unit}, head_extrinsic(config))
 
     cameras = {}
     if args.cameras:
