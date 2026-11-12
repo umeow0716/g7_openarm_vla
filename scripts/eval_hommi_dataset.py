@@ -161,12 +161,22 @@ def main() -> None:
     )
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--model-dir", type=Path, default=None)
+    parser.add_argument(
+        "--inference-precision",
+        choices=("fp32", "fp16"),
+        default="fp16",
+        help="fp32 to compare against the trained precision (default: deployed fp16)",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no-plot", action="store_true")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
-    runner = HommiPolicyRunner(device=args.device, model_dir=args.model_dir)
+    runner = HommiPolicyRunner(
+        device=args.device,
+        model_dir=args.model_dir,
+        inference_precision=args.inference_precision,
+    )
     builder = Ego3dObservationBuilder(runner.shape_meta, crop=runner.crop, device=runner.device)
     meta = runner.shape_meta
     obs_step = int(meta["obs"]["camera_head_pointmap"]["down_sample_steps"])

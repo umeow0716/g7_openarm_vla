@@ -104,7 +104,13 @@ def build_ego3d_policy(cfg: dict[str, Any]) -> DiffusionDiTImagePolicy:
 class HommiPolicyRunner:
     """Load the ego3d HoMMI artifact once and expose numpy action-chunk inference."""
 
-    def __init__(self, *, device: str = "cuda:0", model_dir: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        device: str = "cuda:0",
+        model_dir: str | Path | None = None,
+        inference_precision: str = "fp16",
+    ) -> None:
         self.device = torch.device(device)
         directory = Path(model_dir) if model_dir is not None else module_model_dir()
         path = (directory / DEFAULT_ARTIFACT_NAME).expanduser().resolve()
@@ -162,6 +168,16 @@ class HommiPolicyRunner:
             )
         else:
             raise ValueError(f"unsupported training.mixed_precision {self.precision!r}")
+
+        # fp16 deployment: the denoiser (131M params, read once per DDIM step) is stored in
+        # half precision, which halves its memory traffic, and the whole predict runs under
+        # fp16 autocast so the ViT encoder uses tensor cores. The DDIM update stays fp32.
+        self.inference_precision = inference_precision
+        if inference_precision == "fp16":
+            self.policy.model.half()
+            self._autocast = torch.autocast(device_type=self.device.type, dtype=torch.float16)
+        elif inference_precision != "fp32":
+            raise ValueError(f"unsupported inference_precision {inference_precision!r}")
 
     def dummy_obs(self) -> dict[str, torch.Tensor]:
         """All-zero observation batch with the policy's input keys and shapes."""

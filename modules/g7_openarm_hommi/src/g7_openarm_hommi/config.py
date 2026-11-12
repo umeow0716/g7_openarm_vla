@@ -24,6 +24,7 @@ class HommiConfig(BaseConfig):
     left_wrist_camera_serial: str
     right_wrist_camera_serial: str
     latency_compensation: bool
+    inference_precision: str  # "fp32" (as trained) or "fp16" (faster on the GPU)
     publish_hz: float  # rt/target rate; follows [wbc].hz
     dds: DDSConfig
 
@@ -39,6 +40,11 @@ class HommiConfig(BaseConfig):
         if self.camera_timeout_ms <= 0:
             raise ValueError(
                 f"hommi.camera_timeout_ms must be positive, got {self.camera_timeout_ms}"
+            )
+        if self.inference_precision not in ("fp32", "fp16"):
+            raise ValueError(
+                "hommi.inference_precision must be 'fp32' or 'fp16', "
+                f"got {self.inference_precision!r}"
             )
 
     @property
@@ -82,6 +88,7 @@ class HommiConfig(BaseConfig):
             left_wrist_camera_serial=str(section.get("left_wrist_camera_serial", "")),
             right_wrist_camera_serial=str(section.get("right_wrist_camera_serial", "")),
             latency_compensation=_bool(section, "latency_compensation", True),
+            inference_precision=str(section.get("inference_precision", "fp16")),
             publish_hz=float((data.get("wbc") or {}).get("hz", 100.0)),
             dds=DDSConfig.from_mapping(data),
         )

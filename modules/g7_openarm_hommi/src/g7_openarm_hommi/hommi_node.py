@@ -85,7 +85,9 @@ class HommiNode:
         self._odom: Odom | None = None
         self._sample_sequence = 0
 
-        self._policy = HommiPolicyRunner(device=config.device)
+        self._policy = HommiPolicyRunner(
+            device=config.device, inference_precision=config.inference_precision
+        )
         self._builder = Ego3dObservationBuilder(
             self._policy.shape_meta,
             crop=self._policy.crop,
