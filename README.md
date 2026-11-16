@@ -35,11 +35,11 @@ The real launcher needs the D435i serials in `[hommi]` of `config.toml`.
 ### ZED 2 head camera
 
 With `head_camera = "zed2"` the head is a ZED 2 (stereo + Fast-FoundationStereo) and only
-the two wrist D435i serials are needed, plus:
-
-- `zed_device`: V4L2 index or device path of the ZED 2.
-- `zed_calibration`: the factory calibration `.conf` for your camera serial, from
-  [calib.stereolabs.com](https://calib.stereolabs.com/).
+the two wrist D435i serials are needed. The camera is found by its USB id, so exactly one
+ZED 2 must be attached. Its factory calibration is
+`modules/g7_openarm_hommi/src/g7_openarm_hommi/calibration/zed2.conf`; for another camera,
+replace it with that camera's file from [calib.stereolabs.com](https://calib.stereolabs.com/).
+The stream is fixed at HD720.
 
 Download `onnx/20_30_48/576x960/20_30_48_iters_8_res_576x960.onnx` and its `.yaml` from the
 official [Fast-FoundationStereo Google Drive](https://drive.google.com/drive/folders/1HuTt7UIp7gQsMiDvJwVuWmKpvFzIIMap?usp=drive_link)

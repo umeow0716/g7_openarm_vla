@@ -46,7 +46,7 @@ def head_extrinsic(cfg: HommiConfig) -> FloatArray:
         return COLOR_LINK_TO_OPTICAL.copy()
     from .zed_camera import rectification_rotation
 
-    return head_camera_extrinsic(rectification_rotation(cfg.zed_calibration))
+    return head_camera_extrinsic(rectification_rotation())
 
 
 class StateHistory:

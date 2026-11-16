@@ -58,20 +58,13 @@ def _calib() -> ZedCalibration:
 
 
 def test_load_zed_conf_reads_intrinsics_and_baseline(tmp_path):
-    path = tmp_path / "SN1234.conf"
+    path = tmp_path / "zed2.conf"
     path.write_text(CONF)
-    calib = load_zed_conf(path, (1280, 720))
+    calib = load_zed_conf(path)
     assert calib.K1[0, 0] == pytest.approx(530.0)
     assert calib.K2[1, 2] == pytest.approx(359.0)
     assert calib.D1[0] == pytest.approx(0.01)
     assert calib.baseline == pytest.approx(0.12)
-
-
-def test_load_zed_conf_rejects_unknown_eye_width(tmp_path):
-    path = tmp_path / "x.conf"
-    path.write_text(CONF)
-    with pytest.raises(ValueError):
-        load_zed_conf(path, (999, 720))
 
 
 def test_rectifier_scales_to_working_size_and_keeps_baseline():
@@ -117,9 +110,57 @@ def test_remove_invisible_drops_left_pixels_without_right_match():
 def test_rectification_rotation_matches_rectifier(tmp_path):
     from g7_openarm_hommi.zed_camera import rectification_rotation
 
-    path = tmp_path / "SN1234.conf"
+    path = tmp_path / "zed2.conf"
     path.write_text(CONF)
     r1 = rectification_rotation(path)
     np.testing.assert_allclose(r1 @ r1.T, np.eye(3), atol=1e-9)
-    expected = Rectifier(load_zed_conf(path, (1280, 720)), (960, 576)).R1
+    expected = Rectifier(load_zed_conf(path), (960, 576)).R1
     np.testing.assert_allclose(r1, expected)
+
+
+def _usb_device(sysfs, name, vid, pid):
+    dev = sysfs / "devices" / name
+    dev.mkdir(parents=True)
+    (dev / "idVendor").write_text(f"{vid}\n")
+    (dev / "idProduct").write_text(f"{pid}\n")
+    return dev
+
+
+def _video_node(sysfs, usb_dev, name, index):
+    node = usb_dev / f"{usb_dev.name}:1.0" / "video4linux" / name
+    node.mkdir(parents=True)
+    (node / "index").write_text(f"{index}\n")
+    cls = sysfs / "class" / "video4linux"
+    cls.mkdir(parents=True, exist_ok=True)
+    (cls / name).symlink_to(node)
+
+
+def _zed2(sysfs, usb_name, first_video):
+    dev = _usb_device(sysfs, usb_name, "2b03", "f780")
+    _video_node(sysfs, dev, f"video{first_video}", 0)
+    _video_node(sysfs, dev, f"video{first_video + 1}", 1)
+
+
+def test_find_zed2_returns_capture_node(tmp_path):
+    from g7_openarm_hommi.zed_camera import find_zed2
+
+    _video_node(tmp_path, _usb_device(tmp_path, "3-7", "046d", "0825"), "video0", 0)
+    _zed2(tmp_path, "2-3", 2)
+    assert find_zed2(tmp_path) == "/dev/video2"
+
+
+@pytest.mark.parametrize("count", [0, 2])
+def test_find_zed2_requires_exactly_one_camera(tmp_path, count):
+    from g7_openarm_hommi.zed_camera import find_zed2
+
+    (tmp_path / "class" / "video4linux").mkdir(parents=True)
+    for i in range(count):
+        _zed2(tmp_path, f"2-{i + 1}", 2 * i)
+    with pytest.raises(RuntimeError, match="exactly one ZED 2"):
+        find_zed2(tmp_path)
+
+
+def test_bundled_calibration_loads():
+    calib = load_zed_conf()
+    assert calib.image_size == (1280, 720)
+    assert calib.baseline == pytest.approx(0.1194, abs=1e-4)

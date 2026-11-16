@@ -1,7 +1,7 @@
 """ZED 2 head stereo camera: rectified left RGB and Fast-FoundationStereo depth.
 
-Rectification and disparity/depth rules are ported from ``~/Downloads/camera``
-(``calib.py``, ``pointmap.py``); keep them in step.
+Rectification, disparity/depth rules and USB discovery are ported from
+``~/Downloads/camera`` (``calib.py``, ``pointmap.py``, ``zed_uvc.py``); keep them in step.
 """
 
 from __future__ import annotations
@@ -19,8 +19,11 @@ import torch
 
 from .camera import CameraFrame, CameraInput, PinholeIntrinsics
 
-ZED_MODE_BY_WIDTH = {2208: "2K", 1920: "FHD", 1280: "HD", 672: "VGA"}
-CAPTURE_SIZE = (1280, 720)  # HD720, per eye
+# The head camera always streams HD720, so only the HD sections of the factory file are used.
+CAPTURE_SIZE = (1280, 720)  # per eye
+# Stereolabs factory calibration of the head camera, from https://calib.stereolabs.com/.
+ZED_CALIBRATION = Path(__file__).resolve().parent / "calibration" / "zed2.conf"
+ZED2_USB_ID = ("2b03", "f780")
 # Official Fast-FoundationStereo 20-30-48 single ONNX (valid_iters 8, max_disp 192).
 STEREO_SIZE = (960, 576)
 FFS_ONNX = (
@@ -49,14 +52,36 @@ class ZedCalibration:
         return float(np.linalg.norm(self.T))
 
 
-def load_zed_conf(path: str | Path, image_size: tuple[int, int]) -> ZedCalibration:
-    """Parse a Stereolabs factory calibration file for the given eye resolution.
+def _sysfs_text(path: Path) -> str:
+    try:
+        return path.read_text().strip()
+    except OSError:
+        return ""
 
-    Download the file for your camera serial from https://calib.stereolabs.com/?SN=<serial>.
+
+def find_zed2(sysfs: Path = Path("/sys")) -> str:
+    """Return the capture node (``/dev/videoN``) of the one attached ZED 2.
+
+    The bundled calibration belongs to one camera, so anything other than exactly
+    one ZED 2 is an error.
     """
-    mode = ZED_MODE_BY_WIDTH.get(image_size[0])
-    if mode is None:
-        raise ValueError(f"no ZED 2 calibration mode for eye width {image_size[0]}")
+    nodes = []
+    for video in sorted((sysfs / "class" / "video4linux").glob("video*")):
+        if _sysfs_text(video / "index") != "0":  # index 1 is the metadata node
+            continue
+        dev = video.resolve()
+        while dev != dev.parent and not (dev / "idVendor").exists():
+            dev = dev.parent
+        if (_sysfs_text(dev / "idVendor"), _sysfs_text(dev / "idProduct")) == ZED2_USB_ID:
+            nodes.append(f"/dev/{video.name}")
+    if len(nodes) != 1:
+        raise RuntimeError(f"expected exactly one ZED 2, found {len(nodes)}: {nodes}")
+    return nodes[0]
+
+
+def load_zed_conf(path: str | Path = ZED_CALIBRATION) -> ZedCalibration:
+    """Parse the HD720 calibration from a Stereolabs factory calibration file."""
+    mode = "HD"
     cp = configparser.ConfigParser()
     if not cp.read(path):
         raise FileNotFoundError(f"ZED calibration file not found: {path}")
@@ -91,7 +116,7 @@ def load_zed_conf(path: str | Path, image_size: tuple[int, int]) -> ZedCalibrati
         )
         / 1000.0
     )
-    return ZedCalibration(image_size, K1, D1, K2, D2, R, T)
+    return ZedCalibration(CAPTURE_SIZE, K1, D1, K2, D2, R, T)
 
 
 def _scale_K(K: npt.NDArray[np.float64], sx: float, sy: float) -> npt.NDArray[np.float64]:
@@ -204,9 +229,11 @@ class FfsEngine:
             self(x, x)
 
 
-def rectification_rotation(calibration: str | Path) -> npt.NDArray[np.float64]:
+def rectification_rotation(
+    calibration: str | Path = ZED_CALIBRATION,
+) -> npt.NDArray[np.float64]:
     """Stereo ``R1`` (raw left -> rectified left) that ``ZedStereoCamera`` applies."""
-    return Rectifier(load_zed_conf(calibration, CAPTURE_SIZE), STEREO_SIZE).R1
+    return Rectifier(load_zed_conf(calibration), STEREO_SIZE).R1
 
 
 def remove_invisible(disp: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
@@ -238,8 +265,6 @@ class ZedStereoCamera(CameraInput):
     def __init__(
         self,
         *,
-        video_device: int | str,
-        calibration: str | Path,
         timeout_ms: int = 1000,
         name: str = "head",
         fps: int = 30,
@@ -248,7 +273,8 @@ class ZedStereoCamera(CameraInput):
         self.name = name
         self._timeout_s = timeout_ms / 1000.0
         eye_w, eye_h = CAPTURE_SIZE
-        self._rect = Rectifier(load_zed_conf(calibration, CAPTURE_SIZE), STEREO_SIZE)
+        video_node = find_zed2()
+        self._rect = Rectifier(load_zed_conf(), STEREO_SIZE)
         self._ffs = FfsEngine(device=cuda_device)
         self._ffs.warmup()
         self._intrinsics = PinholeIntrinsics(
@@ -260,21 +286,18 @@ class ZedStereoCamera(CameraInput):
             float(self._rect.K[1, 2]),
         )
 
-        self._cap = cv2.VideoCapture(
-            video_device, cv2.CAP_V4L2 if isinstance(video_device, int) else cv2.CAP_ANY
-        )
+        self._cap = cv2.VideoCapture(video_node, cv2.CAP_V4L2)
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, 2 * eye_w)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, eye_h)
         self._cap.set(cv2.CAP_PROP_FPS, fps)
         if not self._cap.isOpened():
-            raise RuntimeError(f"cannot open ZED 2 stereo device {video_device!r}")
+            raise RuntimeError(f"cannot open ZED 2 stereo device {video_node}")
         ok, frame = self._cap.read()
         if not ok or frame.shape[:2] != (eye_h, 2 * eye_w):
             self._cap.release()
             got = None if not ok else frame.shape[:2]
             raise RuntimeError(
-                f"ZED 2 side-by-side stream is {got}, expected {(eye_h, 2 * eye_w)}; "
-                "check zed_device"
+                f"ZED 2 side-by-side stream on {video_node} is {got}, expected {(eye_h, 2 * eye_w)}"
             )
 
         self._lock = threading.Condition()

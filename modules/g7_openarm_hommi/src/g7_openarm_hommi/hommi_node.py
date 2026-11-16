@@ -67,10 +67,6 @@ def _make_cameras(kind: CameraKind) -> dict[str, CameraInput]:
     try:
         if config.head_camera == "zed2":
             cameras["head"] = ZedStereoCamera(
-                video_device=(
-                    int(config.zed_device) if config.zed_device.isdigit() else config.zed_device
-                ),
-                calibration=config.zed_calibration,
                 timeout_ms=config.camera_timeout_ms,
                 cuda_device=config.device,
             )

@@ -60,9 +60,7 @@ left_wrist_camera_serial = ""
 right_wrist_camera_serial = ""
 latency_compensation = true
 inference_precision = "fp16"
-head_camera = "realsense" # "realsense" or "zed2"
-zed_device = "0"
-zed_calibration = ""
+head_camera = "zed2" # "realsense" or "zed2"
 
 [vr]
 hz = 50.0 # Target
