@@ -25,6 +25,7 @@ class HommiConfig(BaseConfig):
     right_wrist_camera_serial: str
     latency_compensation: bool
     inference_precision: str  # "fp32" (as trained) or "fp16" (faster on the GPU)
+    inference_backend: str  # "tensorrt" (engines built per machine) or "torch"
     head_camera: str  # "realsense" or "zed2"
     publish_hz: float  # rt/target rate; follows [wbc].hz
     dds: DDSConfig
@@ -50,6 +51,12 @@ class HommiConfig(BaseConfig):
             raise ValueError(
                 "hommi.inference_precision must be 'fp32' or 'fp16', "
                 f"got {self.inference_precision!r}"
+            )
+
+        if self.inference_backend not in ("tensorrt", "torch"):
+            raise ValueError(
+                "hommi.inference_backend must be 'tensorrt' or 'torch', "
+                f"got {self.inference_backend!r}"
             )
 
     @property
@@ -96,6 +103,7 @@ class HommiConfig(BaseConfig):
             right_wrist_camera_serial=str(section.get("right_wrist_camera_serial", "")),
             latency_compensation=_bool(section, "latency_compensation", True),
             inference_precision=str(section.get("inference_precision", "fp16")),
+            inference_backend=str(section.get("inference_backend", "tensorrt")),
             head_camera=str(section.get("head_camera", "realsense")),
             publish_hz=float((data.get("wbc") or {}).get("hz", 100.0)),
             dds=DDSConfig.from_mapping(data),

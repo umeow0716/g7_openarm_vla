@@ -227,6 +227,9 @@ modules/g7_openarm_hommi/model/model.pt
 modules/g7_openarm_hommi/model/model.trt.ep
 modules/g7_openarm_hommi/model/model.trt.ep.json
 modules/g7_openarm_hommi/model/ego3d_policy.pt
+modules/g7_openarm_hommi/model/ego3d_*.onnx
+modules/g7_openarm_hommi/model/ego3d_*.engine
+modules/g7_openarm_hommi/model/ego3d_engines.*.json
 modules/g7_openarm_hommi/model/*.tmp
 modules/g7_openarm_hommi/model/ffs/
 

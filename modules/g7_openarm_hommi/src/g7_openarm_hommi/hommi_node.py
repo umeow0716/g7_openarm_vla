@@ -96,7 +96,9 @@ class HommiNode:
         self._sample_sequence = 0
 
         self._policy = HommiPolicyRunner(
-            device=config.device, inference_precision=config.inference_precision
+            device=config.device,
+            inference_precision=config.inference_precision,
+            backend=config.inference_backend,
         )
         self._builder = Ego3dObservationBuilder(
             self._policy.shape_meta,
@@ -151,7 +153,8 @@ class HommiNode:
         print(
             "HoMMI ego3d ready: "
             f"model={self._policy.model_path}, device={self._policy.device}, "
-            f"precision={self._policy.precision}, obs_horizon={self._builder.horizon}, "
+            f"backend={self._policy.backend} {self._policy.inference_precision}, "
+            f"obs_horizon={self._builder.horizon}, "
             f"action_steps={self._policy.n_action_steps}, hz={config.hz:g}, "
             f"publish_hz={config.publish_hz:g}, "
             f"cameras={f'dataset ({replay.mode} replay)' if replay else camera_kind}; "

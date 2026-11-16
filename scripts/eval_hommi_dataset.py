@@ -167,6 +167,12 @@ def main() -> None:
         default="fp16",
         help="fp32 to compare against the trained precision (default: deployed fp16)",
     )
+    parser.add_argument(
+        "--backend",
+        choices=("tensorrt", "torch"),
+        default="tensorrt",
+        help="torch to compare against the PyTorch policy (default: deployed TensorRT)",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no-plot", action="store_true")
     args = parser.parse_args()
@@ -176,6 +182,7 @@ def main() -> None:
         device=args.device,
         model_dir=args.model_dir,
         inference_precision=args.inference_precision,
+        backend=args.backend,
     )
     builder = Ego3dObservationBuilder(runner.shape_meta, crop=runner.crop, device=runner.device)
     meta = runner.shape_meta
@@ -238,8 +245,7 @@ def main() -> None:
                     )
                 )
             obs = builder.build(samples)
-            with torch.inference_mode(), runner._autocast:
-                pred = runner.policy.predict_action(obs)["action_pred"][0].float().cpu().numpy()
+            pred = runner.predict_horizon(obs)
             gt = ep.gt_action(cur, horizon, step)
             pol_errs.append(chunk_errors(pred, gt))
             hold_errs.append(chunk_errors(np.repeat(gt[:1], horizon, axis=0), gt))

@@ -60,6 +60,7 @@ left_wrist_camera_serial = ""
 right_wrist_camera_serial = ""
 latency_compensation = true
 inference_precision = "fp16"
+inference_backend = "tensorrt" # "tensorrt" or "torch"
 head_camera = "zed2" # "realsense" or "zed2"
 
 [vr]

@@ -17,6 +17,7 @@ dependencies = [
     "tensorrt-cu13<11",
     "torch",
     "unitree-sdk2py",
+    "onnx",
 ]
 
 [tool.uv.sources]

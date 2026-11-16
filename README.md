@@ -22,13 +22,18 @@ uv run scripts/run_sim.py
 
 The integrated deployment module is `modules/g7_openarm_hommi` (HoMMI
 `ego3d_lookat_policy`: bimanual + head look-at). Convert the training checkpoint
-once, then launch:
+and build its TensorRT engines once, then launch:
 
 ```bash
 uv run python scripts/convert_hommi_ckpt.py ~/Downloads/latest.ckpt
+uv run python scripts/build_hommi_engine.py
 uv run python scripts/sim_hommi.py
 uv run python scripts/real_hommi.py
 ```
+
+The engines only run on the GPU and TensorRT version that built them, so build them on
+every machine and again after converting a new checkpoint. `inference_backend = "torch"`
+in `[hommi]` runs the PyTorch policy instead and needs no engines.
 
 The real launcher needs the D435i serials in `[hommi]` of `config.toml`.
 
