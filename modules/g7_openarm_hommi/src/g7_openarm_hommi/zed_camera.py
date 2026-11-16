@@ -7,10 +7,18 @@ Rectification, disparity/depth rules and USB discovery are ported from
 from __future__ import annotations
 
 import configparser
+import ctypes
+import multiprocessing as mp
+import os
+import signal
 import threading
 import time
+import traceback
 from dataclasses import dataclass
+from multiprocessing.connection import Connection
+from multiprocessing.synchronize import Event, Lock
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -18,6 +26,7 @@ import numpy.typing as npt
 import torch
 
 from .camera import CameraFrame, CameraInput, PinholeIntrinsics
+from .trt import TrtEngine
 
 # The head camera always streams HD720, so only the HD sections of the factory file are used.
 CAPTURE_SIZE = (1280, 720)  # per eye
@@ -33,6 +42,8 @@ FFS_ENGINE = FFS_ONNX.with_suffix(".engine")
 # The single ONNX has ImageNet normalization stripped; inputs are normalized in 0-255 scale.
 IMAGENET_MEAN = (123.675, 116.28, 103.53)
 IMAGENET_STD = (58.395, 57.12, 57.375)
+# The camera process loads the engine and warms it up before its first frame.
+STARTUP_TIMEOUT_S = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,54 +184,29 @@ class FfsEngine:
     """Fast-FoundationStereo TensorRT engine: rectified RGB pair -> disparity (pixels)."""
 
     def __init__(self, engine_path: Path = FFS_ENGINE, device: str = "cuda:0") -> None:
-        import tensorrt as trt
-
-        if not engine_path.is_file():
-            raise FileNotFoundError(
-                f"no Fast-FoundationStereo engine at {engine_path}; build it on this machine with "
-                "`uv run python scripts/build_ffs_engine.py`"
-            )
-        self.device = torch.device(device)
-        logger = trt.Logger(trt.Logger.WARNING)
-        self._engine = trt.Runtime(logger).deserialize_cuda_engine(engine_path.read_bytes())
-        if self._engine is None:
-            raise RuntimeError(
-                f"cannot load {engine_path} with TensorRT {trt.__version__}; rebuild it with "
-                "`uv run python scripts/build_ffs_engine.py`"
-            )
-        self._context = self._engine.create_execution_context()
-        for name in ("left_image", "right_image", "disparity"):
-            if self._engine.get_tensor_dtype(name) != trt.DataType.FLOAT:
-                raise RuntimeError(f"engine tensor {name} is not float32")
-        shape = tuple(self._engine.get_tensor_shape("left_image"))
+        self._engine = TrtEngine(
+            engine_path,
+            device=device,
+            build_hint="uv run python scripts/build_ffs_engine.py",
+        )
+        shape = self._engine.input_shapes["left_image"]
         if shape != (1, 3, STEREO_SIZE[1], STEREO_SIZE[0]):
             raise RuntimeError(
                 f"engine input is {shape}, expected 1x3x{STEREO_SIZE[1]}x{STEREO_SIZE[0]}"
             )
-        self._mean = torch.tensor(IMAGENET_MEAN, device=self.device).view(1, 3, 1, 1)
-        self._std = torch.tensor(IMAGENET_STD, device=self.device).view(1, 3, 1, 1)
-        self._disparity = torch.empty((1, 1, STEREO_SIZE[1], STEREO_SIZE[0]), device=self.device)
-        self._stream = torch.cuda.Stream(device=self.device)
+        self._mean = torch.tensor(IMAGENET_MEAN, device=self._engine.device).view(1, 3, 1, 1)
+        self._std = torch.tensor(IMAGENET_STD, device=self._engine.device).view(1, 3, 1, 1)
 
     def _input(self, image: npt.NDArray[np.uint8]) -> torch.Tensor:
-        x = torch.from_numpy(image).to(self.device).permute(2, 0, 1)[None].float()
-        return ((x - self._mean) / self._std).contiguous()
+        x = torch.from_numpy(image).to(self._engine.device).permute(2, 0, 1)[None].float()
+        return (x - self._mean) / self._std
 
     @torch.inference_mode()
     def __call__(
         self, left: npt.NDArray[np.uint8], right: npt.NDArray[np.uint8]
     ) -> npt.NDArray[np.float32]:
-        with torch.cuda.stream(self._stream):
-            tensors = {
-                "left_image": self._input(left),
-                "right_image": self._input(right),
-                "disparity": self._disparity,
-            }
-            for name, tensor in tensors.items():
-                self._context.set_tensor_address(name, tensor.data_ptr())
-            if not self._context.execute_async_v3(self._stream.cuda_stream):
-                raise RuntimeError("Fast-FoundationStereo TensorRT inference failed")
-            disparity = self._disparity[0, 0].clamp(min=0).cpu().numpy()
+        out = self._engine(left_image=self._input(left), right_image=self._input(right))
+        disparity: npt.NDArray[np.float32] = out["disparity"][0, 0].clamp(min=0).cpu().numpy()
         return disparity
 
     def warmup(self, n: int = 3) -> None:
@@ -254,141 +240,192 @@ def disparity_to_depth(
     return depth
 
 
-class ZedStereoCamera(CameraInput):
-    """ZED 2 head camera: latest rectified left frame plus its FoundationStereo depth.
+_FRAME_HEADER_BYTES = 16
+_FRAME_BYTES = _FRAME_HEADER_BYTES + STEREO_SIZE[0] * STEREO_SIZE[1] * (3 + 4)
 
-    The capture thread keeps only the newest result, like ``RealSenseCamera``. The
-    stereo model sets the frame rate, so the observation loop may see the same head
-    frame twice.
-    """
 
-    def __init__(
-        self,
-        *,
-        timeout_ms: int = 1000,
-        name: str = "head",
-        fps: int = 30,
-        cuda_device: str = "cuda:0",
-    ) -> None:
-        self.name = name
-        self._timeout_s = timeout_ms / 1000.0
+def _frame_views(buffer: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Sequence number, capture time, colour and depth of the frame shared by both processes."""
+    w, h = STEREO_SIZE
+    seq: np.ndarray = np.ndarray((1,), np.int64, buffer, 0)
+    stamp: np.ndarray = np.ndarray((1,), np.float64, buffer, 8)
+    color: np.ndarray = np.ndarray((h, w, 3), np.uint8, buffer, _FRAME_HEADER_BYTES)
+    depth: np.ndarray = np.ndarray((h, w), np.float32, buffer, _FRAME_HEADER_BYTES + color.nbytes)
+    return seq, stamp, color, depth
+
+
+def _camera_process(
+    buffer: Any,
+    lock: Lock,
+    stop: Event,
+    conn: Connection,
+    fps: int,
+    cuda_device: str,
+    parent_pid: int,
+) -> None:
+    """Capture, rectify and run FoundationStereo, publishing only the newest frame."""
+    # Ctrl-C reaches the whole process group; the parent decides when this one stops.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    cap = None
+    grabber = None
+    try:
+        seq, stamp, color, depth = _frame_views(buffer)
         eye_w, eye_h = CAPTURE_SIZE
         video_node = find_zed2()
-        self._rect = Rectifier(load_zed_conf(), STEREO_SIZE)
-        self._ffs = FfsEngine(device=cuda_device)
-        self._ffs.warmup()
-        self._intrinsics = PinholeIntrinsics(
-            STEREO_SIZE[0],
-            STEREO_SIZE[1],
-            float(self._rect.K[0, 0]),
-            float(self._rect.K[1, 1]),
-            float(self._rect.K[0, 2]),
-            float(self._rect.K[1, 2]),
-        )
+        rect = Rectifier(load_zed_conf(), STEREO_SIZE)
+        fx = float(rect.K[0, 0])
+        ffs = FfsEngine(device=cuda_device)
+        ffs.warmup()
 
-        self._cap = cv2.VideoCapture(video_node, cv2.CAP_V4L2)
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, 2 * eye_w)
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, eye_h)
-        self._cap.set(cv2.CAP_PROP_FPS, fps)
-        if not self._cap.isOpened():
+        cap = cv2.VideoCapture(video_node, cv2.CAP_V4L2)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 2 * eye_w)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, eye_h)
+        cap.set(cv2.CAP_PROP_FPS, fps)
+        if not cap.isOpened():
             raise RuntimeError(f"cannot open ZED 2 stereo device {video_node}")
-        ok, frame = self._cap.read()
+        ok, frame = cap.read()
         if not ok or frame.shape[:2] != (eye_h, 2 * eye_w):
-            self._cap.release()
             got = None if not ok else frame.shape[:2]
             raise RuntimeError(
                 f"ZED 2 side-by-side stream on {video_node} is {got}, expected {(eye_h, 2 * eye_w)}"
             )
 
-        self._lock = threading.Condition()
-        self._frame: CameraFrame | None = None
-        self._raw: tuple[npt.NDArray[np.uint8], float] | None = None
-        self._raw_seq = 0
-        self._error: BaseException | None = None
-        self._stop = threading.Event()
-        self._threads = (
-            threading.Thread(target=self._grab_loop, name=f"zed-{name}-grab", daemon=True),
-            threading.Thread(target=self._process_loop, name=f"zed-{name}-ffs", daemon=True),
-        )
-        for thread in self._threads:
-            thread.start()
+        raw_ready = threading.Condition()
+        raw: list[Any] = [None, 0, None]  # frame, sequence, grab error
 
-    def _process(self, sbs_bgr: npt.NDArray[np.uint8], timestamp: float) -> CameraFrame:
-        half = sbs_bgr.shape[1] // 2
-        left, right = self._rect(sbs_bgr[:, :half], sbs_bgr[:, half:])
-        left = cv2.cvtColor(left, cv2.COLOR_BGR2RGB)
-        right = cv2.cvtColor(right, cv2.COLOR_BGR2RGB)
-        disp = remove_invisible(self._ffs(left, right))
-        depth = disparity_to_depth(disp, self._intrinsics.fx, self._rect.baseline)
-        return CameraFrame(
-            timestamp=timestamp,
-            color=left,
-            color_intrinsics=self._intrinsics,
-            depth=depth,
-            depth_intrinsics=self._intrinsics,
-            depth_to_color=np.eye(4),
-        )
+        def grab() -> None:
+            # Drain the stream at camera rate so FoundationStereo always gets the newest
+            # frame with its real capture time, not one that waited in the V4L2 queue.
+            try:
+                while not stop.is_set():
+                    ok, frame = cap.read()
+                    timestamp = time.monotonic()
+                    if not ok:
+                        raise RuntimeError("ZED 2 frame read failed")
+                    with raw_ready:
+                        raw[0] = (frame, timestamp)
+                        raw[1] += 1
+                        raw_ready.notify_all()
+            except BaseException as exc:
+                with raw_ready:
+                    raw[2] = exc
+                    raw_ready.notify_all()
 
-    def _fail(self, exc: BaseException) -> None:
-        with self._lock:
-            if self._error is None:
-                self._error = exc
-            self._lock.notify_all()
+        grabber = threading.Thread(target=grab, name="zed-grab", daemon=True)
+        grabber.start()
 
-    def _grab_loop(self) -> None:
-        # Drain the stream at camera rate so FoundationStereo always gets the newest
-        # frame with its real capture time, not one that waited in the V4L2 queue.
-        try:
-            while not self._stop.is_set():
-                ok, frame = self._cap.read()
-                timestamp = time.monotonic()
-                if not ok:
-                    raise RuntimeError(f"ZED {self.name} frame read failed")
-                with self._lock:
-                    self._raw = (frame, timestamp)
-                    self._raw_seq += 1
-                    self._lock.notify_all()
-        except BaseException as exc:
-            self._fail(exc)
-
-    def _process_loop(self) -> None:
         last_seq = 0
+        # A parent that was killed cannot stop this process, so stop with it.
+        while not stop.is_set() and os.getppid() == parent_pid:
+            with raw_ready:
+                if raw[1] == last_seq and raw[2] is None:
+                    raw_ready.wait(0.1)
+                if raw[2] is not None:
+                    raise raw[2]
+                if raw[1] == last_seq:
+                    continue
+                (sbs_bgr, timestamp), last_seq = raw[0], raw[1]
+            half = sbs_bgr.shape[1] // 2
+            left, right = rect(sbs_bgr[:, :half], sbs_bgr[:, half:])
+            left = cv2.cvtColor(left, cv2.COLOR_BGR2RGB)
+            right = cv2.cvtColor(right, cv2.COLOR_BGR2RGB)
+            disp = remove_invisible(ffs(left, right))
+            metric = disparity_to_depth(disp, fx, rect.baseline)
+            with lock:
+                color[:] = left
+                depth[:] = metric
+                stamp[0] = timestamp
+                seq[0] += 1
+                first = seq[0] == 1
+            if first:
+                conn.send(
+                    ("ready", tuple(float(v) for v in (*np.diag(rect.K)[:2], *rect.K[:2, 2])))
+                )
+    except BaseException:
+        conn.send(("error", traceback.format_exc()))
+    finally:
+        stop.set()
+        if grabber is not None:
+            grabber.join(timeout=2.0)
+        if cap is not None:
+            cap.release()
+
+
+class ZedStereoCamera(CameraInput):
+    """ZED 2 head camera: latest rectified left frame plus its FoundationStereo depth.
+
+    Capture and the stereo model run in their own process, so they never hold this
+    process's interpreter while the policy is inferring. That process keeps only the
+    newest result, like ``RealSenseCamera``; the stereo model sets the frame rate, so
+    the observation loop may see the same head frame twice.
+    """
+
+    def __init__(self, *, name: str = "head", fps: int = 30, cuda_device: str = "cuda:0") -> None:
+        self.name = name
+        ctx = mp.get_context("spawn")
+        self._buffer = ctx.RawArray(ctypes.c_uint8, _FRAME_BYTES)
+        self._seq, self._stamp, self._color, self._depth = _frame_views(self._buffer)
+        self._lock = ctx.Lock()
+        self._stop = ctx.Event()
+        self._conn, child_conn = ctx.Pipe(duplex=False)
+        self._error: str | None = None
+        self._frame: CameraFrame | None = None
+        self._frame_seq = 0
+        self._process = ctx.Process(
+            target=_camera_process,
+            args=(self._buffer, self._lock, self._stop, child_conn, fps, cuda_device, os.getpid()),
+            name=f"zed-{name}",
+            daemon=True,
+        )
+        self._process.start()
+        child_conn.close()
+
         try:
-            while not self._stop.is_set():
-                with self._lock:
-                    while self._raw_seq == last_seq and self._error is None:
-                        if self._stop.is_set():
-                            return
-                        self._lock.wait(0.1)
-                    if self._error is not None:
-                        return
-                    assert self._raw is not None
-                    frame, timestamp = self._raw
-                    last_seq = self._raw_seq
-                result = self._process(frame, timestamp)
-                with self._lock:
-                    self._frame = result
-                    self._lock.notify_all()
-        except BaseException as exc:
-            self._fail(exc)
+            if not self._conn.poll(STARTUP_TIMEOUT_S):
+                raise TimeoutError(f"ZED {name} produced no frame in {STARTUP_TIMEOUT_S:.0f} s")
+            self._raise_if_failed()
+        except BaseException:
+            self.close()
+            raise
+        w, h = STEREO_SIZE
+        self._intrinsics = PinholeIntrinsics(w, h, *self._ready)
+
+    def _raise_if_failed(self) -> None:
+        if self._error is None:
+            try:
+                if self._conn.poll():
+                    kind, payload = self._conn.recv()
+                    if kind == "ready":
+                        self._ready: tuple[float, float, float, float] = payload
+                    else:
+                        self._error = payload
+            except EOFError:
+                self._error = "the camera process closed its pipe"
+            if self._error is None and not self._process.is_alive():
+                self._error = f"the camera process exited with code {self._process.exitcode}"
+        if self._error is not None:
+            raise RuntimeError(f"ZED {self.name} capture failed:\n{self._error}")
 
     def latest(self) -> CameraFrame:
-        deadline = time.monotonic() + self._timeout_s
+        self._raise_if_failed()
         with self._lock:
-            while self._frame is None and self._error is None:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0.0:
-                    raise TimeoutError(f"ZED {self.name} produced no frame")
-                self._lock.wait(remaining)
-            if self._error is not None:
-                raise RuntimeError(f"ZED {self.name} capture failed") from self._error
+            seq = int(self._seq[0])
+            if seq != self._frame_seq:
+                self._frame = CameraFrame(
+                    timestamp=float(self._stamp[0]),
+                    color=self._color.copy(),
+                    color_intrinsics=self._intrinsics,
+                    depth=self._depth.copy(),
+                    depth_intrinsics=self._intrinsics,
+                    depth_to_color=np.eye(4),
+                )
+                self._frame_seq = seq
             assert self._frame is not None
             return self._frame
 
     def close(self) -> None:
-        if self._stop.is_set():
-            return
         self._stop.set()
-        for thread in self._threads:
-            thread.join(timeout=2.0)
-        self._cap.release()
+        self._process.join(timeout=3.0)
+        if self._process.is_alive():
+            self._process.terminate()
+            self._process.join()

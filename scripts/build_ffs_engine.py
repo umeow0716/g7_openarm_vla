@@ -12,8 +12,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import tensorrt as trt
-
+from g7_openarm_hommi.trt import build_engine
 from g7_openarm_hommi.zed_camera import FFS_ENGINE, FFS_ONNX
 
 
@@ -23,23 +22,7 @@ def main() -> None:
     parser.add_argument("--engine", type=Path, default=FFS_ENGINE)
     args = parser.parse_args()
 
-    logger = trt.Logger(trt.Logger.WARNING)
-    builder = trt.Builder(logger)
-    network = builder.create_network(0)
-    parser_onnx = trt.OnnxParser(network, logger)
-    if not parser_onnx.parse_from_file(str(args.onnx)):
-        errors = "\n".join(str(parser_onnx.get_error(i)) for i in range(parser_onnx.num_errors))
-        raise SystemExit(f"cannot parse {args.onnx}:\n{errors}")
-
-    config = builder.create_builder_config()
-    config.set_flag(trt.BuilderFlag.FP16)
-    print(f"building {args.engine} from {args.onnx} (TensorRT {trt.__version__}, fp16) ...")
-    serialized = builder.build_serialized_network(network, config)
-    if serialized is None:
-        raise SystemExit("TensorRT engine build failed")
-    tmp = args.engine.with_suffix(".engine.tmp")
-    tmp.write_bytes(serialized)
-    tmp.replace(args.engine)
+    build_engine(args.onnx, args.engine, fp16=True)
     print(f"wrote {args.engine}")
 
 

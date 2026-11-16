@@ -66,10 +66,7 @@ def _make_cameras(kind: CameraKind) -> dict[str, CameraInput]:
     cameras: dict[str, CameraInput] = {}
     try:
         if config.head_camera == "zed2":
-            cameras["head"] = ZedStereoCamera(
-                timeout_ms=config.camera_timeout_ms,
-                cuda_device=config.device,
-            )
+            cameras["head"] = ZedStereoCamera(fps=config.camera_fps, cuda_device=config.device)
         for name, serial in serials.items():
             cameras[name] = RealSenseCamera(
                 serial,

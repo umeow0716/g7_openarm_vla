@@ -164,3 +164,16 @@ def test_bundled_calibration_loads():
     calib = load_zed_conf()
     assert calib.image_size == (1280, 720)
     assert calib.baseline == pytest.approx(0.1194, abs=1e-4)
+
+
+def test_shared_frame_fields_do_not_overlap():
+    from g7_openarm_hommi.zed_camera import _FRAME_BYTES, STEREO_SIZE, _frame_views
+
+    seq, stamp, color, depth = _frame_views(bytearray(_FRAME_BYTES))
+    assert color.shape == (STEREO_SIZE[1], STEREO_SIZE[0], 3)
+    assert depth.shape == (STEREO_SIZE[1], STEREO_SIZE[0])
+    seq[0], stamp[0] = 7, 2.5
+    color[:] = 255
+    depth[:] = 1.5
+    assert seq[0] == 7 and stamp[0] == 2.5
+    assert (color == 255).all() and (depth == 1.5).all()

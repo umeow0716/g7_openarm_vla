@@ -55,6 +55,8 @@ machine (engines only run on the GPU and TensorRT version that built them):
 uv run python scripts/build_ffs_engine.py
 ```
 
+The camera and the stereo model run in their own process, next to the policy's.
+
 To check the head depth on its own, preview the rectified image next to the depth map:
 
 ```bash
