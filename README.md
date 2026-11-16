@@ -50,6 +50,12 @@ machine (engines only run on the GPU and TensorRT version that built them):
 uv run python scripts/build_ffs_engine.py
 ```
 
+To check the head depth on its own, preview the rectified image next to the depth map:
+
+```bash
+uv run python scripts/view_zed_depth.py
+```
+
 See `modules/g7_openarm_hommi/README.md` for camera, frame and action details.
 
 ## Gripper coordinate convention
