@@ -62,6 +62,7 @@ latency_compensation = true
 inference_precision = "fp16"
 inference_backend = "tensorrt" # "tensorrt" or "torch"
 head_camera = "zed2" # "realsense" or "zed2"
+trajectory_speed = 0.5 # playback speed of predicted action chunks (1.0 = as trained, 0.5 = half speed)
 
 [vr]
 hz = 50.0 # Target

@@ -154,6 +154,7 @@ class HommiNode:
             f"obs_horizon={self._builder.horizon}, "
             f"action_steps={self._policy.n_action_steps}, hz={config.hz:g}, "
             f"publish_hz={config.publish_hz:g}, "
+            f"trajectory_speed={config.trajectory_speed:g}x, "
             f"cameras={f'dataset ({replay.mode} replay)' if replay else camera_kind}; "
             "waiting for Enter in the monitor",
             flush=True,
@@ -318,7 +319,7 @@ class HommiNode:
                 action_chunk,
                 reference=samples[-1].robot,
                 gripper_ranges=self._policy.gripper_ranges,
-                interval=config.interval,
+                interval=config.action_interval,
                 obs_horizon=self._builder.horizon,
             )
             with self._control_lock:

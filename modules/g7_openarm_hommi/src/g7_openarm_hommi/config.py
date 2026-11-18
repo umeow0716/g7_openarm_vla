@@ -27,12 +27,17 @@ class HommiConfig(BaseConfig):
     inference_precision: str  # "fp32" (as trained) or "fp16" (faster on the GPU)
     inference_backend: str  # "tensorrt" (engines built per machine) or "torch"
     head_camera: str  # "realsense" or "zed2"
+    trajectory_speed: float  # playback speed of predicted chunks (0.5 = half speed)
     publish_hz: float  # rt/target rate; follows [wbc].hz
     dds: DDSConfig
 
     def __post_init__(self) -> None:
         if self.hz <= 0.0:
             raise ValueError(f"hommi.hz must be positive, got {self.hz}")
+        if self.trajectory_speed <= 0.0:
+            raise ValueError(
+                f"hommi.trajectory_speed must be positive, got {self.trajectory_speed}"
+            )
         if self.publish_hz < self.hz:
             raise ValueError(f"wbc.hz ({self.publish_hz}) must be >= hommi.hz ({self.hz})")
         if not self.device:
@@ -62,6 +67,11 @@ class HommiConfig(BaseConfig):
     @property
     def interval(self) -> float:
         return 1.0 / self.hz
+
+    @property
+    def action_interval(self) -> float:
+        """Time between executed action steps, stretched by ``trajectory_speed``."""
+        return self.interval / self.trajectory_speed
 
     @property
     def publish_interval(self) -> float:
@@ -105,6 +115,7 @@ class HommiConfig(BaseConfig):
             inference_precision=str(section.get("inference_precision", "fp16")),
             inference_backend=str(section.get("inference_backend", "tensorrt")),
             head_camera=str(section.get("head_camera", "realsense")),
+            trajectory_speed=float(section.get("trajectory_speed", 1.0)),
             publish_hz=float((data.get("wbc") or {}).get("hz", 100.0)),
             dds=DDSConfig.from_mapping(data),
         )
