@@ -63,7 +63,7 @@ def run_lowlevel() -> None:
 def run_state_estimator() -> None:
     from g7_openarm_state_estimator.odom_node import main
 
-    run_silently(main, "state_estimator")
+    run_silently(main, "state-estimator")
 
 
 def run_wbc() -> None:
