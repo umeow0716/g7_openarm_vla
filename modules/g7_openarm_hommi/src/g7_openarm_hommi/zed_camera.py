@@ -14,6 +14,7 @@ import signal
 import threading
 import time
 import traceback
+from contextlib import nullcontext
 from dataclasses import dataclass
 from multiprocessing.connection import Connection
 from multiprocessing.synchronize import Event, Lock
@@ -26,6 +27,7 @@ import numpy.typing as npt
 import torch
 
 from .camera import CameraFrame, CameraInput, PinholeIntrinsics
+from .gpu_turns import GpuTurns
 from .trt import TrtEngine
 
 # The head camera always streams HD720, so only the HD sections of the factory file are used.
@@ -262,6 +264,7 @@ def _camera_process(
     fps: int,
     cuda_device: str,
     parent_pid: int,
+    gpu_turns: GpuTurns | None,
 ) -> None:
     """Capture, rectify and run FoundationStereo, publishing only the newest frame."""
     # Ctrl-C reaches the whole process group; the parent decides when this one stops.
@@ -317,26 +320,30 @@ def _camera_process(
         last_seq = 0
         # A parent that was killed cannot stop this process, so stop with it.
         while not stop.is_set() and os.getppid() == parent_pid:
-            with raw_ready:
-                if raw[1] == last_seq and raw[2] is None:
-                    raw_ready.wait(0.1)
-                if raw[2] is not None:
-                    raise raw[2]
-                if raw[1] == last_seq:
-                    continue
-                (sbs_bgr, timestamp), last_seq = raw[0], raw[1]
-            half = sbs_bgr.shape[1] // 2
-            left, right = rect(sbs_bgr[:, :half], sbs_bgr[:, half:])
-            left = cv2.cvtColor(left, cv2.COLOR_BGR2RGB)
-            right = cv2.cvtColor(right, cv2.COLOR_BGR2RGB)
-            disp = remove_invisible(ffs(left, right))
-            metric = disparity_to_depth(disp, fx, rect.baseline)
-            with lock:
-                color[:] = left
-                depth[:] = metric
-                stamp[0] = timestamp
-                seq[0] += 1
-                first = seq[0] == 1
+            # Take the GPU turn before picking the frame, so the newest frame is the one
+            # that gets processed rather than one that aged while the policy ran.
+            with gpu_turns.turn("stereo") if gpu_turns is not None else nullcontext():
+                with raw_ready:
+                    if raw[1] == last_seq and raw[2] is None:
+                        raw_ready.wait(0.1)
+                    if raw[2] is not None:
+                        raise raw[2]
+                    if raw[1] == last_seq:
+                        continue
+                    (sbs_bgr, timestamp), last_seq = raw[0], raw[1]
+                half = sbs_bgr.shape[1] // 2
+                left, right = rect(sbs_bgr[:, :half], sbs_bgr[:, half:])
+                left = cv2.cvtColor(left, cv2.COLOR_BGR2RGB)
+                right = cv2.cvtColor(right, cv2.COLOR_BGR2RGB)
+                disp = remove_invisible(ffs(left, right))
+                metric = disparity_to_depth(disp, fx, rect.baseline)
+                # Publish before the turn ends, so the policy's turn sees this frame.
+                with lock:
+                    color[:] = left
+                    depth[:] = metric
+                    stamp[0] = timestamp
+                    seq[0] += 1
+                    first = seq[0] == 1
             if first:
                 conn.send(
                     ("ready", tuple(float(v) for v in (*np.diag(rect.K)[:2], *rect.K[:2, 2])))
@@ -360,7 +367,14 @@ class ZedStereoCamera(CameraInput):
     the observation loop may see the same head frame twice.
     """
 
-    def __init__(self, *, name: str = "head", fps: int = 30, cuda_device: str = "cuda:0") -> None:
+    def __init__(
+        self,
+        *,
+        name: str = "head",
+        fps: int = 30,
+        cuda_device: str = "cuda:0",
+        gpu_turns: GpuTurns | None = None,
+    ) -> None:
         self.name = name
         ctx = mp.get_context("spawn")
         self._buffer = ctx.RawArray(ctypes.c_uint8, _FRAME_BYTES)
@@ -373,7 +387,16 @@ class ZedStereoCamera(CameraInput):
         self._frame_seq = 0
         self._process = ctx.Process(
             target=_camera_process,
-            args=(self._buffer, self._lock, self._stop, child_conn, fps, cuda_device, os.getpid()),
+            args=(
+                self._buffer,
+                self._lock,
+                self._stop,
+                child_conn,
+                fps,
+                cuda_device,
+                os.getpid(),
+                gpu_turns,
+            ),
             name=f"zed-{name}",
             daemon=True,
         )

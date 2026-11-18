@@ -66,6 +66,11 @@ class ObservationHistory:
                 self._condition.wait(timeout=0.1)
         return None
 
+    def newest(self) -> tuple[ObservationSample, ...]:
+        """The current window of samples (may hold fewer than ``horizon`` at start-up)."""
+        with self._condition:
+            return tuple(self._samples)
+
     def latest(self) -> ObservationSample | None:
         with self._condition:
             return self._samples[-1] if self._samples else None

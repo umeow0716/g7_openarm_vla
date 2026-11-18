@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import dataclasses
 import signal
 import threading
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from typing import Literal
 
 from unitree_sdk2py.idl.default import HGLowState_
@@ -15,6 +17,7 @@ from g7_openarm_utils.layout import HEAD_ENABLED, LEFT_ARM_ENABLED, RIGHT_ARM_EN
 
 from .camera import BlackCamera, CameraInput, RealSenseCamera
 from .config import config
+from .gpu_turns import GpuTurns
 from .observation import (
     Ego3dObservationBuilder,
     ObservationHistory,
@@ -52,7 +55,7 @@ def _validate_control_mode() -> None:
         print("HoMMI: general.head_enabled=false, look-at actions will not move the head")
 
 
-def _make_cameras(kind: CameraKind) -> dict[str, CameraInput]:
+def _make_cameras(kind: CameraKind, gpu_turns: GpuTurns | None) -> dict[str, CameraInput]:
     if kind == "simulation":
         return {
             "head": BlackCamera(with_depth=True),
@@ -66,7 +69,9 @@ def _make_cameras(kind: CameraKind) -> dict[str, CameraInput]:
     cameras: dict[str, CameraInput] = {}
     try:
         if config.head_camera == "zed2":
-            cameras["head"] = ZedStereoCamera(fps=config.camera_fps, cuda_device=config.device)
+            cameras["head"] = ZedStereoCamera(
+                fps=config.camera_fps, cuda_device=config.device, gpu_turns=gpu_turns
+            )
         for name, serial in serials.items():
             cameras[name] = RealSenseCamera(
                 serial,
@@ -124,7 +129,24 @@ class HommiNode:
         self._replay = None if replay is None else self._make_replay(replay)
         self._replay_anchored = False
         self._replay_ramp_until = 0.0
-        self._cameras = {} if self._replay is not None else _make_cameras(camera_kind)
+        # Only the ZED stereo model competes with the policy for the GPU.
+        self._gpu_turns = (
+            GpuTurns()
+            if config.gpu_turns
+            and self._replay is None
+            and camera_kind == "realsense"
+            and config.head_camera == "zed2"
+            else None
+        )
+        self._cameras = (
+            {} if self._replay is not None else _make_cameras(camera_kind, self._gpu_turns)
+        )
+        # FK for the inference thread's head refresh; the observation loop owns _projector.
+        self._head_projector = (
+            None
+            if self._gpu_turns is None
+            else RobotStateProjector(self._policy.gripper_ranges, head_extrinsic(config))
+        )
 
         self._publisher = build_pub("rt/target", Target)
         self._lowstate_sub = build_sub("rt/lowstate", HGLowState_, self._lowstate_handler)
@@ -155,6 +177,7 @@ class HommiNode:
             f"action_steps={self._policy.n_action_steps}, hz={config.hz:g}, "
             f"publish_hz={config.publish_hz:g}, "
             f"trajectory_speed={config.trajectory_speed:g}x, "
+            f"gpu_turns={self._gpu_turns is not None}, "
             f"cameras={f'dataset ({replay.mode} replay)' if replay else camera_kind}; "
             "waiting for Enter in the monitor",
             flush=True,
@@ -300,6 +323,36 @@ class HommiNode:
         )
         self._trajectory.replace([first], now=now, latency_compensation=True)
 
+    def _gpu_turn(self) -> AbstractContextManager[None]:
+        if self._gpu_turns is None:
+            return nullcontext()
+        return self._gpu_turns.turn("policy")
+
+    def _with_fresh_head(
+        self, samples: tuple[ObservationSample, ...]
+    ) -> tuple[ObservationSample, ...]:
+        """With GPU turns, use the newest observation and swap the newest head depth in.
+
+        The stereo model's turn ends just before ours, so its depth is usually not in
+        an observation yet; rebuilding the head part here avoids running a whole chunk
+        on the previous depth (or idling the GPU until the next observation tick).
+        """
+        if self._head_projector is None:
+            return samples
+        # The window advanced while we waited for the turn; use its newest state too.
+        newest = self._history.newest()
+        if len(newest) == len(samples) and newest[-1].sequence > samples[-1].sequence:
+            samples = newest
+        frame = self._cameras["head"].latest()
+        last = samples[-1]
+        if last.head_state.timestamp >= frame.timestamp:
+            return samples
+        state = self._states.at(frame.timestamp)
+        assert state is not None  # an observation exists, so robot state does too
+        head_robot = self._head_projector.snapshot(*state, timestamp=frame.timestamp)
+        head = process_head_frame(frame, output_size=self._builder.head_size)
+        return (*samples[:-1], dataclasses.replace(last, head=head, head_robot=head_robot))
+
     def _inference_loop(self) -> None:
         last_sequence = -1
         while not self._stop.is_set():
@@ -313,8 +366,11 @@ class HommiNode:
             if self._replay is not None and self._replay.options.mode == "trajectory":
                 continue  # the observation loop commands the recorded trajectory
             generation = self._operator.generation
-            obs = self._builder.build(samples)
-            action_chunk = self._policy.predict(obs)
+            with self._gpu_turn():
+                samples = self._with_fresh_head(samples)
+                obs = self._builder.build(samples)
+                action_chunk = self._policy.predict(obs)
+            last_sequence = samples[-1].sequence
             points = decode_action_chunk(
                 action_chunk,
                 reference=samples[-1].robot,
