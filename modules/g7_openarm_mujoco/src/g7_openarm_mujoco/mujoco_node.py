@@ -232,7 +232,6 @@ class MujocoNode:
             #             self.data.qpos[self.qpos_index_register.get(joint)] = \
             #                 self.lowstate.motor_state[low_idx(joint)].q
 
-            print(self.odom)
             if self.odom is not None:
                 self.data.qpos[0] = self.odom.position.x
                 self.data.qpos[1] = self.odom.position.y
