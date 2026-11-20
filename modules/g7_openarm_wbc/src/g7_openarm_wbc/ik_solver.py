@@ -511,6 +511,9 @@ class G7OpenArmLQR():
         target = self.task_state_from_target(target_ref)
         
         task_eval = self.task_evaluate(state, target)
+        # Exposed for the tracking log (target vs. measured EE pose).
+        self.last_state = state
+        self.last_target = target
 
         Jkin = self.task_kinematic_jacobian(lib_x)
         # Preserve the original IK's independent position/orientation penalties.

@@ -28,6 +28,7 @@ hommi-diffusion-policy = { git = "https://github.com/umeow0716/hommi_diffusion_p
 
 [dependency-groups]
 dev = [
+    "matplotlib>=3.11.2",
     "mypy>=2.3.0",
     "pybind11-stubgen>=2.5.5",
     "pytest>=9.1.1",

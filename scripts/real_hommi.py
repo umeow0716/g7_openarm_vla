@@ -84,7 +84,7 @@ def run_state_estimator() -> None:
 def run_wbc() -> None:
     from g7_openarm_wbc.wbc_node import main
 
-    run_silently(main, "wbc")
+    run_silently(lambda: main(log_tracking=True), "wbc")
 
 
 def run_monitor() -> None:

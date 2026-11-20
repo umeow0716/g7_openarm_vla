@@ -20,6 +20,7 @@ from unitree_sdk2py.idl.default import HGLowState_
 from .base_filter import LowPassFilter
 from .config import config
 from .ik_solver import G7OpenArmLQR
+from .tracking_log import TrackingLogger
 
 
 def gripper_openness(value: float) -> float:
@@ -40,9 +41,10 @@ def vr_joy_to_body_command(joy: VRJoy):
 
 
 class WBCNode:
-    def __init__(self, is_vr=False):
+    def __init__(self, is_vr=False, log_tracking=False):
         self.is_vr = is_vr
         self.solver = G7OpenArmLQR()
+        self.tracking_log = TrackingLogger() if log_tracking else None
         self.base_lpf = LowPassFilter(
             sample_hz=config.hz, cutoff_hz=config.base_lpf_cutoff_hz
         )
@@ -90,6 +92,8 @@ class WBCNode:
             body_cmd = vr_joy_to_body_command(self.vrjoy)
 
         result = self.solver.solve_once(self.lowstate, self.odom, self.target)
+        if self.tracking_log is not None:
+            self.tracking_log.write(self.solver.last_target, self.solver.last_state)
         cmd = WBCLowCmd_default()
         cmd.dq_des = result[3:17].tolist()
         raw_base_cmd = body_cmd if body_cmd is not None else result[:3]
@@ -102,9 +106,9 @@ class WBCNode:
         self.wbclowcmd_pub.Write(cmd)
 
 
-def main(is_vr=False):
+def main(is_vr=False, log_tracking=False):
     ChannelFactoryInitialize(config.dds.domain_id, config.dds.interface)
-    node = WBCNode(is_vr)
+    node = WBCNode(is_vr, log_tracking)
     while True:
         time.sleep(1.0)
 
