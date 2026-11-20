@@ -9,6 +9,8 @@ import numpy as np
 import numpy.typing as npt
 import pyrealsense2 as rs
 
+from .color import ColorCalibration, ColorCorrector
+
 RGBFrame = npt.NDArray[np.uint8]
 DepthFrame = npt.NDArray[np.float32]
 
@@ -110,6 +112,7 @@ class RealSenseCamera(CameraInput):
         fps: int = 30,
         timeout_ms: int = 1000,
         warmup_frames: int = 5,
+        color_calibration: ColorCalibration | None = None,
     ) -> None:
         if not serial:
             raise ValueError(
@@ -137,6 +140,15 @@ class RealSenseCamera(CameraInput):
 
         self._pipeline = rs.pipeline()
         profile = self._pipeline.start(stream_config)
+        self._correct: ColorCorrector | None = None
+        # White-balance settings persist on the device across sessions, so always set them.
+        sensor = profile.get_device().first_color_sensor()
+        sensor.set_option(rs.option.enable_auto_white_balance, float(color_calibration is None))
+        if color_calibration is not None:
+            # Fixed white balance: the correction LUT is only valid for the
+            # color temperature it was fitted at.
+            sensor.set_option(rs.option.white_balance, color_calibration.white_balance)
+            self._correct = ColorCorrector(color_calibration)
         color_profile = profile.get_stream(rs.stream.color).as_video_stream_profile()
         self._color_intrinsics = PinholeIntrinsics.from_rs(color_profile.get_intrinsics())
 
@@ -190,6 +202,8 @@ class RealSenseCamera(CameraInput):
                     depth_np = (
                         np.asanyarray(depth.get_data()).astype(np.float32) * self._depth_scale
                     )
+                if self._correct is not None:
+                    color_np = self._correct(color_np)
                 frame = CameraFrame(
                     timestamp=timestamp,
                     color=color_np,

@@ -16,6 +16,7 @@ from g7_openarm_utils import ChannelFactoryInitialize, build_pub, build_sub
 from g7_openarm_utils.layout import HEAD_ENABLED, LEFT_ARM_ENABLED, RIGHT_ARM_ENABLED
 
 from .camera import BlackCamera, CameraInput, RealSenseCamera
+from .color import ZED_KEY, ColorCalibration, load_calibrations
 from .config import config
 from .gpu_turns import GpuTurns
 from .observation import (
@@ -66,11 +67,21 @@ def _make_cameras(kind: CameraKind, gpu_turns: GpuTurns | None) -> dict[str, Cam
         raise ValueError(f"unknown camera kind {kind!r}")
 
     serials = config.camera_serials()
+    colors = load_calibrations() if config.color_correction else {}
+
+    def color_for(name: str, key: str) -> ColorCalibration | None:
+        if config.color_correction and key not in colors:
+            print(f"HoMMI: no color calibration for {name} camera {key}")
+        return colors.get(key)
+
     cameras: dict[str, CameraInput] = {}
     try:
         if config.head_camera == "zed2":
             cameras["head"] = ZedStereoCamera(
-                fps=config.camera_fps, cuda_device=config.device, gpu_turns=gpu_turns
+                fps=config.camera_fps,
+                cuda_device=config.device,
+                gpu_turns=gpu_turns,
+                color_calibration=color_for("head", ZED_KEY),
             )
         for name, serial in serials.items():
             cameras[name] = RealSenseCamera(
@@ -79,6 +90,7 @@ def _make_cameras(kind: CameraKind, gpu_turns: GpuTurns | None) -> dict[str, Cam
                 with_depth=name == "head",
                 fps=config.camera_fps,
                 timeout_ms=config.camera_timeout_ms,
+                color_calibration=color_for(name, serial),
             )
     except BaseException:
         for camera in cameras.values():

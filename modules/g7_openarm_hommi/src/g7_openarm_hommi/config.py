@@ -29,6 +29,7 @@ class HommiConfig(BaseConfig):
     head_camera: str  # "realsense" or "zed2"
     trajectory_speed: float  # playback speed of predicted chunks (0.5 = half speed)
     gpu_turns: bool  # policy and ZED stereo take turns on the GPU instead of sharing it
+    color_correction: bool  # apply calibration/camera_color.json to head + wrist cameras
     publish_hz: float  # rt/target rate; follows [wbc].hz
     dds: DDSConfig
 
@@ -118,6 +119,7 @@ class HommiConfig(BaseConfig):
             head_camera=str(section.get("head_camera", "realsense")),
             trajectory_speed=float(section.get("trajectory_speed", 1.0)),
             gpu_turns=_bool(section, "gpu_turns", True),
+            color_correction=_bool(section, "color_correction", True),
             publish_hz=float((data.get("wbc") or {}).get("hz", 100.0)),
             dds=DDSConfig.from_mapping(data),
         )

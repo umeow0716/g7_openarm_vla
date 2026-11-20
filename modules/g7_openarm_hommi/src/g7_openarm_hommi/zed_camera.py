@@ -27,6 +27,7 @@ import numpy.typing as npt
 import torch
 
 from .camera import CameraFrame, CameraInput, PinholeIntrinsics
+from .color import ColorCalibration, ColorCorrector
 from .gpu_turns import GpuTurns
 from .trt import TrtEngine
 
@@ -265,6 +266,7 @@ def _camera_process(
     cuda_device: str,
     parent_pid: int,
     gpu_turns: GpuTurns | None,
+    color_calibration: ColorCalibration | None,
 ) -> None:
     """Capture, rectify and run FoundationStereo, publishing only the newest frame."""
     # Ctrl-C reaches the whole process group; the parent decides when this one stops.
@@ -286,6 +288,17 @@ def _camera_process(
         cap.set(cv2.CAP_PROP_FPS, fps)
         if not cap.isOpened():
             raise RuntimeError(f"cannot open ZED 2 stereo device {video_node}")
+        correct = None
+        # V4L2 controls persist after the device is closed, so always set auto WB.
+        cap.set(cv2.CAP_PROP_AUTO_WB, float(color_calibration is None))
+        if color_calibration is not None:
+            # Fixed white balance: the correction LUT is only valid at this temperature.
+            if not (
+                cap.set(cv2.CAP_PROP_AUTO_WB, 0)
+                and cap.set(cv2.CAP_PROP_WB_TEMPERATURE, color_calibration.white_balance)
+            ):
+                raise RuntimeError(f"cannot lock ZED 2 white balance on {video_node}")
+            correct = ColorCorrector(color_calibration)
         ok, frame = cap.read()
         if not ok or frame.shape[:2] != (eye_h, 2 * eye_w):
             got = None if not ok else frame.shape[:2]
@@ -337,6 +350,9 @@ def _camera_process(
                 right = cv2.cvtColor(right, cv2.COLOR_BGR2RGB)
                 disp = remove_invisible(ffs(left, right))
                 metric = disparity_to_depth(disp, fx, rect.baseline)
+                if correct is not None:
+                    # Stereo matched the raw images; only the policy's RGB is corrected.
+                    left = correct(left)
                 # Publish before the turn ends, so the policy's turn sees this frame.
                 with lock:
                     color[:] = left
@@ -374,6 +390,7 @@ class ZedStereoCamera(CameraInput):
         fps: int = 30,
         cuda_device: str = "cuda:0",
         gpu_turns: GpuTurns | None = None,
+        color_calibration: ColorCalibration | None = None,
     ) -> None:
         self.name = name
         ctx = mp.get_context("spawn")
@@ -396,6 +413,7 @@ class ZedStereoCamera(CameraInput):
                 cuda_device,
                 os.getpid(),
                 gpu_turns,
+                color_calibration,
             ),
             name=f"zed-{name}",
             daemon=True,

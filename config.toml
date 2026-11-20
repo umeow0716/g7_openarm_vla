@@ -64,6 +64,7 @@ inference_backend = "tensorrt" # "tensorrt" or "torch"
 head_camera = "zed2" # "realsense" or "zed2"
 trajectory_speed = 1.0 # playback speed of predicted action chunks (1.0 = as trained, 0.5 = half speed)
 gpu_turns = true # policy and ZED 2 stereo model take turns on the GPU instead of slowing each other down
+color_correction = true # lock camera WB + match dataset colors (calibration/camera_color.json, scripts/fit_camera_color.py)
 
 [vr]
 hz = 50.0 # Target
