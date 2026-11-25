@@ -306,7 +306,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/62/88/4b440f59169762348
 [[package]]
 name = "damiao-can"
 version = "1.2.9"
-source = { git = "https://github.com/umeow0716/damiao_can?subdirectory=python#20a63632fc59f285b4081b72489875582cc06ce0" }
+source = { git = "https://github.com/umeow0716/damiao_can?subdirectory=python#52e290cd69504e4fc535a47e74c88cb591e3792a" }
 
 [[package]]
 name = "diffusers"
