@@ -19,6 +19,8 @@ import numpy as np
 LOG_DIR = Path("logs") / "ee-tracking"
 AXES = ("x", "y", "z")
 MAX_LAG_S = 1.0
+TARGET_STYLE = {"color": "#e8590c", "lw": 2.0}  # bold orange, stands out against the blue ee
+EE_STYLE = {"color": "#2a6fdb", "lw": 1.2}
 
 
 def latest_log() -> Path:
@@ -91,7 +93,11 @@ def main() -> None:
     )
     parser.add_argument("log", nargs="?", type=Path, help="tracking CSV (default: newest)")
     parser.add_argument("--arm", choices=("left", "right", "both"), default="both")
-    parser.add_argument("--out", type=Path, help="output PNG (default: next to the CSV)")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="output base name; writes <base>_target/_ee/_overlay.png (default: next to the CSV)",
+    )
     parser.add_argument("--show", action="store_true", help="also open an interactive window")
     args = parser.parse_args()
 
@@ -107,16 +113,58 @@ def main() -> None:
     arms = ("left", "right") if args.arm == "both" else (args.arm,)
 
     print(f"log: {path}")
-    fig, axes = plt.subplots(5, len(arms), sharex=True, squeeze=False, figsize=(7 * len(arms), 12))
-    for col, arm in enumerate(arms):
+    series = {}
+    for arm in arms:
         tgt_pos, tgt_quat = pose(d, arm, "target")
         ee_pos, ee_quat = pose(d, arm, "ee")
-        pos_err_mm, ori_err_deg = summarize(arm, t, tgt_pos, ee_pos, tgt_quat, ee_quat)
+        errs = summarize(arm, t, tgt_pos, ee_pos, tgt_quat, ee_quat)
+        series[arm] = (tgt_pos, ee_pos, errs)
 
+    base = args.out.with_suffix("") if args.out else path.with_suffix("")
+    targets = {a: s[0] for a, s in series.items()}
+    ees = {a: s[1] for a, s in series.items()}
+    figs = [
+        ("target", plot_single(t, arms, targets, "target", TARGET_STYLE)),
+        ("ee", plot_single(t, arms, ees, "ee", EE_STYLE)),
+        ("overlay", plot_overlay(t, arms, series)),
+    ]
+    for suffix, fig in figs:
+        fig.suptitle(f"{path.name} — {suffix}")
+        fig.tight_layout()
+        out = base.parent / f"{base.name}_{suffix}.png"
+        fig.savefig(out, dpi=120)
+        print(f"saved: {out}")
+    if args.show:
+        plt.show()
+
+
+def plot_single(t, arms, pos_by_arm, label, style):
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(3, len(arms), sharex=True, squeeze=False, figsize=(7 * len(arms), 8))
+    for col, arm in enumerate(arms):
+        pos = pos_by_arm[arm]
         for row, a in enumerate(AXES):
             ax = axes[row, col]
-            ax.plot(t, tgt_pos[:, row], "--", color="#888888", lw=1.2, label="target")
-            ax.plot(t, ee_pos[:, row], color="#2a6fdb", lw=1.2, label="ee")
+            ax.plot(t, pos[:, row], label=label, **style)
+            ax.set_ylabel(f"{a} [m]")
+            ax.grid(alpha=0.3)
+        axes[0, col].set_title(f"{arm} arm")
+        axes[0, col].legend(loc="upper right", frameon=False)
+        axes[-1, col].set_xlabel("time [s]")
+    return fig
+
+
+def plot_overlay(t, arms, series):
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(5, len(arms), sharex=True, squeeze=False, figsize=(7 * len(arms), 12))
+    for col, arm in enumerate(arms):
+        tgt_pos, ee_pos, (pos_err_mm, ori_err_deg) = series[arm]
+        for row, a in enumerate(AXES):
+            ax = axes[row, col]
+            ax.plot(t, ee_pos[:, row], label="ee", zorder=2, **EE_STYLE)
+            ax.plot(t, tgt_pos[:, row], "--", label="target", zorder=3, **TARGET_STYLE)
             ax.set_ylabel(f"{a} [m]")
             ax.grid(alpha=0.3)
         axes[0, col].set_title(f"{arm} arm")
@@ -132,14 +180,7 @@ def main() -> None:
         ax.set_ylabel("ori err [deg]")
         ax.set_xlabel("time [s]")
         ax.grid(alpha=0.3)
-
-    fig.suptitle(path.name)
-    fig.tight_layout()
-    out = args.out or path.with_suffix(".png")
-    fig.savefig(out, dpi=120)
-    print(f"saved: {out}")
-    if args.show:
-        plt.show()
+    return fig
 
 
 if __name__ == "__main__":

@@ -13,8 +13,8 @@ interface = "lo"
 hz = 100.0
 imu_hz = 100.0
 base_can = "can3"
-left_arm_can = "can1"
-right_arm_can = "can0"
+left_arm_can = "can5"
+right_arm_can = "can4"
 can_fd = true
 # base ids: [FL, FLW, FR, FRW, RL, RLW, RR, RRW]
 base_ids            = [ 0x01, 0x05, 0x02, 0x06, 0x03, 0x07, 0x04, 0x08 ]
@@ -24,10 +24,10 @@ left_arm_offset     = [  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0, -0.967 ]
 right_arm_direction = [  1.0, -1.0,  1.0, -1.0,  1.0, -1.0,  1.0,  1.0, 1.0 ] # index -1 -> camera yaw
 right_arm_offset    = [ -0.052453, 0.016594, -0.048638, -0.000572, -0.047112, -0.006676, 0.022698, 0.0, 0.0597 ]
 # Calibrated physical gripper motor positions [rad].
-left_gripper_open   = -0.684
-left_gripper_close  =  0.012
-right_gripper_open  =  1.800
-right_gripper_close = -2.550
+left_gripper_open   = -1.774
+left_gripper_close  = -6.070
+right_gripper_open  =  2.240
+right_gripper_close = -2.635
 
 [lowlevel]
 hz = 100.0
@@ -55,15 +55,14 @@ hz = 20.0 # HoMMI dataset/control frequency (60 Hz data, down_sample_steps=3)
 device = "cuda:0"
 camera_fps = 30
 camera_timeout_ms = 1000
-head_camera_serial = ""
-left_wrist_camera_serial = ""
-right_wrist_camera_serial = ""
+head_camera_serial = "215322079791"
+left_wrist_camera_serial = "349622071134"
+right_wrist_camera_serial = "135622077941"
 latency_compensation = true
 inference_precision = "fp16"
 inference_backend = "tensorrt" # "tensorrt" or "torch"
 head_camera = "zed2" # "realsense" or "zed2"
-trajectory_speed = 1.0 # playback speed of predicted action chunks (1.0 = as trained, 0.5 = half speed)
-gpu_turns = true # policy and ZED 2 stereo model take turns on the GPU instead of slowing each other down
+trajectory_speed = 0.1 # playback speed of predicted action chunks (1.0 = as trained, 0.5 = half speed)
 color_correction = true # lock camera WB + match dataset colors (calibration/camera_color.json, scripts/fit_camera_color.py)
 
 [vr]

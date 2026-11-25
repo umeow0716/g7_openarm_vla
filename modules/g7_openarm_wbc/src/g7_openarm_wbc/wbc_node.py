@@ -100,6 +100,7 @@ class WBCNode:
         cmd.mobile = self.base_lpf.update(raw_base_cmd).tolist()
         if general_config.head_enabled:
             cmd.head = result[-2:].tolist()
+            cmd.head[0] = max(-0.7, cmd.head[0])
         cmd.left_gripper = gripper_openness(self.target.left_gripper)
         cmd.right_gripper = gripper_openness(self.target.right_gripper)
 

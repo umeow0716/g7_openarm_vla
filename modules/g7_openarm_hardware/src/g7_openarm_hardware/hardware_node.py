@@ -120,12 +120,13 @@ def _read_left_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
     low_list = [
         lowstate.motor_state[low_idx(joint)] for joint in LEFT_ARM_JOINT
     ] + [ lowstate.motor_state[low_idx(Joint.L8)], lowstate.motor_state[low_idx(Joint.HEAD_pitch)] ]
-    
+
     for i, (dev, low) in enumerate(zip(dev_list, low_list)):
         low.q  = dev.get_position() * config.left_arm_direction[i]
         low.dq = dev.get_velocity() * config.left_arm_direction[i]
         low.tau_est = dev.get_torque() * config.left_arm_direction[i]
 
+    # print('left_gripper_raw:', lowstate.motor_state[low_idx(Joint.L8)].q)
 
     close_q = config.left_gripper_close
     open_q  = config.left_gripper_open
@@ -148,6 +149,8 @@ def _read_right_arm(device: dc.DamiaoCAN, lowstate: HGLowState_):
         low.q  = dev.get_position() * config.right_arm_direction[i]
         low.dq = dev.get_velocity() * config.right_arm_direction[i]
         low.tau_est = dev.get_torque() * config.right_arm_direction[i]
+
+    print('right_gripper_raw:', lowstate.motor_state[low_idx(Joint.R8)].q)
 
     open_q  = config.right_gripper_open
     close_q = config.right_gripper_close
@@ -239,7 +242,7 @@ def _write_right_arm(device: dc.DamiaoCAN, lowcmd: HGLowCmd_):
     device.posforce_control_one(7, dc.PosForceParam(
         q=openness_to_motor(gripper_low.q, close_q, open_q),
         dq=20.0,
-        i=5000.0
+        i=0.5
     ))
 
 class HardwareNode:
@@ -273,6 +276,8 @@ class HardwareNode:
             res = self.group.recv_all(1_000_000)
             if res.ok:
                 break
+            print("hardware not ok")
+            print(res)
             time.sleep(0.2)
         else:
             raise RuntimeError("Initialize motor failed over 5 times...")
